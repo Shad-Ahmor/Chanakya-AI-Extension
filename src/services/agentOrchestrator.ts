@@ -62,6 +62,20 @@ export class AgentOrchestrator {
       {
         type: 'function',
         function: {
+          name: 'search_code',
+          description: 'Search for text, code, function names, or imports across the workspace to prevent hallucination. ALWAYS use this to verify a function exists before importing it.',
+          parameters: {
+            type: 'object',
+            properties: {
+              query: { type: 'string', description: 'The text or regex to search for.' }
+            },
+            required: ['query']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
           name: 'list_directory',
           description: 'List the contents of a directory to discover files.',
           parameters: {
@@ -161,6 +175,8 @@ Only one tool call per response is supported. Do not output anything else if you
           return await this.runTerminalCommand(args.command, args.cwd);
         case 'view_file':
           return await this.viewFile(args.filePath);
+        case 'search_code':
+          return await this.searchCode(args.query);
         case 'list_directory':
           return await this.listDirectory(args.dirPath);
         case 'edit_file':
@@ -189,20 +205,36 @@ Only one tool call per response is supported. Do not output anything else if you
     return new Promise((resolve) => {
       const execCwd = cwd ? this.resolvePath(cwd) : (vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd());
       
-      cp.exec(command, { cwd: execCwd, maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
-        let output = '';
-        if (stdout) output += `[STDOUT]\n${stdout}\n`;
-        if (stderr) output += `[STDERR]\n${stderr}\n`;
-        if (error) output += `[ERROR_CODE] ${error.code}\n`;
-        
-        if (!output.trim()) {
-          resolve('Command executed successfully with no output.');
+      // Look for existing Chanakya Agent terminal
+      let terminal = vscode.window.terminals.find(t => t.name === 'Chanakya Agent');
+      if (!terminal) {
+        terminal = vscode.window.createTerminal({
+          name: 'Chanakya Agent',
+          cwd: execCwd
+        });
+      }
+      
+      terminal.show(false);
+      terminal.sendText(command);
+      
+      // Resolve immediately to prevent blocking the LLM for long-running commands like pip install or migrations.
+      resolve(`Command '${command}' has been sent to the VS Code 'Chanakya Agent' Terminal and is running. The user can see it live. Proceed with your next step without waiting for it to finish.`);
+    });
+  }
+
+  private async searchCode(query: string): Promise<string> {
+    return new Promise((resolve) => {
+      const execCwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
+      // Using simple grep -rn
+      cp.exec(`grep -rn "${query.replace(/"/g, '\\"')}" .`, { cwd: execCwd, maxBuffer: 1024 * 1024 * 10 }, (_error, stdout) => {
+        if (!stdout || stdout.trim().length === 0) {
+          resolve(`No results found for query: ${query}`);
         } else {
-          // Truncate if too long
-          if (output.length > 30000) {
-            output = output.substring(0, 30000) + '... [Output Truncated]';
+          let output = stdout;
+          if (output.length > 20000) {
+            output = output.substring(0, 20000) + '\\n... [Results Truncated]';
           }
-          resolve(output);
+          resolve(`Search results:\\n${output}`);
         }
       });
     });
@@ -228,6 +260,15 @@ Only one tool call per response is supported. Do not output anything else if you
   private async editFile(filePath: string, content: string): Promise<string> {
     const fullPath = this.resolvePath(filePath);
     await fs.writeFile(fullPath, content, 'utf8');
+    
+    // Open in UI
+    try {
+      const doc = await vscode.workspace.openTextDocument(fullPath);
+      await vscode.window.showTextDocument(doc, { preview: false, preserveFocus: true });
+    } catch (e) {
+      this.logger.error(`Failed to open document ${fullPath} in UI`, e);
+    }
+    
     return `Successfully modified file: ${filePath}`;
   }
 
@@ -236,6 +277,15 @@ Only one tool call per response is supported. Do not output anything else if you
     const dir = path.dirname(fullPath);
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(fullPath, content, 'utf8');
+    
+    // Open in UI
+    try {
+      const doc = await vscode.workspace.openTextDocument(fullPath);
+      await vscode.window.showTextDocument(doc, { preview: false, preserveFocus: true });
+    } catch (e) {
+      this.logger.error(`Failed to open document ${fullPath} in UI`, e);
+    }
+    
     return `Successfully created file: ${filePath}`;
   }
 }

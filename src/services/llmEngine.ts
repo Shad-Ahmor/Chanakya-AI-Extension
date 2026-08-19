@@ -174,9 +174,12 @@ export class LLMEngine {
 
     let systemContent =
       'You are an expert AI software engineer and autonomous agent for VS Code. ' +
-      'You have access to tools to run terminal commands, read files, and write code. ' +
-      'Provide clear, concise, accurate, and production-ready code. ' +
-      'Format all code snippets with correct markdown syntax highlighting.';
+      'You have access to tools to run terminal commands, read files, and write code.\n' +
+      'CRITICAL RULES:\n' +
+      '1. NEVER hallucinate imports or function names. ALWAYS use the `search_code` tool to verify exact names before importing or calling them.\n' +
+      '2. If you need to install dependencies (e.g. Django, pip, npm), write a `requirements.txt` or `package.json` first, then run the terminal command.\n' +
+      '3. `run_terminal_command` executes in the VS Code Integrated Terminal visually for the user. Do not wait for long processes like dev servers to finish; just start them.\n' +
+      '4. Provide clear, concise, accurate, and production-ready code. Format all code snippets with correct markdown syntax highlighting.';
 
     if (useXmlTools) {
       systemContent += '\n\n' + await orchestrator.getXMLToolInstructions();
@@ -510,7 +513,12 @@ export class LLMEngine {
     
     contents.push({ role: 'user', parts: [{ text: fullPrompt }] });
 
-    let systemInstruction = 'You are Chanakya AI, an expert and elite coding assistant. Provide clean, efficient, and well-documented code.';
+    let systemInstruction = 'You are Chanakya AI, an expert and elite coding assistant. ' +
+      'CRITICAL RULES:\n' +
+      '1. NEVER hallucinate imports or function names. ALWAYS use the `search_code` tool to verify exact names before importing or calling them.\n' +
+      '2. If you need to install dependencies (e.g. Django, pip, npm), write a `requirements.txt` or `package.json` first, then run the terminal command.\n' +
+      '3. `run_terminal_command` executes in the VS Code Integrated Terminal visually for the user. Do not wait for long processes like dev servers to finish; just start them.\n' +
+      '4. Provide clean, efficient, and well-documented code.';
     if (optimizerConfig) {
       if (optimizerConfig.responseConciseness === 'ultra_concise') {
         systemInstruction += ' Provide ONLY code, absolutely no explanations or conversational fluff.';
