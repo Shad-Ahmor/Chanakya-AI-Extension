@@ -167,6 +167,7 @@ export class LLMEngine {
     const apiBase = (model.apiBase || 'https://api.openai.com/v1').replace(/\/+$/, '');
     const endpoint = `${apiBase}/chat/completions`;
     const orchestrator = AgentOrchestrator.getInstance();
+    const useXmlTools = model.isLocal || ['vllm', 'ollama', 'lmstudio', 'custom'].includes(model.provider);
 
     let messages = existingMessages;
     if (!messages) {
@@ -175,6 +176,10 @@ export class LLMEngine {
         'You have access to tools to run terminal commands, read files, and write code. ' +
         'Provide clear, concise, accurate, and production-ready code. ' +
         'Format all code snippets with correct markdown syntax highlighting.';
+
+      if (useXmlTools) {
+        systemContent += '\n\n' + await orchestrator.getXMLToolInstructions();
+      }
 
       if (optimizerConfig) {
         if (optimizerConfig.responseConciseness === 'ultra_concise') {
@@ -237,11 +242,14 @@ export class LLMEngine {
       model: model.model,
       messages,
       stream: true,
-      tools: await orchestrator.getAvailableTools(),
       temperature: model.defaultCompletionOptions?.temperature ?? 0.2,
       max_tokens: model.defaultCompletionOptions?.maxTokens ?? 4096,
       ...(model.requestOptions?.extraBody || {})
     };
+
+    if (!useXmlTools) {
+      payload.tools = await orchestrator.getAvailableTools();
+    }
 
     let res = await fetch(endpoint, {
       method: 'POST',
@@ -336,34 +344,75 @@ export class LLMEngine {
     // Clean up empty items if array has holes
     toolCalls = toolCalls.filter(Boolean);
 
+    // Parse XML tool calls for local models
+    if (useXmlTools) {
+      const xmlMatch = fullText.match(/<tool_call>([\s\S]*?)<\/tool_call>/);
+      if (xmlMatch && xmlMatch[1]) {
+        try {
+          const parsed = JSON.parse(xmlMatch[1].trim());
+          if (parsed.name && parsed.arguments) {
+            toolCalls.push({
+              id: 'call_' + Math.random().toString(36).substring(2, 9),
+              type: 'function',
+              function: { name: parsed.name, arguments: JSON.stringify(parsed.arguments) }
+            });
+            callbacks.onChunk(`\n> ⚙️ **Running XML Tool:** \`${parsed.name}\`...\n`);
+          }
+        } catch (e) {
+          this.logger.error('Failed to parse XML tool call', e);
+        }
+      }
+    }
+
     // If tool calls were made, execute them and recurse
     if (toolCalls.length > 0) {
-      messages.push({
-        role: 'assistant',
-        content: fullText || null,
-        tool_calls: toolCalls
-      });
+      if (!useXmlTools) {
+        messages.push({
+          role: 'assistant',
+          content: fullText || null,
+          tool_calls: toolCalls
+        });
+      } else {
+        messages.push({
+          role: 'assistant',
+          content: fullText || null
+        });
+      }
 
       for (const toolCall of toolCalls) {
         try {
           const args = JSON.parse(toolCall.function.arguments);
           const result = await orchestrator.executeTool(toolCall.function.name, args);
           
-          messages.push({
-            role: 'tool',
-            tool_call_id: toolCall.id,
-            name: toolCall.function.name,
-            content: result
-          });
+          if (!useXmlTools) {
+            messages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              name: toolCall.function.name,
+              content: result
+            });
+          } else {
+            messages.push({
+              role: 'user',
+              content: `Tool '${toolCall.function.name}' executed successfully.\nResult:\n${result}`
+            });
+          }
           
           callbacks.onChunk(`> ✅ **Tool Result:** \`${result.substring(0, 100).replace(/\n/g, ' ')}...\`\n\n`);
         } catch (err: any) {
-          messages.push({
-            role: 'tool',
-            tool_call_id: toolCall.id,
-            name: toolCall.function.name,
-            content: `Error: ${err.message}`
-          });
+          if (!useXmlTools) {
+            messages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              name: toolCall.function.name,
+              content: `Error: ${err.message}`
+            });
+          } else {
+            messages.push({
+              role: 'user',
+              content: `Tool '${toolCall.function.name}' failed with error:\n${err.message}`
+            });
+          }
           callbacks.onChunk(`> ❌ **Tool Error:** ${err.message}\n\n`);
         }
       }

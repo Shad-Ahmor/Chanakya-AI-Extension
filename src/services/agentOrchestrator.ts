@@ -125,6 +125,27 @@ export class AgentOrchestrator {
     return nativeTools;
   }
 
+  public async getXMLToolInstructions(): Promise<string> {
+    const tools = await this.getAvailableTools();
+    let instructions = `
+You have access to the following tools to perform autonomous tasks:
+`;
+    for (const t of tools) {
+      instructions += `\n- **${t.function.name}**: ${t.function.description}`;
+    }
+
+    instructions += `
+
+To use a tool, you MUST output a block of XML like this:
+<tool_call>
+{"name": "tool_name", "arguments": {"arg1": "value1"}}
+</tool_call>
+
+Only one tool call per response is supported. Do not output anything else if you are calling a tool.
+`;
+    return instructions;
+  }
+
   private resolvePath(reqPath: string): string {
     if (path.isAbsolute(reqPath)) return reqPath;
     const ws = vscode.workspace.workspaceFolders;
