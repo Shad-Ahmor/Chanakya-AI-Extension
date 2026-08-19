@@ -393,6 +393,8 @@ ${diff}`;
           timestamp: Date.now()
         };
 
+        let currentOptStats: { originalTokens: number; optimizedTokens: number } | undefined = undefined;
+
         await LLMEngine.getInstance().streamChat({
           prompt: text,
           contextItems: enrichedContextItems,
@@ -419,7 +421,8 @@ ${diff}`;
                   id: assistantMsgId,
                   role: 'assistant',
                   content: fullText,
-                  timestamp: Date.now()
+                  timestamp: Date.now(),
+                  optimizationStats: currentOptStats
                 }
               ] as any[];
               
@@ -448,7 +451,8 @@ ${diff}`;
                   id: assistantMsgId,
                   role: 'assistant',
                   content: `⚠️ **Error:** ${error.message}`,
-                  timestamp: Date.now()
+                  timestamp: Date.now(),
+                  optimizationStats: currentOptStats
                 }
               ] as any[];
               
@@ -464,6 +468,7 @@ ${diff}`;
               this._saveTokenUsage(modelId, promptTokens, completionTokens, durationMs, ttftMs, isError).catch(() => { /* non-fatal */ });
             },
             onOptimizationStats: (originalTokens, optimizedTokens) => {
+              currentOptStats = { originalTokens, optimizedTokens };
               this.postMessage({
                 type: 'optimizationStats',
                 payload: { messageId: assistantMsgId, originalTokens, optimizedTokens }
