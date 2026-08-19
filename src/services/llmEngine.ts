@@ -245,7 +245,9 @@ export class LLMEngine {
     let messages: any[] = [{ role: 'system', content: systemContent }];
     
     if (existingMessages && existingMessages.length > 0) {
-      const history = existingMessages
+      // Limit history to the last 6 messages to prevent token explosion
+      const recentHistory = existingMessages.slice(-6);
+      const history = recentHistory
         .filter(m => m.role !== 'system')
         .map(m => ({ role: m.role, content: m.content }));
       messages.push(...history);
@@ -505,7 +507,9 @@ export class LLMEngine {
 
     let contents: any[] = [];
     if (existingMessages && existingMessages.length > 0) {
-      contents = existingMessages
+      // Limit history to the last 6 messages to prevent token explosion
+      const recentHistory = existingMessages.slice(-6);
+      contents = recentHistory
         .filter(m => m.role !== 'system') // Gemini doesn't mix system in contents
         .map(m => ({
           role: m.role === 'assistant' ? 'model' : 'user',
