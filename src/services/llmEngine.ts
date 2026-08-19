@@ -243,16 +243,36 @@ export class LLMEngine {
       ...(model.requestOptions?.extraBody || {})
     };
 
-    const res = await fetch(endpoint, {
+    let res = await fetch(endpoint, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
       signal
     });
 
+    let toolsDisabledDueToError = false;
+
     if (!res.ok) {
       const errBody = await res.text();
-      throw new Error(`LLM API Error [${res.status}]: ${errBody}`);
+      if (res.status === 400 && errBody.includes('--enable-auto-tool-choice')) {
+        this.logger.log('Local LLM does not support auto tool choice without flags. Retrying without tools.');
+        delete payload.tools;
+        toolsDisabledDueToError = true;
+        
+        res = await fetch(endpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload),
+          signal
+        });
+
+        if (!res.ok) {
+          const retryErrBody = await res.text();
+          throw new Error(`LLM API Error [${res.status}] (Retry without tools): ${retryErrBody}`);
+        }
+      } else {
+        throw new Error(`LLM API Error [${res.status}]: ${errBody}`);
+      }
     }
 
     if (!res.body) {
@@ -352,6 +372,12 @@ export class LLMEngine {
       return this.streamOpenAICompatible(model, prompt, contextItems, optimizerConfig, callbacks, signal, messages);
     } else {
       // Finished
+      if (toolsDisabledDueToError) {
+        const warning = '\n\n> ⚠️ **Agentic Tools Disabled:** Your local LLM server requires the `--enable-auto-tool-choice` and `--tool-call-parser` flags to support autonomous file creation. Please restart your server with these flags to enable full Agentic features.';
+        fullText += warning;
+        callbacks.onChunk(warning);
+      }
+
       callbacks.onComplete(fullText);
 
       // Token usage tracking (approximation, doesn't count tool results perfectly yet)
