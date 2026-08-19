@@ -256,12 +256,12 @@ function SavingsCard({ cfg }: { cfg: TokenOptimizerConfig }) {
 function Section({ icon, title, children, defaultOpen = true }: { icon: React.ReactNode; title: string; children: React.ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="mb-4 border border-[var(--vscode-widget-border)] rounded-xl">
+    <div className="mb-4 border border-[var(--vscode-widget-border)] rounded-xl" style={{ overflow: 'visible' }}>
       <button onClick={() => setOpen(!open)} className={`w-full flex items-center justify-between px-4 py-3 bg-[var(--vscode-editor-background)] hover:bg-[var(--vscode-list-hoverBackground)] transition text-left ${open ? 'rounded-t-xl border-b border-[var(--vscode-widget-border)]' : 'rounded-xl'}`}>
         <div className="flex items-center gap-2 font-semibold text-sm text-[var(--vscode-foreground)]">{icon}{title}</div>
         {open ? <ChevronUp className="w-3.5 h-3.5 opacity-60" /> : <ChevronDown className="w-3.5 h-3.5 opacity-60" />}
       </button>
-      {open && <div className="px-4 pt-3 pb-4 bg-[var(--vscode-editorWidget-background)] rounded-b-xl">{children}</div>}
+      {open && <div className="px-4 pt-3 pb-4 bg-[var(--vscode-editorWidget-background)] rounded-b-xl" style={{ overflow: 'visible' }}>{children}</div>}
     </div>
   );
 }
