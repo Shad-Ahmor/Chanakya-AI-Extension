@@ -55,7 +55,7 @@ export default function ModelHubView({ config, rawYaml, onUpdateConfig, onClose,
   const filteredModels = config.models.filter((m) => {
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      const match = m.name.toLowerCase().includes(q) || m.model.toLowerCase().includes(q) || m.provider.toLowerCase().includes(q);
+      const match = (m.name || '').toLowerCase().includes(q) || (m.model || '').toLowerCase().includes(q) || (m.provider || '').toLowerCase().includes(q);
       if (!match) return false;
     }
     if (filter === 'local') return m.isLocal;
@@ -65,9 +65,9 @@ export default function ModelHubView({ config, rawYaml, onUpdateConfig, onClose,
     return true;
   });
 
-  const getBrandName = (provider: string, name: string): string => {
-    const p = provider.toLowerCase();
-    const n = name.toLowerCase();
+  const getBrandName = (provider: string = '', name: string = ''): string => {
+    const p = (provider || '').toLowerCase();
+    const n = (name || '').toLowerCase();
     if (n.includes('qwen') || p.includes('qwen')) return 'Qwen (Alibaba)';
     if (n.includes('claude') || p.includes('anthropic')) return 'Anthropic';
     if (n.includes('gemini') || p.includes('google')) return 'Google';
@@ -79,9 +79,9 @@ export default function ModelHubView({ config, rawYaml, onUpdateConfig, onClose,
     return provider;
   };
 
-  const getProviderLogo = (provider: string, name: string): string => {
-    const p = provider.toLowerCase();
-    const n = name.toLowerCase();
+  const getProviderLogo = (provider: string = '', name: string = ''): string => {
+    const p = (provider || '').toLowerCase();
+    const n = (name || '').toLowerCase();
     // Name-based checks FIRST so Qwen-via-Ollama shows Qwen icon, not Ollama
     if (n.includes('qwen')) return 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-png@latest/light/qwen.png';
     if (n.includes('claude')) return 'https://upload.wikimedia.org/wikipedia/commons/7/78/Anthropic_logo.svg';
