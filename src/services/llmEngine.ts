@@ -176,6 +176,14 @@ export class LLMEngine {
       if (optimizerConfig.programmingLanguages && optimizerConfig.programmingLanguages.length > 0) {
         systemContent += `\n\nTarget Languages/Ecosystems: ${optimizerConfig.programmingLanguages.join(', ')}. Do not provide solutions outside these.`;
       }
+
+      if (optimizerConfig.taskType) {
+        systemContent += `\n\n[Task Context] Type: ${optimizerConfig.taskType.toUpperCase()}`;
+        if (optimizerConfig.taskType === 'coding' && optimizerConfig.platformTarget && optimizerConfig.platformTarget.length > 0) {
+          systemContent += ` | Target Platform(s): ${optimizerConfig.platformTarget.join(', ')}`;
+        }
+        systemContent += '\nStrictly adapt your reasoning and output format for this specific task type and target context.';
+      }
     }
 
     let formattedUserPrompt = '';
@@ -313,6 +321,16 @@ export class LLMEngine {
       }
       if (optimizerConfig.negativePrompts && optimizerConfig.negativePrompts.length > 0) {
         systemInstruction += '\n\nNegative Constraints (DO NOT DO THESE):\n' + optimizerConfig.negativePrompts.map((r: string) => '- ' + r).join('\n');
+      }
+      if (optimizerConfig.programmingLanguages && optimizerConfig.programmingLanguages.length > 0) {
+        systemInstruction += `\n\nTarget Languages/Ecosystems: ${optimizerConfig.programmingLanguages.join(', ')}. Do not provide solutions outside these.`;
+      }
+      if (optimizerConfig.taskType) {
+        systemInstruction += `\n\n[Task Context] Type: ${optimizerConfig.taskType.toUpperCase()}`;
+        if (optimizerConfig.taskType === 'coding' && optimizerConfig.platformTarget && optimizerConfig.platformTarget.length > 0) {
+          systemInstruction += ` | Target Platform(s): ${optimizerConfig.platformTarget.join(', ')}`;
+        }
+        systemInstruction += '\nStrictly adapt your reasoning and output format for this specific task type and target context.';
       }
     }
 

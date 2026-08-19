@@ -15,10 +15,13 @@ import {
   CheckCircle2,
   AlertTriangle,
   ListX,
+  Sparkles,
 } from 'lucide-react';
 
 export interface TokenOptimizerConfig {
   enabled: boolean;
+  taskType: 'coding' | 'thinking' | 'reasoning' | 'bug_solving' | 'other';
+  platformTarget: string[];
   programmingLanguages: string[];
   frameworks: string[];
   rules: string[];
@@ -34,6 +37,8 @@ export interface TokenOptimizerConfig {
 
 export const DEFAULT_TOKEN_CONFIG: TokenOptimizerConfig = {
   enabled: true,
+  taskType: 'coding',
+  platformTarget: [],
   programmingLanguages: [],
   frameworks: [],
   rules: [],
@@ -203,7 +208,7 @@ export default function TokenOptimizerView({ config }: { config: any }) {
     setSaved(false);
   }, [selectedModelId]);
 
-  const addToList = (key: 'programmingLanguages' | 'frameworks' | 'rules' | 'negativePrompts', val: string) => {
+  const addToList = (key: 'programmingLanguages' | 'frameworks' | 'rules' | 'negativePrompts' | 'platformTarget', val: string) => {
     setAllConfigs((prev) => {
       const current = prev[selectedModelId] || DEFAULT_TOKEN_CONFIG;
       return { ...prev, [selectedModelId]: { ...current, [key]: [...current[key], val] } };
@@ -211,11 +216,59 @@ export default function TokenOptimizerView({ config }: { config: any }) {
     setSaved(false);
   };
 
-  const removeFromList = (key: 'programmingLanguages' | 'frameworks' | 'rules' | 'negativePrompts', val: string) => {
+  const removeFromList = (key: 'programmingLanguages' | 'frameworks' | 'rules' | 'negativePrompts' | 'platformTarget', val: string) => {
     setAllConfigs((prev) => {
       const current = prev[selectedModelId] || DEFAULT_TOKEN_CONFIG;
       return { ...prev, [selectedModelId]: { ...current, [key]: current[key].filter((v) => v !== val) } };
     });
+    setSaved(false);
+  };
+
+  const handleAutoGenerate = () => {
+    const current = allConfigs[selectedModelId] || DEFAULT_TOKEN_CONFIG;
+    const langs = current.programmingLanguages.map(l => l.toLowerCase());
+    const frames = current.frameworks.map(f => f.toLowerCase());
+    const targets = current.platformTarget.map(t => t.toLowerCase());
+
+    const smartRules = new Set<string>();
+    const smartNegatives = new Set<string>();
+
+    if (current.taskType === 'coding') {
+      smartRules.add('Only output the specific modified functions/classes, not the whole file.');
+      smartNegatives.add('Do not explain standard API syntax or obvious logic.');
+      
+      if (langs.includes('python')) {
+        smartRules.add('Use list comprehensions and generic types to minimize code size.');
+        smartNegatives.add('Do not write redundant type hints for obvious types.');
+      }
+      if (langs.includes('javascript') || langs.includes('typescript')) {
+        smartRules.add('Use modern ES6+ terse syntax (arrow functions, destructuring).');
+        smartNegatives.add('Do not include common standard imports (like React) unless requested.');
+      }
+      if (frames.includes('django')) {
+        smartRules.add('Use Class Based Views (CBV) or generic views where possible to reduce boilerplate.');
+        smartNegatives.add('Do not explain Django routing or ORM basics.');
+      }
+      if (frames.includes('react')) {
+        smartRules.add('Use functional components and inline hooks.');
+        smartNegatives.add('Do not write class components or prop-types.');
+      }
+      if (targets.includes('website') || targets.includes('web')) {
+        smartNegatives.add('Do not include boilerplate HTML/CSS tags if context implies a component snippet.');
+      }
+    } else if (current.taskType === 'bug_solving') {
+      smartRules.add('Output the direct root cause and exactly 1 concise fix.');
+      smartNegatives.add('Do not explain generic debugging strategies.');
+    }
+
+    setAllConfigs((prev) => ({
+      ...prev,
+      [selectedModelId]: {
+        ...current,
+        rules: Array.from(new Set([...current.rules, ...smartRules])),
+        negativePrompts: Array.from(new Set([...current.negativePrompts, ...smartNegatives])),
+      }
+    }));
     setSaved(false);
   };
 
@@ -273,6 +326,35 @@ export default function TokenOptimizerView({ config }: { config: any }) {
         </div>
 
         <SavingsCard cfg={cfg} />
+
+        {/* Task Type Context */}
+        <Section icon={<Layers className="w-4 h-4 text-purple-400" />} title="Task Type & Context">
+          <p className="text-[11px] text-[var(--vscode-descriptionForeground)] mb-3">Define the type of task so AI can ignore unrelated contexts.</p>
+          
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+            {([
+              { key: 'coding', label: 'Coding' },
+              { key: 'bug_solving', label: 'Bug Solving' },
+              { key: 'reasoning', label: 'Reasoning' },
+              { key: 'thinking', label: 'Thinking' },
+            ] as const).map(({ key, label }) => (
+              <button key={key} onClick={() => update('taskType', key)} className={`p-2 rounded-lg border text-center transition ${cfg.taskType === key ? 'border-purple-500/60 bg-purple-500/10 text-purple-400 font-bold' : 'border-[var(--vscode-widget-border)] bg-[var(--vscode-editor-background)] hover:border-[var(--vscode-focusBorder)] text-[var(--vscode-foreground)]'}`}>
+                <div className="text-xs">{label}</div>
+              </button>
+            ))}
+          </div>
+
+          {cfg.taskType === 'coding' && (
+            <ChipInput
+              label="Platform Target (Web, Mobile, Script, etc.)"
+              placeholder="e.g. Website, iOS, Android, Script..."
+              items={cfg.platformTarget}
+              onAdd={(v) => addToList('platformTarget', v)}
+              onRemove={(v) => removeFromList('platformTarget', v)}
+              suggestions={['Website', 'Mobile App', 'Desktop Software', 'CLI Script', 'Server API', 'Database']}
+            />
+          )}
+        </Section>
 
         {/* Response Conciseness */}
         <Section icon={<MessageSquareX className="w-4 h-4 text-emerald-400" />} title="Response Style">
@@ -350,6 +432,14 @@ export default function TokenOptimizerView({ config }: { config: any }) {
           <p className="text-[11px] text-[var(--vscode-descriptionForeground)] mb-3">Apni preferred languages aur frameworks set karo — AI sirf isi ecosystem mein sochega, extra suggestions nahi dega.</p>
           <ChipInput label="Programming Languages" placeholder="Type & Enter — e.g. TypeScript" items={cfg.programmingLanguages} onAdd={(v) => addToList('programmingLanguages', v)} onRemove={(v) => removeFromList('programmingLanguages', v)} suggestions={['TypeScript', 'JavaScript', 'Python', 'Go', 'Rust', 'Java', 'C++', 'C#', 'Kotlin', 'Swift', 'Dart', 'Ruby', 'PHP']} />
           <ChipInput label="Frameworks & Libraries" placeholder="Type & Enter — e.g. React" items={cfg.frameworks} onAdd={(v) => addToList('frameworks', v)} onRemove={(v) => removeFromList('frameworks', v)} suggestions={['React', 'Next.js', 'Vue', 'Angular', 'Svelte', 'Express', 'FastAPI', 'Django', 'Spring', 'Flutter', 'Tailwind CSS', 'Prisma', 'GraphQL', 'tRPC']} />
+          
+          <button 
+            onClick={handleAutoGenerate}
+            className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/30 rounded-lg text-xs font-bold transition"
+          >
+            <Sparkles className="w-4 h-4" />
+            Auto-Generate Smart Rules & Constraints
+          </button>
         </Section>
 
         {/* Custom Rules */}
