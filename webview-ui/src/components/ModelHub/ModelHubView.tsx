@@ -44,62 +44,7 @@ export default function ModelHubView({ config, rawYaml, onUpdateConfig, onClose,
   const [isScanning, setIsScanning] = useState(false);
   const [pingResults, setPingResults] = useState<Record<string, { success: boolean; latencyMs?: number; error?: string; loading?: boolean }>>({});
 
-  // Cloud provider quick-add presets shown in hub grid
-  const CLOUD_PROVIDERS: Array<{
-    key: string; label: string; sub: string;
-    color: string; border: string; bg: string;
-    badge: string; badgeColor: string;
-    model: Partial<ModelConfig>;
-  }> = [
-      {
-        key: 'claude_sonnet', label: 'Claude Sonnet 4.5', sub: 'Anthropic',
-        color: '#ea580c', border: 'border-t-orange-500', bg: 'bg-orange-500/10',
-        badge: 'Best All-round', badgeColor: 'text-orange-400',
-        model: { name: 'Claude Sonnet 4.5', provider: 'anthropic', model: 'claude-sonnet-4-5', apiBase: 'https://api.anthropic.com/v1', executionMode: 'online_api', roles: ['chat', 'edit', 'apply'], capabilities: ['image_input', 'tools'], defaultCompletionOptions: { contextLength: 200000, maxTokens: 16384, temperature: 0.2 } },
-      },
-      {
-        key: 'claude_haiku', label: 'Claude Haiku 3.5', sub: 'Anthropic',
-        color: '#f97316', border: 'border-t-orange-400', bg: 'bg-orange-400/10',
-        badge: 'Fast & Cheap', badgeColor: 'text-orange-300',
-        model: { name: 'Claude Haiku 3.5', provider: 'anthropic', model: 'claude-haiku-3-5', apiBase: 'https://api.anthropic.com/v1', executionMode: 'online_api', roles: ['chat', 'edit', 'apply', 'autocomplete'], capabilities: ['tools'], defaultCompletionOptions: { contextLength: 200000, maxTokens: 8192, temperature: 0.2 } },
-      },
-      {
-        key: 'gemini_25_pro', label: 'Gemini 2.5 Pro', sub: 'Google',
-        color: '#0ea5e9', border: 'border-t-sky-500', bg: 'bg-sky-500/10',
-        badge: '1M Context', badgeColor: 'text-sky-400',
-        model: { name: 'Gemini 2.5 Pro', provider: 'gemini', model: 'gemini-2.5-pro', apiBase: 'https://generativelanguage.googleapis.com/v1beta', executionMode: 'online_api', roles: ['chat', 'edit', 'apply'], capabilities: ['image_input', 'tools'], defaultCompletionOptions: { contextLength: 1048576, maxTokens: 65536, temperature: 0.2 } },
-      },
-      {
-        key: 'gemini_25_flash', label: 'Gemini 2.5 Flash', sub: 'Google',
-        color: '#38bdf8', border: 'border-t-sky-400', bg: 'bg-sky-400/10',
-        badge: 'Fastest Gemini', badgeColor: 'text-sky-300',
-        model: { name: 'Gemini 2.5 Flash', provider: 'gemini', model: 'gemini-2.5-flash', apiBase: 'https://generativelanguage.googleapis.com/v1beta', executionMode: 'online_api', roles: ['chat', 'edit', 'apply', 'autocomplete'], capabilities: ['tools'], defaultCompletionOptions: { contextLength: 1048576, maxTokens: 32768, temperature: 0.2 } },
-      },
-      {
-        key: 'gpt4o', label: 'GPT-4o', sub: 'OpenAI',
-        color: '#10b981', border: 'border-t-emerald-500', bg: 'bg-emerald-500/10',
-        badge: 'Multimodal', badgeColor: 'text-emerald-400',
-        model: { name: 'OpenAI GPT-4o', provider: 'openai', model: 'gpt-4o', apiBase: 'https://api.openai.com/v1', executionMode: 'online_api', roles: ['chat', 'edit', 'apply'], capabilities: ['image_input', 'tools'], defaultCompletionOptions: { contextLength: 128000, maxTokens: 16384, temperature: 0.2 } },
-      },
-      {
-        key: 'gpt4o_mini', label: 'GPT-4o Mini', sub: 'OpenAI',
-        color: '#34d399', border: 'border-t-emerald-400', bg: 'bg-emerald-400/10',
-        badge: 'Budget Pick', badgeColor: 'text-emerald-300',
-        model: { name: 'OpenAI GPT-4o Mini', provider: 'openai', model: 'gpt-4o-mini', apiBase: 'https://api.openai.com/v1', executionMode: 'online_api', roles: ['chat', 'edit', 'apply', 'autocomplete'], capabilities: ['tools'], defaultCompletionOptions: { contextLength: 128000, maxTokens: 16384, temperature: 0.2 } },
-      },
-      {
-        key: 'deepseek_v3', label: 'DeepSeek V3', sub: 'DeepSeek',
-        color: '#a855f7', border: 'border-t-purple-500', bg: 'bg-purple-500/10',
-        badge: 'Ultra Cheap', badgeColor: 'text-purple-400',
-        model: { name: 'DeepSeek V3', provider: 'deepseek', model: 'deepseek-chat', apiBase: 'https://api.deepseek.com/v1', executionMode: 'online_api', roles: ['chat', 'edit', 'apply'], capabilities: ['tools'], defaultCompletionOptions: { contextLength: 64000, maxTokens: 8192, temperature: 0.2 } },
-      },
-      {
-        key: 'mistral_large', label: 'Mistral Large 2', sub: 'Mistral',
-        color: '#f59e0b', border: 'border-t-amber-500', bg: 'bg-amber-500/10',
-        badge: 'EU Hosted', badgeColor: 'text-amber-400',
-        model: { name: 'Mistral Large 2', provider: 'mistral', model: 'mistral-large-latest', apiBase: 'https://api.mistral.ai/v1', executionMode: 'online_api', roles: ['chat', 'edit', 'apply'], capabilities: ['tools'], defaultCompletionOptions: { contextLength: 131072, maxTokens: 32768, temperature: 0.2 } },
-      },
-    ];
+
 
   useEffect(() => {
     if (initialDashboardTab) {
@@ -375,40 +320,6 @@ export default function ModelHubView({ config, rawYaml, onUpdateConfig, onClose,
               </div>
             </div>
 
-            {/* Quick Add Cloud Models */}
-            {isDashboard && (
-              <div className="col-span-full mb-2">
-                <div className="flex items-center gap-2 mb-3">
-                  <Globe className="w-4 h-4 text-[var(--vscode-textLink-foreground)]" />
-                  <span className="text-sm font-bold text-[var(--vscode-foreground)]">Quick Add Cloud Models</span>
-                  <span className="text-[10px] text-[var(--vscode-descriptionForeground)] ml-1">— click karo, sirf API Key enter karo!</span>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2">
-                  {CLOUD_PROVIDERS
-                    .filter(p => !config.models.some(m => m.model === p.model.model))
-                    .map(p => (
-                      <button
-                        key={p.key}
-                        onClick={() => {
-                          setEditingModel({ id: `model-${Date.now()}`, isLocal: false, ...p.model } as ModelConfig);
-                        }}
-                        className={`flex flex-col justify-between p-3 rounded-xl border border-t-[3px] ${p.border} hover:-translate-y-0.5 transition-all duration-200 group text-left`}
-                        style={{ height: '90px', backgroundColor: 'var(--vscode-editorWidget-background)', borderBottomColor: 'var(--vscode-widget-border)', borderLeftColor: 'var(--vscode-widget-border)', borderRightColor: 'var(--vscode-widget-border)' }}
-                      >
-                        <div>
-                          <div className="text-[11px] font-black text-[var(--vscode-foreground)] leading-tight">{p.label}</div>
-                          <div className="text-[9px] text-[var(--vscode-descriptionForeground)]">{p.sub}</div>
-                          <div className={`text-[9px] font-bold ${p.badgeColor}`}>{p.badge}</div>
-                        </div>
-                        <div className="flex items-center gap-1 text-[10px] font-bold" style={{ color: p.color }}>
-                          <Plus className="w-3 h-3" />
-                          Add
-                        </div>
-                      </button>
-                    ))}
-                </div>
-              </div>
-            )}
 
             {/* Grid — fixed row height so all cards are equal */}
             <div className={`flex-1 overflow-y-auto pr-2 pb-10 ${isDashboard ? 'grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 auto-rows-[260px]' : 'flex flex-col gap-3'}`}>
