@@ -291,13 +291,9 @@ export default function App() {
     <div className="absolute inset-0 flex flex-col bg-vscode-editor-background text-vscode-fg text-[13px] overflow-hidden">
       {/* Top Header */}
       <header className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-black/40 backdrop-blur-md select-none z-10 shadow-sm">
-        {/* Model Selector Button Pill */}
+        {/* Model Selector Dropdown */}
         <div className="flex items-center gap-1.5 flex-1 min-w-0">
-          <button
-            onClick={() => setViewMode('modelhub')}
-            className="flex items-center gap-2 px-2.5 py-1 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] hover:border-sky-400/50 max-w-[200px] transition text-left shadow-sm group"
-            title="Click to open Chanakya Model Hub & Switch Models"
-          >
+          <div className="relative flex items-center bg-white/[0.04] border border-white/10 hover:border-sky-400/50 hover:bg-white/[0.08] rounded-lg transition px-2.5 py-1 w-full max-w-[200px] shadow-sm group">
             {activeModel?.isLocal ? (
               <Cpu className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
             ) : isEnterprise ? (
@@ -305,15 +301,36 @@ export default function App() {
             ) : (
               <Globe className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" />
             )}
-            <span className="truncate font-bold text-xs text-white group-hover:text-sky-300 transition">
-              {activeModel?.name || 'Select Model'}
-            </span>
-            <ChevronDown className="w-3 h-3 text-white/40 group-hover:text-white flex-shrink-0 transition" />
-          </button>
+            <select
+              value={activeModel?.id || activeModel?.name || ''}
+              onChange={(e) => {
+                const newModelId = e.target.value;
+                if (!config) return;
+                const updatedConfig = { ...config, activeChatModelId: newModelId };
+                handleUpdateConfig(updatedConfig);
+              }}
+              className="appearance-none bg-transparent outline-none font-bold text-[11px] text-white group-hover:text-sky-300 transition w-full pl-2 pr-5 cursor-pointer truncate"
+              title="Switch Active Chat Model"
+            >
+              {config?.models.map((m) => (
+                <option key={m.id || m.name} value={m.id || m.name} className="bg-[var(--vscode-editor-background)] text-[var(--vscode-foreground)]">
+                  {m.name}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="w-3 h-3 text-white/40 group-hover:text-white flex-shrink-0 absolute right-1.5 pointer-events-none" />
+          </div>
         </div>
 
         {/* Action Icons */}
         <div className="flex items-center gap-1">
+          <button
+            onClick={() => setViewMode('dashboard')}
+            title="Open AI Dashboard & Model Hub"
+            className="p-1.5 hover:bg-sky-500/20 rounded-lg transition text-sky-400/80 hover:text-sky-400 border border-transparent hover:border-sky-500/30"
+          >
+            <Zap className="w-3.5 h-3.5" />
+          </button>
           <button
             onClick={() => vscode.postMessage({ type: 'openSettings' })}
             title="Open Extension Settings"
