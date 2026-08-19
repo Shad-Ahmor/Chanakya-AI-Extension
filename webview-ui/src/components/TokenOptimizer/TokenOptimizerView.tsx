@@ -18,6 +18,22 @@ import {
   Sparkles,
 } from 'lucide-react';
 
+const LANGUAGE_FRAMEWORKS: Record<string, string[]> = {
+  typescript: ['React', 'Next.js', 'Vue', 'Angular', 'Svelte', 'Express', 'NestJS', 'Prisma', 'tRPC'],
+  javascript: ['React', 'Next.js', 'Vue', 'Angular', 'Svelte', 'Express', 'React Native'],
+  python: ['Django', 'FastAPI', 'Flask', 'Pyramid', 'Tornado'],
+  go: ['Gin', 'Fiber', 'Echo', 'Beego'],
+  rust: ['Actix', 'Rocket', 'Tauri', 'Axum'],
+  java: ['Spring Boot', 'Hibernate', 'Micronaut', 'Quarkus'],
+  'c++': ['Qt', 'Boost', 'Poco'],
+  'c#': ['.NET Core', 'ASP.NET', 'Unity', 'Blazor'],
+  kotlin: ['Spring Boot', 'Ktor', 'Android Jetpack'],
+  swift: ['SwiftUI', 'UIKit', 'Vapor'],
+  dart: ['Flutter'],
+  ruby: ['Ruby on Rails', 'Sinatra'],
+  php: ['Laravel', 'Symfony', 'CodeIgniter', 'WordPress'],
+};
+
 export interface TokenOptimizerConfig {
   enabled: boolean;
   taskType: 'coding' | 'thinking' | 'reasoning' | 'bug_solving' | 'other';
@@ -362,7 +378,7 @@ export default function TokenOptimizerView({ config }: { config: any }) {
               <Zap className="w-5 h-5 text-emerald-400" />
               <h2 className="text-xl font-black text-[var(--vscode-foreground)]">Token Optimizer</h2>
             </div>
-            <p className="text-xs text-[var(--vscode-descriptionForeground)]">Reduce AI API costs by sending smarter, targeted prompts. Kam token, same kaam!</p>
+            <p className="text-xs text-[var(--vscode-descriptionForeground)]">Reduce AI API costs by sending smarter, targeted prompts for maximum efficiency.</p>
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => update('enabled', !cfg.enabled)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition ${cfg.enabled ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-[var(--vscode-editor-background)] text-[var(--vscode-descriptionForeground)] border border-[var(--vscode-widget-border)]'}`}>
@@ -432,7 +448,7 @@ export default function TokenOptimizerView({ config }: { config: any }) {
 
         {/* Response Conciseness */}
         <Section icon={<MessageSquareX className="w-4 h-4 text-emerald-400" />} title="Response Style">
-          <p className="text-[11px] text-[var(--vscode-descriptionForeground)] mb-3">AI ko batao kitne chhote jawab dene hain. Ultra-concise = sirf code, koi explanation nahi.</p>
+          <p className="text-[11px] text-[var(--vscode-descriptionForeground)] mb-3">Define how concise the AI's responses should be. Ultra-concise = code only, no explanations.</p>
           <div className="grid grid-cols-3 gap-2">
             {([
               { key: 'normal', label: 'Normal', desc: 'Detailed explanations', saving: '~0%' },
@@ -450,7 +466,7 @@ export default function TokenOptimizerView({ config }: { config: any }) {
 
         {/* Context Lines */}
         <Section icon={<Code2 className="w-4 h-4 text-sky-400" />} title="Code Context Size">
-          <p className="text-[11px] text-[var(--vscode-descriptionForeground)] mb-3">Code select karne ke baad kitni surrounding lines context mein bhejna hai. Zyada lines = zyada tokens.</p>
+          <p className="text-[11px] text-[var(--vscode-descriptionForeground)] mb-3">Determine the number of surrounding lines to include when sending code context. More lines = more tokens consumed.</p>
           <div className="flex items-center gap-4">
             <input type="range" min={5} max={50} value={cfg.contextLines} onChange={(e) => update('contextLines', Number(e.target.value))} className="flex-1 accent-sky-400" />
             <div className="text-center min-w-[60px]">
@@ -479,14 +495,14 @@ export default function TokenOptimizerView({ config }: { config: any }) {
 
         {/* Code Stripping */}
         <Section icon={<ListX className="w-4 h-4 text-orange-400" />} title="Code Stripping" defaultOpen={false}>
-          <p className="text-[11px] text-[var(--vscode-descriptionForeground)] mb-3">Code context se kuch cheezein strip karo taaki AI ko send karne se pehle size kam ho.</p>
+          <p className="text-[11px] text-[var(--vscode-descriptionForeground)] mb-3">Strip specific elements from the code context to minimize payload size before sending to AI.</p>
           <div className="space-y-2">
             {([
-              { key: 'skipComments', label: 'Remove Inline Comments', desc: '// ... aur # ... wali lines hata do' },
-              { key: 'skipDocstrings', label: 'Remove Docstrings', desc: '"""...""" aur /** ... */ blocks hata do' },
-              { key: 'skipImports', label: 'Remove Import Lines', desc: 'import/require statements remove karo' },
-              { key: 'removeEmptyLines', label: 'Remove Empty Lines', desc: 'Sare extra empty blank lines hata do' },
-              { key: 'removeConsoleLogs', label: 'Remove Console.logs', desc: 'console.log/print statements hata do' },
+              { key: 'skipComments', label: 'Remove Inline Comments', desc: 'Remove lines starting with // or #' },
+              { key: 'skipDocstrings', label: 'Remove Docstrings', desc: 'Remove block comments like /** */ or Python docstrings' },
+              { key: 'skipImports', label: 'Remove Import Lines', desc: 'Remove import and require statements' },
+              { key: 'removeEmptyLines', label: 'Remove Empty Lines', desc: 'Remove all empty blank lines' },
+              { key: 'removeConsoleLogs', label: 'Remove Console.logs', desc: 'Remove console.log or print statements' },
             ] as const).map(({ key, label, desc }) => (
               <label key={key} className="flex items-start gap-3 p-2.5 rounded-lg hover:bg-[var(--vscode-list-hoverBackground)] cursor-pointer transition">
                 <div onClick={() => update(key, !cfg[key])} className={`mt-0.5 rounded-full relative flex-shrink-0 cursor-pointer transition-colors ${cfg[key] ? 'bg-emerald-500' : 'bg-[var(--vscode-input-border)]'}`} style={{ height: '18px', minWidth: '32px' }}>
@@ -503,9 +519,32 @@ export default function TokenOptimizerView({ config }: { config: any }) {
 
         {/* Languages & Frameworks */}
         <Section icon={<Layers className="w-4 h-4 text-purple-400" />} title="Languages & Frameworks">
-          <p className="text-[11px] text-[var(--vscode-descriptionForeground)] mb-3">Apni preferred languages aur frameworks set karo — AI sirf isi ecosystem mein sochega, extra suggestions nahi dega.</p>
+          <p className="text-[11px] text-[var(--vscode-descriptionForeground)] mb-3">Set your preferred languages and frameworks. The AI will strictly suggest solutions within this ecosystem.</p>
           <ChipInput label="Programming Languages" placeholder="Type & Enter — e.g. TypeScript" items={cfg.programmingLanguages} onAdd={(v) => addToList('programmingLanguages', v)} onRemove={(v) => removeFromList('programmingLanguages', v)} suggestions={['TypeScript', 'JavaScript', 'Python', 'Go', 'Rust', 'Java', 'C++', 'C#', 'Kotlin', 'Swift', 'Dart', 'Ruby', 'PHP']} />
-          <ChipInput label="Frameworks & Libraries" placeholder="Type & Enter — e.g. React" items={cfg.frameworks} onAdd={(v) => addToList('frameworks', v)} onRemove={(v) => removeFromList('frameworks', v)} suggestions={['React', 'Next.js', 'Vue', 'Angular', 'Svelte', 'Express', 'FastAPI', 'Django', 'Spring', 'Flutter', 'Tailwind CSS', 'Prisma', 'GraphQL', 'tRPC']} />
+          
+          {(() => {
+            const selectedLangs = cfg.programmingLanguages.map(l => l.toLowerCase());
+            let dynamicFrameworks: string[] = [];
+            if (selectedLangs.length > 0) {
+              const frames = new Set<string>();
+              selectedLangs.forEach(lang => {
+                if (LANGUAGE_FRAMEWORKS[lang]) {
+                  LANGUAGE_FRAMEWORKS[lang].forEach(f => frames.add(f));
+                }
+              });
+              dynamicFrameworks = Array.from(frames);
+            }
+            return (
+              <ChipInput 
+                label="Frameworks & Libraries" 
+                placeholder={selectedLangs.length > 0 ? "Type & Enter — e.g. React" : "Select a programming language first..."}
+                items={cfg.frameworks} 
+                onAdd={(v) => addToList('frameworks', v)} 
+                onRemove={(v) => removeFromList('frameworks', v)} 
+                suggestions={dynamicFrameworks} 
+              />
+            );
+          })()}
           
           <button 
             onClick={handleAutoGenerate}
@@ -518,13 +557,13 @@ export default function TokenOptimizerView({ config }: { config: any }) {
 
         {/* Custom Rules */}
         <Section icon={<Info className="w-4 h-4 text-sky-400" />} title="Coding Rules (System Context)">
-          <p className="text-[11px] text-[var(--vscode-descriptionForeground)] mb-3">Har prompt ke sath ye rules attach honge. Bar-bar same instruction dene ki zarurat nahi. e.g. "Always use async/await"</p>
+          <p className="text-[11px] text-[var(--vscode-descriptionForeground)] mb-3">These rules are appended to every prompt automatically, eliminating the need to repeat instructions.</p>
           <RuleListInput label="Rules" placeholder="Type your own custom rule or choose from templates below..." items={cfg.rules} onAdd={(v) => addToList('rules', v)} onRemove={(v) => removeFromList('rules', v)} suggestions={['Always use async/await over .then()', 'Never use var, use const/let', 'Use TypeScript strict mode', 'Prefer functional components', 'Always handle errors with try/catch', 'Never use any type in TypeScript', 'Use named exports over default', 'Keep functions under 50 lines', 'Write self-documenting code']} />
         </Section>
 
         {/* Negative Prompts */}
         <Section icon={<MessageSquareX className="w-4 h-4 text-red-400" />} title="Negative Prompts (What NOT to do)">
-          <p className="text-[11px] text-[var(--vscode-descriptionForeground)] mb-3">AI ko specifically batao kya <strong>nahi karna</strong>. Yeh system prompt mein add hota hai — AI un cheezeon se bachta hai.</p>
+          <p className="text-[11px] text-[var(--vscode-descriptionForeground)] mb-3">Explicitly instruct the AI on what <strong>NOT to do</strong>. This enforces strict negative constraints on its behavior.</p>
           <RuleListInput label="Negative Instructions" placeholder="Type what the AI should NOT do..." items={cfg.negativePrompts} onAdd={(v) => addToList('negativePrompts', v)} onRemove={(v) => removeFromList('negativePrompts', v)} suggestions={['Do not explain the code, just write it', 'Do not add unnecessary comments', 'Do not use deprecated APIs', 'Do not add console.log statements', 'Do not write unit tests unless asked', 'Do not suggest refactoring unless asked', 'Do not add boilerplate imports', 'Do not explain basic concepts']} />
         </Section>
 
