@@ -19,19 +19,21 @@ import {
 } from 'lucide-react';
 
 const LANGUAGE_FRAMEWORKS: Record<string, string[]> = {
-  typescript: ['React', 'Next.js', 'Vue', 'Angular', 'Svelte', 'Express', 'NestJS', 'Prisma', 'tRPC'],
-  javascript: ['React', 'Next.js', 'Vue', 'Angular', 'Svelte', 'Express', 'React Native'],
-  python: ['Django', 'FastAPI', 'Flask', 'Pyramid', 'Tornado'],
-  go: ['Gin', 'Fiber', 'Echo', 'Beego'],
-  rust: ['Actix', 'Rocket', 'Tauri', 'Axum'],
-  java: ['Spring Boot', 'Hibernate', 'Micronaut', 'Quarkus'],
-  'c++': ['Qt', 'Boost', 'Poco'],
-  'c#': ['.NET Core', 'ASP.NET', 'Unity', 'Blazor'],
-  kotlin: ['Spring Boot', 'Ktor', 'Android Jetpack'],
-  swift: ['SwiftUI', 'UIKit', 'Vapor'],
-  dart: ['Flutter'],
-  ruby: ['Ruby on Rails', 'Sinatra'],
-  php: ['Laravel', 'Symfony', 'CodeIgniter', 'WordPress'],
+  typescript: ['React', 'Next.js', 'Vue', 'Angular', 'Svelte', 'Express', 'NestJS', 'Prisma', 'tRPC', 'Nuxt', 'Remix', 'Astro', 'Hono'],
+  javascript: ['React', 'Next.js', 'Vue', 'Angular', 'Svelte', 'Express', 'React Native', 'Meteor', 'Ember', 'AdonisJS', 'Fastify', 'Electron'],
+  python: ['Django', 'FastAPI', 'Flask', 'Pyramid', 'Tornado', 'Streamlit', 'Dash', 'Celery', 'SQLAlchemy', 'Pydantic'],
+  go: ['Gin', 'Fiber', 'Echo', 'Beego', 'GORM', 'Revel', 'Chi'],
+  rust: ['Actix', 'Rocket', 'Tauri', 'Axum', 'Tokio', 'Diesel', 'Yew', 'Dioxus'],
+  java: ['Spring Boot', 'Hibernate', 'Micronaut', 'Quarkus', 'Jakarta EE', 'Vert.x', 'Dropwizard', 'Struts'],
+  'c++': ['Qt', 'Boost', 'Poco', 'Unreal Engine', 'JUCE', 'wxWidgets'],
+  'c#': ['.NET Core', 'ASP.NET', 'Unity', 'Blazor', 'WPF', 'Xamarin', 'MAUI'],
+  kotlin: ['Spring Boot', 'Ktor', 'Android Jetpack', 'Compose', 'Exposed'],
+  swift: ['SwiftUI', 'UIKit', 'Vapor', 'Perfect', 'Kitura'],
+  dart: ['Flutter', 'Riverpod', 'GetX', 'Provider', 'Bloc'],
+  ruby: ['Ruby on Rails', 'Sinatra', 'Hanami', 'Sidekiq', 'RSpec'],
+  php: ['Laravel', 'Symfony', 'CodeIgniter', 'WordPress', 'Lumen', 'Phalcon', 'CakePHP'],
+  c: ['GTK', 'SDL', 'Raylib'],
+  sql: ['PostgreSQL', 'MySQL', 'SQLite', 'MongoDB (NoSQL)', 'Redis (NoSQL)'],
 };
 
 export interface TokenOptimizerConfig {
@@ -314,6 +316,29 @@ export default function TokenOptimizerView({ config }: { config: any }) {
     setSaved(false);
   };
 
+  const STATIC_SMART_RULES: Record<string, { rules: string[]; negatives: string[] }> = {
+    python: {
+      rules: ['Use list comprehensions and generic types to minimize code size.'],
+      negatives: ['Do not write redundant type hints for obvious types.', 'Do not explain standard Python syntax.']
+    },
+    javascript: {
+      rules: ['Use modern ES6+ terse syntax (arrow functions, destructuring).'],
+      negatives: ['Do not include common standard imports unless requested.', 'Do not explain basic JavaScript concepts.']
+    },
+    typescript: {
+      rules: ['Use modern ES6+ terse syntax (arrow functions, destructuring).', 'Prefer strict typings and avoid any.'],
+      negatives: ['Do not include common standard imports unless requested.', 'Do not explain TypeScript basics.']
+    },
+    django: {
+      rules: ['Use Class Based Views (CBV) or generic views where possible to reduce boilerplate.'],
+      negatives: ['Do not explain Django routing or ORM basics.']
+    },
+    react: {
+      rules: ['Use functional components and inline hooks.'],
+      negatives: ['Do not write class components or prop-types.']
+    },
+  };
+
   const handleAutoGenerate = () => {
     const current = allConfigs[selectedModelId] || DEFAULT_TOKEN_CONFIG;
     const langs = current.programmingLanguages.map(l => l.toLowerCase());
@@ -323,30 +348,35 @@ export default function TokenOptimizerView({ config }: { config: any }) {
     const smartRules = new Set<string>();
     const smartNegatives = new Set<string>();
 
+    // Base coding constraints
     if (current.taskType === 'coding') {
       smartRules.add('Only output the specific modified functions/classes, not the whole file.');
       smartNegatives.add('Do not explain standard API syntax or obvious logic.');
-      
-      if (langs.includes('python')) {
-        smartRules.add('Use list comprehensions and generic types to minimize code size.');
-        smartNegatives.add('Do not write redundant type hints for obvious types.');
+    }
+
+    // Language-specific static rules
+    langs.forEach(lang => {
+      if (STATIC_SMART_RULES[lang]) {
+        STATIC_SMART_RULES[lang].rules.forEach(r => smartRules.add(r));
+        STATIC_SMART_RULES[lang].negatives.forEach(n => smartNegatives.add(n));
       }
-      if (langs.includes('javascript') || langs.includes('typescript')) {
-        smartRules.add('Use modern ES6+ terse syntax (arrow functions, destructuring).');
-        smartNegatives.add('Do not include common standard imports (like React) unless requested.');
+    });
+
+    // Framework-specific static rules
+    frames.forEach(fr => {
+      if (STATIC_SMART_RULES[fr]) {
+        STATIC_SMART_RULES[fr].rules.forEach(r => smartRules.add(r));
+        STATIC_SMART_RULES[fr].negatives.forEach(n => smartNegatives.add(n));
       }
-      if (frames.includes('django')) {
-        smartRules.add('Use Class Based Views (CBV) or generic views where possible to reduce boilerplate.');
-        smartNegatives.add('Do not explain Django routing or ORM basics.');
-      }
-      if (frames.includes('react')) {
-        smartRules.add('Use functional components and inline hooks.');
-        smartNegatives.add('Do not write class components or prop-types.');
-      }
-      if (targets.includes('website') || targets.includes('web')) {
-        smartNegatives.add('Do not include boilerplate HTML/CSS tags if context implies a component snippet.');
-      }
-    } else if (current.taskType === 'bug_solving') {
+    });
+
+    // Platform target specific additions
+    if (targets.includes('website') || targets.includes('web')) {
+      smartNegatives.add('Do not include boilerplate HTML/CSS tags if context implies a component snippet.');
+    }
+
+    // Bug solving specific rules
+    if (current.taskType === 'bug_solving') {
       smartRules.add('Output the direct root cause and exactly 1 concise fix.');
       smartNegatives.add('Do not explain generic debugging strategies.');
     }
@@ -356,7 +386,7 @@ export default function TokenOptimizerView({ config }: { config: any }) {
       [selectedModelId]: {
         ...current,
         rules: Array.from(new Set([...current.rules, ...smartRules])),
-        negativePrompts: Array.from(new Set([...current.negativePrompts, ...smartNegatives])),
+        negativePrompts: Array.from(new Set([...current.negativePrompts, ...smartNegatives]))
       }
     }));
     setSaved(false);
@@ -370,7 +400,7 @@ export default function TokenOptimizerView({ config }: { config: any }) {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="w-full max-w-5xl mx-auto py-6 px-4">
+      <div className="w-full max-w-5xl mx-auto pt-6 pb-64 px-4">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div>

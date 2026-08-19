@@ -3,9 +3,8 @@ import { vscode } from '../../vscode';
 import { Settings, Server, Zap, MessageSquare } from 'lucide-react';
 
 interface SettingsData {
-  apiEndpoint?: string;
   model?: string;
-  customHeaders?: string;
+  enableGitSnapshots?: boolean;
   maxTokens?: number;
   temperature?: number;
   autoContextExtraction?: boolean;
@@ -64,33 +63,58 @@ export default function SettingsView() {
             </div>
             <div>
               <h2 className="text-2xl font-bold text-[var(--vscode-foreground)] tracking-tight">General Settings</h2>
-              <p className="text-sm text-[var(--vscode-descriptionForeground)] mt-1">Configure global API defaults and headers</p>
+              <p className="text-sm text-[var(--vscode-descriptionForeground)] mt-1">Global agent behaviors and features</p>
             </div>
           </div>
           
           <div className="space-y-6">
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-semibold text-[var(--vscode-foreground)]">API Endpoint</label>
-              <input
-                type="text"
-                value={settings.apiEndpoint || ''}
-                onChange={(e) => handleChange('apiEndpoint', e.target.value)}
-                placeholder="https://api.openai.com/v1"
-                className="px-4 py-3 rounded-lg border border-[var(--vscode-input-border)] focus:border-[var(--vscode-focusBorder)] focus:outline-none transition-colors bg-[var(--vscode-input-background)] text-[var(--vscode-input-foreground)] placeholder-[var(--vscode-input-placeholderForeground)]"
-              />
-              <p className="text-xs text-[var(--vscode-descriptionForeground)]">Base URL for OpenAI-compatible API endpoint.</p>
-            </div>
+            
+            <label className="flex items-center gap-4 cursor-pointer p-4 rounded-xl border border-[var(--vscode-widget-border)] hover:bg-[var(--vscode-list-hoverBackground)] transition-colors">
+              <div className="relative flex items-center">
+                <input
+                  type="checkbox"
+                  checked={settings.enableGitSnapshots !== false} // default true
+                  onChange={(e) => handleChange('enableGitSnapshots', e.target.checked)}
+                  className="w-5 h-5 rounded border-[var(--vscode-input-border)] text-[var(--vscode-button-background)] focus:ring-2 focus:ring-[var(--vscode-focusBorder)] bg-[var(--vscode-input-background)] cursor-pointer"
+                />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-sm font-semibold text-[var(--vscode-foreground)]">Enable Auto Git-Snapshots</span>
+                <span className="text-xs text-[var(--vscode-descriptionForeground)]">Automatically creates a Git commit before AI runs commands or edits files. This enables the 'Revert' button in chat.</span>
+              </div>
+            </label>
+          </div>
+        </section>
 
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-semibold text-[var(--vscode-foreground)]">Custom Headers</label>
-              <textarea
-                value={settings.customHeaders || ''}
-                onChange={(e) => handleChange('customHeaders', e.target.value)}
-                placeholder="Content-Type: application/json\nworkspace-id: 1234"
-                rows={3}
-                className="px-4 py-3 rounded-lg border border-[var(--vscode-input-border)] focus:border-[var(--vscode-focusBorder)] focus:outline-none transition-colors bg-[var(--vscode-input-background)] text-[var(--vscode-input-foreground)] placeholder-[var(--vscode-input-placeholderForeground)] font-mono text-sm resize-y"
-              />
-              <p className="text-xs text-[var(--vscode-descriptionForeground)]">Add custom headers for requests (one per line, e.g., 'Key: Value').</p>
+        {/* MCP Settings */}
+        <section className="rounded-2xl shadow-sm border p-8 transition-colors" style={{ backgroundColor: 'var(--vscode-editorWidget-background)', borderColor: 'var(--vscode-widget-border)' }}>
+          <div className="flex items-center gap-4 mb-6 border-b border-[var(--vscode-panel-border)] pb-5">
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center text-emerald-500 bg-emerald-500/10 border border-emerald-500/20">
+              <Server className="w-6 h-6" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-[var(--vscode-foreground)] tracking-tight">MCP Servers</h2>
+              <p className="text-sm text-[var(--vscode-descriptionForeground)] mt-1">Model Context Protocol configuration</p>
+            </div>
+          </div>
+          
+          <div className="space-y-6">
+            <div className="p-4 rounded-xl border border-[var(--vscode-widget-border)] bg-[var(--vscode-list-hoverBackground)]">
+              <h3 className="text-sm font-semibold text-[var(--vscode-foreground)] mb-2">Workspace MCP Config</h3>
+              <p className="text-xs text-[var(--vscode-descriptionForeground)] leading-relaxed">
+                Chanakya AI Enhancer automatically supports the **Model Context Protocol (MCP)**. 
+                To add custom tools (like Local DB, GitHub, Web Search), create a <code className="text-emerald-400 bg-black/20 px-1 rounded">.vscode/mcp.json</code> file in your workspace root.
+              </p>
+              <pre className="mt-3 p-3 rounded-lg bg-black/40 border border-white/5 text-[11px] font-mono text-emerald-300 overflow-x-auto">
+{`{
+  "mcpServers": {
+    "sqlite": {
+      "command": "uvx",
+      "args": ["mcp-server-sqlite", "--db-path", "database.db"]
+    }
+  }
+}`}
+              </pre>
             </div>
           </div>
         </section>

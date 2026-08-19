@@ -55,6 +55,7 @@ export type WebviewToExtensionMessage =
   | { type: 'getApiKeyStatus' }
   | { type: 'clearHistory' }
   | { type: 'insertCode'; payload: { code: string } }
+  | { type: 'applyCodeMerge'; payload: { code: string } }
   | { type: 'copyToClipboard'; payload: { text: string } }
   | { type: 'openSettings' };
 

@@ -4,6 +4,7 @@ import { InlineEditProvider } from './providers/inlineEditProvider';
 import { SidebarProvider } from './providers/sidebarProvider';
 import { DashboardProvider } from './providers/dashboardProvider';
 import { ConfigManager } from './services/configManager';
+import { McpService } from './services/mcpService';
 import { ContextItem } from './types/ipc';
 import { Logger } from './utils/logger';
 import { InlineEditCommand } from './commands/inlineEdit';
@@ -17,6 +18,13 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // 1. Initialize Configuration Manager
   const configManager = ConfigManager.getInstance();
+
+  // 1.5 Initialize MCP Service
+  const mcpService = McpService.getInstance();
+  const wsFolders = vscode.workspace.workspaceFolders;
+  if (wsFolders && wsFolders.length > 0) {
+    mcpService.loadConfig(wsFolders[0].uri.fsPath);
+  }
 
   // 2. Register Sidebar Provider (Replaces Full Screen Dashboard)
   const sidebarProvider = new SidebarProvider(context.extensionUri, context);

@@ -2,7 +2,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ChatMessage } from '../../types/ipc';
 import CodeBlock from './CodeBlock';
-import { Code, FileText, Bot, User, Sparkles } from 'lucide-react';
+import { Code, FileText, Bot, User, Sparkles, Undo2, ArrowDownRight } from 'lucide-react';
+import { vscode } from '../../vscode';
 
 interface Props {
   message: ChatMessage;
@@ -39,9 +40,20 @@ export default function ChatMessageItem({ message }: Props) {
             {isUser ? 'You' : 'Chanakya AI Enhancer'}
           </span>
         </div>
-        <span className="text-[10px] opacity-60 font-normal font-mono">
-          {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] opacity-60 font-normal font-mono">
+            {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
+          {!isUser && (
+            <button
+              onClick={() => vscode.postMessage({ type: 'revertSnapshot' })}
+              className="text-[10px] flex items-center gap-1 bg-red-500/20 text-red-300 hover:bg-red-500/40 px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+              title="Revert workspace to before this prompt"
+            >
+              <Undo2 className="w-3 h-3" /> Revert
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Context Item Pills */}
@@ -145,6 +157,23 @@ export default function ChatMessageItem({ message }: Props) {
           </span>
         )}
       </div>
+
+      {/* Token Optimization Stats Card */}
+      {!isUser && !message.isStreaming && message.optimizationStats && message.optimizationStats.originalTokens > message.optimizationStats.optimizedTokens && (
+        <div className="mt-3 flex items-center gap-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[11px] font-mono select-none shadow-sm">
+          <ArrowDownRight className="w-3.5 h-3.5" />
+          <div className="flex-1 flex justify-between items-center">
+            <span>
+              <span className="font-semibold text-emerald-400">
+                {message.optimizationStats.originalTokens - message.optimizationStats.optimizedTokens}
+              </span> tokens saved
+            </span>
+            <span className="bg-emerald-500/20 px-1.5 py-0.5 rounded text-emerald-200">
+              {Math.round(((message.optimizationStats.originalTokens - message.optimizationStats.optimizedTokens) / message.optimizationStats.originalTokens) * 100)}% optimized
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -228,7 +228,7 @@ export default function AnalyticsDashboard({ config, onSetActiveModel }: Props) 
 
 
 
-  const [timeFilter, setTimeFilter] = useState<'hourly' | 'daily' | 'weekly' | 'monthly'>('monthly');
+  const [timeFilter, setTimeFilter] = useState<'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly'>('monthly');
 
   // Filter history based on time period
   const now = Date.now();
@@ -236,43 +236,66 @@ export default function AnalyticsDashboard({ config, onSetActiveModel }: Props) 
     hourly: now - (24 * 60 * 60 * 1000), // Last 24 hours
     daily: now - (7 * 24 * 60 * 60 * 1000), // Last 7 days
     weekly: now - (4 * 7 * 24 * 60 * 60 * 1000), // Last 4 weeks
-    monthly: now - (365 * 24 * 60 * 60 * 1000), // Last 12 months
+    monthly: now - (30 * 24 * 60 * 60 * 1000), // Last 30 days
+    yearly: now - (365 * 24 * 60 * 60 * 1000), // Last 365 days
   };
   
-  const filteredHistory = history.filter(h => 
-    (h.modelId === selectedModelId) && (h.timestamp >= timeThresholds[timeFilter])
-  );
-
-  // Calculate dynamic stats for the active model based on history
-  let cardReqs = 0;
-  let cardPromptTokens = 0;
-  let cardCompTokens = 0;
-  let totalDur = 0;
-  let totalTTFT = 0;
-  let cardErrors = 0;
-
-  filteredHistory.forEach(r => {
-    cardReqs++;
-    cardPromptTokens += r.promptTokens;
-    cardCompTokens += r.completionTokens;
-    totalDur += r.durationMs;
-    totalTTFT += r.ttftMs;
-    if (r.isError) cardErrors++;
+  // Calculate dynamic stats for ALL models based on the time filter
+  const filteredStats: TokenStats = {};
+  history.forEach(r => {
+    if (r.timestamp >= timeThresholds[timeFilter]) {
+      if (!filteredStats[r.modelId]) {
+        filteredStats[r.modelId] = {
+          requests: 0,
+          promptTokens: 0,
+          completionTokens: 0,
+          avgDuration: 0,
+          avgTTFT: 0,
+          errors: 0
+        };
+      }
+      const st = filteredStats[r.modelId];
+      st.requests++;
+      st.promptTokens += r.promptTokens;
+      st.completionTokens += r.completionTokens;
+      // Note: For simplicity we will average these later if needed, but the original logic just stored sum and averaged on display.
+      // Actually, since TokenStats requires avgDuration, let's store sums here and compute averages after the loop.
+      st.avgDuration = (st.avgDuration || 0) + r.durationMs;
+      st.avgTTFT = (st.avgTTFT || 0) + r.ttftMs;
+      if (r.isError) st.errors = (st.errors || 0) + 1;
+    }
   });
 
+  // Calculate averages for filtered stats
+  Object.keys(filteredStats).forEach(key => {
+    const st = filteredStats[key];
+    if (st.requests > 0) {
+      st.avgDuration = st.avgDuration! / st.requests;
+      st.avgTTFT = st.avgTTFT! / st.requests;
+    }
+  });
+
+  // Top cards use active model's filtered stats
+  const activeStats = filteredStats[selectedModelId] || { requests: 0, promptTokens: 0, completionTokens: 0, avgDuration: 0, avgTTFT: 0, errors: 0 };
+  const cardReqs = activeStats.requests;
+  const cardPromptTokens = activeStats.promptTokens;
+  const cardCompTokens = activeStats.completionTokens;
   const cardTotalTokens = cardPromptTokens + cardCompTokens;
-  const cardAvgDur = cardReqs > 0 ? (totalDur / cardReqs) : 0;
-  const cardAvgTTFT = cardReqs > 0 ? (totalTTFT / cardReqs) : 0;
+  const cardAvgDur = activeStats.avgDuration || 0;
+  const cardAvgTTFT = activeStats.avgTTFT || 0;
+  const cardErrors = activeStats.errors || 0;
 
   // Calculate Line Chart points
   // Group by periods (e.g. 24 buckets for hourly, 7 for daily)
-  const buckets = timeFilter === 'hourly' ? 24 : timeFilter === 'daily' ? 7 : timeFilter === 'weekly' ? 4 : 12;
+  const buckets = timeFilter === 'hourly' ? 24 : timeFilter === 'daily' ? 7 : timeFilter === 'weekly' ? 4 : timeFilter === 'monthly' ? 30 : 12;
   const bucketSize = (now - timeThresholds[timeFilter]) / buckets;
   
   const latencyBuckets = new Array(buckets).fill(0).map(() => ({ sum: 0, count: 0 }));
   const tokenBuckets = new Array(buckets).fill(0);
 
-  filteredHistory.forEach(r => {
+  const activeModelHistory = history.filter(h => (h.modelId === selectedModelId) && (h.timestamp >= timeThresholds[timeFilter]));
+  
+  activeModelHistory.forEach(r => {
     const bucketIdx = Math.max(0, Math.min(buckets - 1, Math.floor((r.timestamp - timeThresholds[timeFilter]) / bucketSize)));
     latencyBuckets[bucketIdx].sum += r.durationMs;
     latencyBuckets[bucketIdx].count += 1;
@@ -313,7 +336,7 @@ export default function AnalyticsDashboard({ config, onSetActiveModel }: Props) 
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1 bg-[var(--vscode-input-background)] border border-[var(--vscode-widget-border)] rounded-lg p-0.5 shadow-sm">
-              {(['hourly', 'daily', 'weekly', 'monthly'] as const).map(tf => (
+              {(['hourly', 'daily', 'weekly', 'monthly', 'yearly'] as const).map(tf => (
                 <button
                   key={tf}
                   onClick={() => setTimeFilter(tf)}
@@ -390,14 +413,14 @@ export default function AnalyticsDashboard({ config, onSetActiveModel }: Props) 
                   ) : (
                     [...config.models]
                       .sort((a, b) => {
-                        const sa = stats[a.id || a.name];
-                        const sb = stats[b.id || b.name];
+                        const sa = filteredStats[a.id || a.name];
+                        const sb = filteredStats[b.id || b.name];
                         const ta = sa ? sa.promptTokens + sa.completionTokens : 0;
                         const tb = sb ? sb.promptTokens + sb.completionTokens : 0;
                         return tb - ta;
                       })
                       .map((model) => {
-                        const st = stats[model.id || model.name];
+                        const st = filteredStats[model.id || model.name];
                         const totalTokens = st ? st.promptTokens + st.completionTokens : 0;
                         const reqs = st?.requests || 0;
                         const errors = st?.errors || 0;

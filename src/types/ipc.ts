@@ -44,6 +44,7 @@ export type FromWebviewMessage =
   | { type: 'searchWorkspaceFiles'; payload: { query: string } }
   | { type: 'readFileContent'; payload: { path: string } }
   | { type: 'insertCode'; payload: { code: string } }
+  | { type: 'applyCodeMerge'; payload: { code: string } }
   | { type: 'copyToClipboard'; payload: { text: string } }
   | { type: 'openSettings' }
   | { type: 'openModelsHub' }
@@ -60,6 +61,7 @@ export type FromWebviewMessage =
   | { type: 'getTokenStats' }
   | { type: 'clearTokenStats' }
   | { type: 'getTokenOptimizerConfig' }
+  | { type: 'revertSnapshot' }
   | { type: 'saveTokenOptimizerConfig'; payload: Record<string, unknown> };
 
 /**
@@ -80,5 +82,6 @@ export type ToWebviewMessage =
   | { type: 'testModelResult'; payload: { modelId: string; success: boolean; latencyMs?: number | undefined; error?: string | undefined } }
   | { type: 'openSettingsTab' }
   | { type: 'localModelsDetected'; payload: { models: DetectedLocalModel[] } }
+  | { type: 'optimizationStats'; payload: { messageId: string; originalTokens: number; optimizedTokens: number } }
   | { type: 'tokenStatsResult'; payload: Record<string, unknown> }
   | { type: 'tokenOptimizerConfig'; payload: Record<string, unknown> };

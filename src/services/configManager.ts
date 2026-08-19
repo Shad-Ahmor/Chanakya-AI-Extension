@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as YAML from 'yaml';
+import * as vscode from 'vscode';
 import { AppConfig, ModelConfig } from '../types/config';
 import { DetectedLocalModel } from '../types/ipc';
 import { Logger } from '../utils/logger';
@@ -16,6 +17,11 @@ export class ConfigManager {
   private readonly configDir: string;
   private readonly configFilePath: string;
   private currentConfig: AppConfig;
+  
+  private _onDidChangeConfig = new vscode.EventEmitter<AppConfig>();
+  public readonly onDidChangeConfig = this._onDidChangeConfig.event;
+  
+  private _isWriting = false;
 
   private constructor() {
     this.configDir = path.join(os.homedir(), '.chanakya-ai-enhancer');
@@ -26,6 +32,34 @@ export class ConfigManager {
     }
 
     this.currentConfig = this.loadOrCreateDefaultConfig();
+    this.startWatchingConfig();
+  }
+
+  private startWatchingConfig() {
+    try {
+      fs.watch(this.configFilePath, (eventType) => {
+        if (eventType === 'change' && !this._isWriting) {
+          // Add a tiny debounce to avoid multiple triggers
+          setTimeout(() => {
+            try {
+              if (fs.existsSync(this.configFilePath)) {
+                const raw = fs.readFileSync(this.configFilePath, 'utf-8');
+                const parsed = YAML.parse(raw) as AppConfig;
+                if (parsed && Array.isArray(parsed.models)) {
+                  this.currentConfig = parsed;
+                  this._onDidChangeConfig.fire(this.currentConfig);
+                  this.logger.log('Detected external change in config.yaml, reloaded config.');
+                }
+              }
+            } catch (err) {
+              this.logger.error('Error reading config.yaml on external change', err);
+            }
+          }, 100);
+        }
+      });
+    } catch (err) {
+      this.logger.error('Could not watch config.yaml', err);
+    }
   }
 
   public static getInstance(): ConfigManager {
@@ -56,11 +90,15 @@ export class ConfigManager {
 
   public saveConfig(config: AppConfig, rawYaml?: string): void {
     try {
+      this._isWriting = true;
       this.currentConfig = config;
       const yamlContent = rawYaml || YAML.stringify(config);
       fs.writeFileSync(this.configFilePath, yamlContent, 'utf-8');
       this.logger.log(`Configuration saved to ${this.configFilePath}`);
+      this._onDidChangeConfig.fire(config);
+      setTimeout(() => { this._isWriting = false; }, 500);
     } catch (err) {
+      this._isWriting = false;
       this.logger.error('Failed to save config.yaml', err);
       throw err;
     }
@@ -82,16 +120,21 @@ export class ConfigManager {
         name: parsed.name || 'Main Config',
         version: parsed.version || '1.0.0',
         schema: parsed.schema || 'v1',
+        enableGitSnapshots: parsed.enableGitSnapshots ?? true,
         activeChatModelId: parsed.activeChatModelId || validatedModels[0]?.id,
         activeAutocompleteModelId: parsed.activeAutocompleteModelId || validatedModels[0]?.id,
         models: validatedModels
       };
 
+      this._isWriting = true;
       this.currentConfig = validatedConfig;
       fs.writeFileSync(this.configFilePath, yamlText, 'utf-8');
       this.logger.log(`Raw YAML configuration saved successfully.`);
+      this._onDidChangeConfig.fire(validatedConfig);
+      setTimeout(() => { this._isWriting = false; }, 500);
       return validatedConfig;
     } catch (err) {
+      this._isWriting = false;
       this.logger.error('Failed to parse or save raw YAML', err);
       throw err;
     }
@@ -214,6 +257,7 @@ export class ConfigManager {
             name: parsed.name || 'Main Config',
             version: parsed.version || '1.0.0',
             schema: parsed.schema || 'v1',
+            enableGitSnapshots: parsed.enableGitSnapshots ?? true,
             activeChatModelId: parsed.activeChatModelId || models[0]?.id,
             activeAutocompleteModelId: parsed.activeAutocompleteModelId || models[0]?.id,
             models
@@ -295,6 +339,7 @@ export class ConfigManager {
       name: 'Main Config',
       version: '1.0.0',
       schema: 'v1',
+      enableGitSnapshots: true,
       activeChatModelId: 'ril-ai-foundry-qwen-27b',
       activeAutocompleteModelId: 'local-ollama-qwen',
       models: defaultModels

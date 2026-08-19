@@ -18,6 +18,19 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   constructor(extensionUri: vscode.Uri, context: vscode.ExtensionContext) {
     this._extensionUri = extensionUri;
     this._context = context;
+    
+    // Listen for external changes to config.yaml (Two-way sync)
+    this._context.subscriptions.push(
+      this._configManager.onDidChangeConfig((newConfig) => {
+        if (this._view) {
+          const rawYaml = this._configManager.getRawYaml();
+          this.postMessage({
+            type: 'configResult',
+            payload: { config: newConfig, rawYaml }
+          });
+        }
+      })
+    );
   }
 
   /** Persist token usage per model to globalState */
@@ -57,6 +70,41 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       history.splice(0, history.length - 2000);
     }
     await this._context.globalState.update(historyKey, history);
+  }
+
+  private _createGitSnapshot(promptText: string): void {
+    try {
+      const workspaceFolders = vscode.workspace.workspaceFolders;
+      if (!workspaceFolders) return;
+      const cwd = workspaceFolders[0].uri.fsPath;
+      
+      const config = vscode.workspace.getConfiguration('aiEnhancer');
+      if (config.get('enableGitSnapshots') === false) {
+        return; // Disabled by user
+      }
+      
+      const fs = require('fs');
+      const path = require('path');
+      if (!fs.existsSync(path.join(cwd, '.git'))) {
+        return; // Not a git repository
+      }
+
+      const cp = require('child_process');
+
+      // Stage everything
+      cp.execSync('git add .', { cwd, stdio: 'ignore' });
+      
+      // Check if there are changes to commit
+      const status = cp.execSync('git status --porcelain', { cwd }).toString();
+      if (status.trim() !== '') {
+        const snippet = promptText.substring(0, 30).replace(/"/g, "'").replace(/\n/g, ' ');
+        const commitMsg = `🤖 Chanakya AI Snapshot: ${snippet}...`;
+        cp.execSync(`git commit -m "${commitMsg}" --no-verify`, { cwd, stdio: 'ignore' });
+        this._logger.log(`Created Git Snapshot: ${commitMsg}`);
+      }
+    } catch (e) {
+      this._logger.error('Failed to create Git snapshot', e);
+    }
   }
 
   public resolveWebviewView(
@@ -269,6 +317,9 @@ ${diff}`;
         const { text, contextItems } = message.payload;
         const assistantMsgId = `asst-${Date.now()}`;
 
+        // Create snapshot before AI runs
+        this._createGitSnapshot(text);
+
         let enrichedContextItems = [...(contextItems || [])];
         const hasCodebase = enrichedContextItems.find(i => i.type === 'codebase');
         
@@ -353,6 +404,12 @@ ${diff}`;
             },
             onTokensUsed: (modelId, promptTokens, completionTokens, durationMs, ttftMs, isError) => {
               this._saveTokenUsage(modelId, promptTokens, completionTokens, durationMs, ttftMs, isError).catch(() => { /* non-fatal */ });
+            },
+            onOptimizationStats: (originalTokens, optimizedTokens) => {
+              this.postMessage({
+                type: 'optimizationStats',
+                payload: { messageId: assistantMsgId, originalTokens, optimizedTokens }
+              });
             }
           }
         });
@@ -443,6 +500,47 @@ ${diff}`;
         break;
       }
 
+      case 'applyCodeMerge': {
+        try {
+          const editor = vscode.window.activeTextEditor;
+          if (!editor) {
+            vscode.window.showWarningMessage('Chanakya AI: Open a file first to apply code.');
+            break;
+          }
+          
+          const fs = require('fs');
+          const os = require('os');
+          const path = require('path');
+          
+          // Original file URI
+          const originalUri = editor.document.uri;
+          const originalContent = editor.document.getText();
+          
+          // Check if it's a snippet or full file. Simple heuristic: if it's much shorter, we replace selection if it exists.
+          let proposedContent = message.payload.code;
+          if (!editor.selection.isEmpty) {
+            // Replace selection with proposed content
+            const before = originalContent.substring(0, editor.document.offsetAt(editor.selection.start));
+            const after = originalContent.substring(editor.document.offsetAt(editor.selection.end));
+            proposedContent = before + proposedContent + after;
+          }
+          
+          // Create temp file for the right side of the diff
+          const tempFilePath = path.join(os.tmpdir(), `chanakya_apply_${Date.now()}_${path.basename(originalUri.fsPath)}`);
+          fs.writeFileSync(tempFilePath, proposedContent, 'utf8');
+          const tempUri = vscode.Uri.file(tempFilePath);
+          
+          // Open Diff View
+          const title = `Chanakya AI Merge: ${path.basename(originalUri.fsPath)}`;
+          await vscode.commands.executeCommand('vscode.diff', originalUri, tempUri, title);
+          
+        } catch (err: any) {
+          this._logger.error('Failed to apply code merge', err);
+          vscode.window.showErrorMessage(`Chanakya AI Merge Error: ${err.message}`);
+        }
+        break;
+      }
+
       case 'copyToClipboard': {
         await vscode.env.clipboard.writeText(message.payload.text);
         vscode.window.showInformationMessage('Copied to clipboard!');
@@ -461,6 +559,39 @@ ${diff}`;
 
       case 'clearChat': {
         this.clearChat();
+        break;
+      }
+
+      case 'revertSnapshot': {
+        try {
+          const workspaceFolders = vscode.workspace.workspaceFolders;
+          if (!workspaceFolders) {
+            vscode.window.showErrorMessage('No workspace folder open to revert.');
+            break;
+          }
+          const cwd = workspaceFolders[0].uri.fsPath;
+          
+          const config = vscode.workspace.getConfiguration('aiEnhancer');
+          if (config.get('enableGitSnapshots') === false) {
+            vscode.window.showErrorMessage('Auto Git-Snapshots are disabled in settings.');
+            break;
+          }
+          
+          const fs = require('fs');
+          const path = require('path');
+          if (!fs.existsSync(path.join(cwd, '.git'))) {
+            vscode.window.showErrorMessage('Current workspace is not a Git repository.');
+            break;
+          }
+
+          const cp = require('child_process');
+          
+          // Revert to the last commit
+          cp.execSync('git reset --hard HEAD~1', { cwd });
+          vscode.window.showInformationMessage('Chanakya AI: Reverted successfully to previous snapshot.');
+        } catch (e: any) {
+          vscode.window.showErrorMessage(`Failed to revert: ${e.message}`);
+        }
         break;
       }
     }

@@ -19,6 +19,10 @@ export interface ChatMessage {
   contextItems?: ContextItem[];
   isStreaming?: boolean;
   timestamp: number;
+  optimizationStats?: {
+    originalTokens: number;
+    optimizedTokens: number;
+  };
 }
 
 export interface WorkspaceFileResult {
@@ -41,6 +45,7 @@ export type FromWebviewMessage =
   | { type: 'searchWorkspaceFiles'; payload: { query: string } }
   | { type: 'readFileContent'; payload: { path: string } }
   | { type: 'insertCode'; payload: { code: string } }
+  | { type: 'applyCodeMerge'; payload: { code: string } }
   | { type: 'copyToClipboard'; payload: { text: string } }
   | { type: 'openSettings' }
   | { type: 'openModelsHub' }
@@ -55,6 +60,7 @@ export type FromWebviewMessage =
   | { type: 'readTerminalContent' }
   | { type: 'generateCommitMessage' }
   | { type: 'getTokenOptimizerConfig' }
+  | { type: 'revertSnapshot' }
   | { type: 'saveTokenOptimizerConfig'; payload: Record<string, unknown> }
   | { type: 'getTokenStats' }
   | { type: 'clearTokenStats' };
@@ -75,4 +81,5 @@ export type ToWebviewMessage =
   | { type: 'openSettingsTab' }
   | { type: 'localModelsDetected'; payload: { models: DetectedLocalModel[] } }
   | { type: 'tokenOptimizerConfig'; payload: Record<string, unknown> }
+  | { type: 'optimizationStats'; payload: { messageId: string; originalTokens: number; optimizedTokens: number } }
   | { type: 'tokenStatsResult'; payload: Record<string, unknown> };

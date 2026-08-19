@@ -138,9 +138,7 @@ export class DashboardProvider {
       case 'getVscodeSettings': {
         const config = vscode.workspace.getConfiguration('aiEnhancer');
         const settings = {
-          apiEndpoint: config.get('apiEndpoint'),
           model: config.get('model'),
-          customHeaders: config.get('customHeaders'),
           maxTokens: config.get('maxTokens'),
           temperature: config.get('temperature'),
           autoContextExtraction: config.get('autoContextExtraction'),
@@ -149,6 +147,7 @@ export class DashboardProvider {
           'autocomplete.model': config.get('autocomplete.model'),
           'autocomplete.debounceMs': config.get('autocomplete.debounceMs'),
           'chat.historySize': config.get('chat.historySize'),
+          'enableGitSnapshots': config.get('enableGitSnapshots'),
         };
         this.postMessage({
           type: 'vscodeSettingsResult',
@@ -165,9 +164,7 @@ export class DashboardProvider {
           
           // Re-fetch and send back to confirm
           const updatedSettings = {
-            apiEndpoint: config.get('apiEndpoint'),
             model: config.get('model'),
-            customHeaders: config.get('customHeaders'),
             maxTokens: config.get('maxTokens'),
             temperature: config.get('temperature'),
             autoContextExtraction: config.get('autoContextExtraction'),
@@ -176,6 +173,7 @@ export class DashboardProvider {
             'autocomplete.model': config.get('autocomplete.model'),
             'autocomplete.debounceMs': config.get('autocomplete.debounceMs'),
             'chat.historySize': config.get('chat.historySize'),
+            'enableGitSnapshots': config.get('enableGitSnapshots'),
           };
           this.postMessage({
             type: 'vscodeSettingsResult',

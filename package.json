@@ -10,216 +10,212 @@
 	},
 	"license": "MIT",
 	"icon": "media/icon.png",
-  "engines": {
-    "vscode": "^1.90.0"
-  },
-  "categories": [
-    "AI",
-    "Programming Languages",
-    "Snippets",
-    "Linters"
-  ],
-  "keywords": [
-    "ai",
-    "copilot",
-    "continue",
-    "assistant",
-    "autocomplete",
-    "fim",
-    "chat"
-  ],
-  "main": "./dist/extension.js",
-  "activationEvents": [
-    "onStartupFinished",
-    "onView:chanakya-ai-launcher"
-  ],
-  "contributes": {
-    "commands": [
-      {
-        "command": "aiEnhancer.addSelectionToContext",
-        "title": "Chanakya AI Enhancer: Add Selection to Chat",
-        "category": "Chanakya AI Enhancer",
-        "icon": "$(add)"
-      },
-      {
-        "command": "aiEnhancer.setApiKey",
-        "title": "Chanakya AI Enhancer: Configure API Key / Model Endpoint",
-        "category": "Chanakya AI Enhancer",
-        "icon": "$(key)"
-      },
-      {
-        "command": "aiEnhancer.clearHistory",
-        "title": "Chanakya AI Enhancer: Clear Chat History",
-        "category": "Chanakya AI Enhancer",
-        "icon": "$(trash)"
-      },
-      {
-        "command": "aiEnhancer.triggerInlineCompletion",
-        "title": "Chanakya AI Enhancer: Trigger Inline Autocomplete",
-        "category": "Chanakya AI Enhancer"
-      },
-      {
-        "command": "aiEnhancer.inlineEdit",
-        "title": "Chanakya AI Enhancer: Inline Edit Code",
-        "category": "Chanakya AI Enhancer",
-        "icon": "$(edit)"
-      },
-      {
-        "command": "aiEnhancer.acceptEdit",
-        "title": "Chanakya AI Enhancer: Accept Inline Edit",
-        "category": "Chanakya AI Enhancer",
-        "icon": "$(check)"
-      },
-      {
-        "command": "aiEnhancer.openModelsHub",
-        "title": "Chanakya AI Enhancer: Open Models Hub",
-        "category": "Chanakya AI Enhancer",
-        "icon": "$(hub)"
-      }
-    ],
-    "keybindings": [
-      {
-        "command": "aiEnhancer.addSelectionToContext",
-        "key": "ctrl+alt+l",
-        "mac": "cmd+alt+l",
-        "when": "editorHasSelection"
-      },
-      {
-        "command": "aiEnhancer.inlineEdit",
-        "key": "ctrl+i",
-        "mac": "cmd+i",
-        "when": "editorTextFocus"
-      },
-      {
-        "command": "aiEnhancer.acceptEdit",
-        "key": "ctrl+shift+enter",
-        "mac": "cmd+shift+enter",
-        "when": "inDiffEditor"
-      }
-    ],
-    "menus": {
-      "editor/context": [
-        {
-          "command": "aiEnhancer.addSelectionToContext",
-          "when": "editorHasSelection",
-          "group": "aiEnhancerGroup@1"
-        },
-        {
-          "command": "aiEnhancer.inlineEdit",
-          "when": "editorHasSelection",
-          "group": "aiEnhancerGroup@2"
-        }
-      ],
-      "editor/title": [
-        {
-          "command": "aiEnhancer.acceptEdit",
-          "when": "inDiffEditor",
-          "group": "navigation"
-        }
-      ]
-    },
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "chanakya-ai-sidebar",
-          "title": "Chanakya AI",
-          "icon": "media/icon.svg"
-        }
-      ]
-    },
-    "views": {
-      "chanakya-ai-sidebar": [
-        {
-          "id": "chanakya-ai-launcher",
-          "type": "webview",
-          "name": "Chat",
-          "icon": "media/icon.svg"
-        }
-      ]
-    },
-    "configuration": {
-      "title": "Chanakya AI Enhancer",
-      "properties": {
-        "aiEnhancer.apiEndpoint": {
-          "type": "string",
-          "default": "https://api.openai.com/v1",
-          "description": "Base URL for OpenAI-compatible API endpoint."
-        },
-        "aiEnhancer.model": {
-          "type": "string",
-          "default": "gpt-4-turbo",
-          "description": "Default chat model to use."
-        },
-        "aiEnhancer.customHeaders": {
-          "type": "string",
-          "default": "",
-          "description": "Add custom headers for requests (one per line, e.g., 'Key: Value')."
-        },
-        "aiEnhancer.maxTokens": {
-          "type": "number",
-          "default": 4096,
-          "description": "Maximum tokens to generate."
-        },
-        "aiEnhancer.temperature": {
-          "type": "number",
-          "default": 0.1,
-          "description": "Temperature for LLM generation."
-        },
-        "aiEnhancer.autoContextExtraction": {
-          "type": "boolean",
-          "default": false,
-          "description": "Automatically extract surrounding code context from the active editor."
-        },
-        "aiEnhancer.systemPrompt": {
-          "type": "string",
-          "default": "",
-          "description": "Custom system prompt to inject into chat requests."
-        },
-        "aiEnhancer.autocomplete.enabled": {
-          "type": "boolean",
-          "default": false,
-          "description": "Turn on ghost text inline completion globally."
-        },
-        "aiEnhancer.autocomplete.model": {
-          "type": "string",
-          "default": "",
-          "description": "Select FIM model from the Models Hub tab."
-        },
-        "aiEnhancer.autocomplete.debounceMs": {
-          "type": "number",
-          "default": 300,
-          "description": "Debounce time in milliseconds for autocomplete."
-        },
-        "aiEnhancer.chat.historySize": {
-          "type": "number",
-          "default": 10,
-          "description": "Number of previous messages to keep in history."
-        }
-      }
-    }
-  },
-  "scripts": {
-    "vscode:prepublish": "npm run build",
-    "compile": "webpack",
-    "watch": "webpack --watch",
-    "build:extension": "webpack --mode production",
-    "build:webview": "npm run --prefix webview-ui build",
-    "watch:webview": "npm run --prefix webview-ui watch",
-    "build": "npm run build:webview && npm run build:extension",
-    "lint": "eslint src --ext ts"
-  },
-  "devDependencies": {
-    "@types/node": "20.x",
-    "@types/vscode": "^1.90.0",
-    "@typescript-eslint/eslint-plugin": "^7.14.1",
-    "@typescript-eslint/parser": "^7.14.1",
-    "eslint": "^8.57.0",
-    "ts-loader": "^9.5.1",
-    "typescript": "^5.4.5",
-    "webpack": "^5.92.1",
-    "webpack-cli": "^5.1.4"
-  },
-  "dependencies": {
-    "yaml": "^2.9.0"
-  }
+	"engines": {
+		"vscode": "^1.90.0"
+	},
+	"categories": [
+		"AI",
+		"Programming Languages",
+		"Snippets",
+		"Linters"
+	],
+	"keywords": [
+		"ai",
+		"copilot",
+		"continue",
+		"assistant",
+		"autocomplete",
+		"fim",
+		"chat"
+	],
+	"main": "./dist/extension.js",
+	"activationEvents": [
+		"onStartupFinished",
+		"onView:chanakya-ai-launcher"
+	],
+	"contributes": {
+		"commands": [
+			{
+				"command": "aiEnhancer.addSelectionToContext",
+				"title": "Chanakya AI Enhancer: Add Selection to Chat",
+				"category": "Chanakya AI Enhancer",
+				"icon": "$(add)"
+			},
+			{
+				"command": "aiEnhancer.setApiKey",
+				"title": "Chanakya AI Enhancer: Configure API Key / Model Endpoint",
+				"category": "Chanakya AI Enhancer",
+				"icon": "$(key)"
+			},
+			{
+				"command": "aiEnhancer.clearHistory",
+				"title": "Chanakya AI Enhancer: Clear Chat History",
+				"category": "Chanakya AI Enhancer",
+				"icon": "$(trash)"
+			},
+			{
+				"command": "aiEnhancer.triggerInlineCompletion",
+				"title": "Chanakya AI Enhancer: Trigger Inline Autocomplete",
+				"category": "Chanakya AI Enhancer"
+			},
+			{
+				"command": "aiEnhancer.inlineEdit",
+				"title": "Chanakya AI Enhancer: Inline Edit Code",
+				"category": "Chanakya AI Enhancer",
+				"icon": "$(edit)"
+			},
+			{
+				"command": "aiEnhancer.acceptEdit",
+				"title": "Chanakya AI Enhancer: Accept Inline Edit",
+				"category": "Chanakya AI Enhancer",
+				"icon": "$(check)"
+			},
+			{
+				"command": "aiEnhancer.openModelsHub",
+				"title": "Chanakya AI Enhancer: Open Models Hub",
+				"category": "Chanakya AI Enhancer",
+				"icon": "$(hub)"
+			}
+		],
+		"keybindings": [
+			{
+				"command": "aiEnhancer.addSelectionToContext",
+				"key": "ctrl+alt+l",
+				"mac": "cmd+alt+l",
+				"when": "editorHasSelection"
+			},
+			{
+				"command": "aiEnhancer.inlineEdit",
+				"key": "ctrl+i",
+				"mac": "cmd+i",
+				"when": "editorTextFocus"
+			},
+			{
+				"command": "aiEnhancer.acceptEdit",
+				"key": "ctrl+shift+enter",
+				"mac": "cmd+shift+enter",
+				"when": "inDiffEditor"
+			}
+		],
+		"menus": {
+			"editor/context": [
+				{
+					"command": "aiEnhancer.addSelectionToContext",
+					"when": "editorHasSelection",
+					"group": "aiEnhancerGroup@1"
+				},
+				{
+					"command": "aiEnhancer.inlineEdit",
+					"when": "editorHasSelection",
+					"group": "aiEnhancerGroup@2"
+				}
+			],
+			"editor/title": [
+				{
+					"command": "aiEnhancer.acceptEdit",
+					"when": "inDiffEditor",
+					"group": "navigation"
+				}
+			]
+		},
+		"viewsContainers": {
+			"activitybar": [
+				{
+					"id": "chanakya-ai-sidebar",
+					"title": "Chanakya AI",
+					"icon": "media/icon.svg"
+				}
+			]
+		},
+		"views": {
+			"chanakya-ai-sidebar": [
+				{
+					"id": "chanakya-ai-launcher",
+					"type": "webview",
+					"name": "Chat",
+					"icon": "media/icon.svg"
+				}
+			]
+		},
+		"configuration": {
+			"title": "Chanakya AI Enhancer",
+			"properties": {
+				"aiEnhancer.model": {
+					"type": "string",
+					"default": "gpt-4-turbo",
+					"description": "Default chat model to use."
+				},
+				"aiEnhancer.maxTokens": {
+					"type": "number",
+					"default": 4096,
+					"description": "Maximum tokens to generate."
+				},
+				"aiEnhancer.temperature": {
+					"type": "number",
+					"default": 0.1,
+					"description": "Temperature for LLM generation."
+				},
+				"aiEnhancer.autoContextExtraction": {
+					"type": "boolean",
+					"default": false,
+					"description": "Automatically extract surrounding code context from the active editor."
+				},
+				"aiEnhancer.enableGitSnapshots": {
+					"type": "boolean",
+					"default": true,
+					"description": "Automatically create a Git snapshot before executing AI-generated commands or edits."
+				},
+				"aiEnhancer.systemPrompt": {
+					"type": "string",
+					"default": "",
+					"description": "Custom system prompt to inject into chat requests."
+				},
+				"aiEnhancer.autocomplete.enabled": {
+					"type": "boolean",
+					"default": false,
+					"description": "Turn on ghost text inline completion globally."
+				},
+				"aiEnhancer.autocomplete.model": {
+					"type": "string",
+					"default": "",
+					"description": "Select FIM model from the Models Hub tab."
+				},
+				"aiEnhancer.autocomplete.debounceMs": {
+					"type": "number",
+					"default": 300,
+					"description": "Debounce time in milliseconds for autocomplete."
+				},
+				"aiEnhancer.chat.historySize": {
+					"type": "number",
+					"default": 10,
+					"description": "Number of previous messages to keep in history."
+				}
+			}
+		}
+	},
+	"scripts": {
+		"vscode:prepublish": "npm run build",
+		"compile": "webpack",
+		"watch": "webpack --watch",
+		"build:extension": "webpack --mode production",
+		"build:webview": "npm run --prefix webview-ui build",
+		"watch:webview": "npm run --prefix webview-ui watch",
+		"build": "npm run build:webview && npm run build:extension",
+		"lint": "eslint src --ext ts"
+	},
+	"devDependencies": {
+		"@types/node": "20.x",
+		"@types/vscode": "^1.90.0",
+		"@typescript-eslint/eslint-plugin": "^7.14.1",
+		"@typescript-eslint/parser": "^7.14.1",
+		"eslint": "^8.57.0",
+		"ts-loader": "^9.5.1",
+		"typescript": "^5.4.5",
+		"webpack": "^5.92.1",
+		"webpack-cli": "^5.1.4"
+	},
+	"dependencies": {
+		"@modelcontextprotocol/sdk": "^1.30.0",
+		"yaml": "^2.9.0"
+	}
 }

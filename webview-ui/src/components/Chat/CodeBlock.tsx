@@ -14,7 +14,7 @@ import 'prismjs/components/prism-rust';
 import 'prismjs/components/prism-c';
 import 'prismjs/components/prism-cpp';
 import 'prismjs/components/prism-java';
-import { Copy, Check, ArrowDownToLine, Code2 } from 'lucide-react';
+import { Copy, Check, ArrowDownToLine, Code2, Sparkles } from 'lucide-react';
 import { vscode } from '../../vscode';
 
 interface CodeBlockProps {
@@ -25,6 +25,7 @@ interface CodeBlockProps {
 export default function CodeBlock({ language, value }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const [inserted, setInserted] = useState(false);
+  const [applied, setApplied] = useState(false);
 
   const lang = language ? language.toLowerCase().trim() : 'text';
   const lines = value.split('\n');
@@ -49,6 +50,15 @@ export default function CodeBlock({ language, value }: CodeBlockProps) {
     });
     setInserted(true);
     setTimeout(() => setInserted(false), 2000);
+  };
+
+  const handleApply = () => {
+    vscode.postMessage({
+      type: 'applyCodeMerge',
+      payload: { code: value }
+    });
+    setApplied(true);
+    setTimeout(() => setApplied(false), 2000);
   };
 
   let highlightedHtml = '';
@@ -88,6 +98,24 @@ export default function CodeBlock({ language, value }: CodeBlockProps) {
               <>
                 <Copy className="w-3.5 h-3.5" />
                 <span>Copy</span>
+              </>
+            )}
+          </button>
+          
+          <button
+            onClick={handleApply}
+            title="Smart merge code into active editor using Diff View"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold text-purple-300 bg-purple-500/15 hover:bg-purple-500/25 border border-purple-400/30 transition shadow-sm ml-1"
+          >
+            {applied ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-purple-400" />
+                <span className="text-purple-400">Applied</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                <span>Apply</span>
               </>
             )}
           </button>

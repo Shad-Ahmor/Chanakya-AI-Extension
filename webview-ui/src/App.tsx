@@ -30,6 +30,7 @@ export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [promptQueue, setPromptQueue] = useState<{text: string, contextItems: ContextItem[]}[]>([]);
   const [contextItems, setContextItems] = useState<ContextItem[]>([]);
   const initialViewMode = (window as any).CHANAKYA_VIEW_MODE === 'dashboard' ? 'dashboard' : 'chat';
   const [viewMode, setViewMode] = useState<'chat' | 'modelhub' | 'dashboard'>(initialViewMode);
@@ -119,6 +120,23 @@ export default function App() {
           break;
         }
 
+        case 'optimizationStats': {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === message.payload.messageId
+                ? {
+                    ...msg,
+                    optimizationStats: {
+                      originalTokens: message.payload.originalTokens,
+                      optimizedTokens: message.payload.optimizedTokens
+                    }
+                  }
+                : msg
+            )
+          );
+          break;
+        }
+
         case 'setLoading': {
           setIsLoading(message.payload.isLoading);
           break;
@@ -138,6 +156,15 @@ export default function App() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Queue Execution Effect
+  useEffect(() => {
+    if (!isLoading && promptQueue.length > 0) {
+      const nextTask = promptQueue[0];
+      setPromptQueue(prev => prev.slice(1));
+      handleSendPrompt(nextTask.text, nextTask.contextItems);
+    }
+  }, [isLoading]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
@@ -188,15 +215,25 @@ export default function App() {
     });
   };
 
-  const handleSendPrompt = (promptText?: string) => {
+  const handleSendPrompt = (promptText?: string, overrideContextItems?: ContextItem[]) => {
     const textToSend = promptText || input;
-    if (!textToSend.trim() && contextItems.length === 0) return;
+    const itemsToSend = overrideContextItems || [...contextItems];
+    
+    if (!textToSend.trim() && itemsToSend.length === 0) return;
+
+    if (isLoading) {
+      setPromptQueue(prev => [...prev, { text: textToSend, contextItems: itemsToSend }]);
+      setInput('');
+      setContextItems([]);
+      if (textareaRef.current) textareaRef.current.style.height = 'auto';
+      return;
+    }
 
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
       content: textToSend,
-      contextItems: [...contextItems],
+      contextItems: itemsToSend,
       timestamp: Date.now()
     };
 
@@ -207,7 +244,7 @@ export default function App() {
       type: 'sendMessage',
       payload: {
         text: textToSend,
-        contextItems: [...contextItems]
+        contextItems: itemsToSend
       }
     });
 
@@ -547,8 +584,6 @@ export default function App() {
                 onClick={() => {
                   setShowSlashMenu(false);
                   setInput('');
-                  // Send a message via standard API that triggers an edit
-                  // For now, we can prompt for it
                   handleQuickAction('edit');
                 }}
                 className="w-full text-left px-3 py-2 hover:bg-purple-500/20 hover:text-purple-200 flex items-center gap-2 border-b border-white/5 transition"
@@ -600,20 +635,30 @@ export default function App() {
           </div>
         )}
 
-        {/* Text Area & Send Button */}
-        <div className="flex flex-col gap-2 bg-vscode-input-background border border-vscode-input-border focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-400/20 rounded-xl p-2 shadow-lg transition-all duration-300 relative z-10">
 
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={handleInputChange}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey && !showMentionMenu) {
-                e.preventDefault();
-                handleSendPrompt();
-              }
-            }}
-            placeholder="Ask Chanakya AI Enhancer or type @ to attach files..."
+        {/* Chat Input Container */}
+        <div className="flex flex-col gap-2 relative">
+          {promptQueue.length > 0 && (
+            <div className="flex items-center justify-between px-3 py-1.5 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-xs font-semibold text-yellow-500 shadow-sm animate-pulse">
+              <span>{promptQueue.length} Task(s) Pending in Queue...</span>
+              <button onClick={() => setPromptQueue([])} className="hover:text-yellow-400 underline" title="Clear Queue">
+                Clear
+              </button>
+            </div>
+          )}
+          
+          <div className="relative bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] rounded-xl shadow-sm focus-within:border-[var(--vscode-focusBorder)] focus-within:ring-1 focus-within:ring-[var(--vscode-focusBorder)] transition-all flex flex-col p-2 z-10">
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={handleInputChange}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && !showMentionMenu) {
+                  e.preventDefault();
+                  handleSendPrompt();
+                }
+              }}
+              placeholder="Ask Chanakya AI Enhancer or type @ to attach files..."
             rows={1}
             className="w-full bg-transparent text-vscode-input-foreground outline-none resize-none text-[13px] leading-snug max-h-32 placeholder-vscode-input-placeholder p-1"
           />
@@ -658,13 +703,23 @@ export default function App() {
             </div>
 
             {isLoading ? (
-              <button
-                onClick={handleAbort}
-                title="Stop Generation"
-                className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30 rounded-lg transition flex items-center justify-center shadow-md"
-              >
-                <Square className="w-3.5 h-3.5 fill-current" />
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleSendPrompt()}
+                  disabled={!input.trim() && contextItems.length === 0}
+                  title="Queue Message (Enter)"
+                  className="p-2 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-500 border border-yellow-500/30 rounded-lg transition flex items-center justify-center shadow-md whitespace-nowrap text-[10px] font-bold"
+                >
+                  QUEUE
+                </button>
+                <button
+                  onClick={handleAbort}
+                  title="Stop Generation"
+                  className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 rounded-lg transition flex items-center justify-center shadow-md"
+                >
+                  <Square className="w-3.5 h-3.5 fill-current" />
+                </button>
+              </div>
             ) : (
               <button
                 onClick={() => handleSendPrompt()}
@@ -677,6 +732,7 @@ export default function App() {
             )}
           </div>
         </div>
+      </div>
       </footer>
     </div>
   );

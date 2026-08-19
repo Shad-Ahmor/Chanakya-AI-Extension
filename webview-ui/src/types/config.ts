@@ -58,8 +58,9 @@ export interface ModelConfig {
 
 export interface AppConfig {
   name: string;
-  version: string;
-  schema: string;
+  readonly version: string;
+  readonly schema: string;
+  readonly enableGitSnapshots?: boolean | undefined;
   activeChatModelId?: string;
   activeAutocompleteModelId?: string;
   models: ModelConfig[];

@@ -3,12 +3,14 @@ import { ModelConfig } from '../types/config';
 import { ContextItem } from '../types/ipc';
 import { ConfigManager } from './configManager';
 import { Logger } from '../utils/logger';
+import { AgentOrchestrator } from './agentOrchestrator';
 
 export interface StreamCallbacks {
   onChunk: (chunk: string) => void;
   onComplete: (fullText: string) => void;
   onError: (error: Error) => void;
   onTokensUsed?: (modelId: string, promptTokens: number, completionTokens: number, durationMs?: number, ttftMs?: number, isError?: boolean) => void;
+  onOptimizationStats?: (originalTokens: number, optimizedTokens: number) => void;
 }
 
 /** Simple token estimator: ~4 chars per token (GPT-family heuristic) */
@@ -90,8 +92,13 @@ export class LLMEngine {
     };
 
     try {
+      let originalTokens = 0;
+      let optimizedTokens = 0;
+
       // 1. Optimize Context Items based on optimizerConfig
       let optimizedContextItems = contextItems.map(item => {
+        originalTokens += estimateTokens(item.content);
+        
         let content = item.content;
         if (optimizerConfig) {
           if (optimizerConfig.skipComments) {
@@ -113,8 +120,15 @@ export class LLMEngine {
             content = content.replace(/print\(.*$/gm, ''); // Python
           }
         }
-        return { ...item, content: content.trim() };
+        
+        const optimizedContent = content.trim();
+        optimizedTokens += estimateTokens(optimizedContent);
+        return { ...item, content: optimizedContent };
       });
+
+      if (callbacks.onOptimizationStats && originalTokens > 0) {
+        callbacks.onOptimizationStats(originalTokens, optimizedTokens);
+      }
 
       if (activeModel.provider === 'gemini' && !activeModel.apiBase?.includes('/v1')) {
         await this.streamGemini(activeModel, prompt, optimizedContextItems, optimizerConfig, wrappedCallbacks, abortController.signal);
@@ -147,66 +161,68 @@ export class LLMEngine {
     contextItems: ContextItem[],
     optimizerConfig: any,
     callbacks: StreamCallbacks,
-    signal: AbortSignal
+    signal: AbortSignal,
+    existingMessages?: any[]
   ): Promise<void> {
     const apiBase = (model.apiBase || 'https://api.openai.com/v1').replace(/\/+$/, '');
     const endpoint = `${apiBase}/chat/completions`;
+    const orchestrator = AgentOrchestrator.getInstance();
 
-    // Construct system and user prompt with context items
-    let systemContent =
-      'You are an expert AI software engineer and code assistant for VS Code. ' +
-      'Provide clear, concise, accurate, and production-ready code. ' +
-      'Format all code snippets with correct markdown syntax highlighting.';
+    let messages = existingMessages;
+    if (!messages) {
+      let systemContent =
+        'You are an expert AI software engineer and autonomous agent for VS Code. ' +
+        'You have access to tools to run terminal commands, read files, and write code. ' +
+        'Provide clear, concise, accurate, and production-ready code. ' +
+        'Format all code snippets with correct markdown syntax highlighting.';
 
-    if (optimizerConfig) {
-      if (optimizerConfig.responseConciseness === 'ultra_concise') {
-        systemContent += ' Provide ONLY code, absolutely no explanations or conversational fluff.';
-      } else if (optimizerConfig.responseConciseness === 'concise') {
-        systemContent += ' Keep explanations extremely short and to the point.';
-      }
-      
-      if (optimizerConfig.rules && optimizerConfig.rules.length > 0) {
-        systemContent += '\n\nCoding Rules to Strictly Follow:\n' + optimizerConfig.rules.map((r: string) => '- ' + r).join('\n');
-      }
-
-      if (optimizerConfig.negativePrompts && optimizerConfig.negativePrompts.length > 0) {
-        systemContent += '\n\nNegative Constraints (DO NOT DO THESE):\n' + optimizerConfig.negativePrompts.map((r: string) => '- ' + r).join('\n');
-      }
-
-      if (optimizerConfig.programmingLanguages && optimizerConfig.programmingLanguages.length > 0) {
-        systemContent += `\n\nTarget Languages/Ecosystems: ${optimizerConfig.programmingLanguages.join(', ')}. Do not provide solutions outside these.`;
-      }
-
-      if (optimizerConfig.taskType) {
-        systemContent += `\n\n[Task Context] Type: ${optimizerConfig.taskType.toUpperCase()}`;
-        if (optimizerConfig.taskType === 'coding' && optimizerConfig.platformTarget && optimizerConfig.platformTarget.length > 0) {
-          systemContent += ` | Target Platform(s): ${optimizerConfig.platformTarget.join(', ')}`;
+      if (optimizerConfig) {
+        if (optimizerConfig.responseConciseness === 'ultra_concise') {
+          systemContent += ' Provide ONLY code, absolutely no explanations or conversational fluff.';
+        } else if (optimizerConfig.responseConciseness === 'concise') {
+          systemContent += ' Keep explanations extremely short and to the point.';
         }
-        systemContent += '\nStrictly adapt your reasoning and output format for this specific task type and target context.';
-      }
-    }
+        
+        if (optimizerConfig.rules && optimizerConfig.rules.length > 0) {
+          systemContent += '\n\nCoding Rules to Strictly Follow:\n' + optimizerConfig.rules.map((r: string) => '- ' + r).join('\n');
+        }
 
-    let formattedUserPrompt = '';
+        if (optimizerConfig.negativePrompts && optimizerConfig.negativePrompts.length > 0) {
+          systemContent += '\n\nNegative Constraints (DO NOT DO THESE):\n' + optimizerConfig.negativePrompts.map((r: string) => '- ' + r).join('\n');
+        }
 
-    // Inject Context Items (Selections and Files)
-    if (contextItems.length > 0) {
-      formattedUserPrompt += '--- Context Items Attached ---\n\n';
-      for (const item of contextItems) {
-        if (item.type === 'selection') {
-          formattedUserPrompt += `[Code Selection: ${item.name}]\n\`\`\`\n${item.content}\n\`\`\`\n\n`;
-        } else if (item.type === 'file') {
-          formattedUserPrompt += `[File Reference: ${item.name} (${item.path || ''})]\n\`\`\`\n${item.content}\n\`\`\`\n\n`;
+        if (optimizerConfig.programmingLanguages && optimizerConfig.programmingLanguages.length > 0) {
+          systemContent += `\n\nTarget Languages/Ecosystems: ${optimizerConfig.programmingLanguages.join(', ')}. Do not provide solutions outside these.`;
+        }
+
+        if (optimizerConfig.taskType) {
+          systemContent += `\n\n[Task Context] Type: ${optimizerConfig.taskType.toUpperCase()}`;
+          if (optimizerConfig.taskType === 'coding' && optimizerConfig.platformTarget && optimizerConfig.platformTarget.length > 0) {
+            systemContent += ` | Target Platform(s): ${optimizerConfig.platformTarget.join(', ')}`;
+          }
+          systemContent += '\nStrictly adapt your reasoning and output format for this specific task type and target context.';
         }
       }
-      formattedUserPrompt += '--- End of Context ---\n\n';
+
+      let formattedUserPrompt = '';
+      if (contextItems.length > 0) {
+        formattedUserPrompt += '--- Context Items Attached ---\n\n';
+        for (const item of contextItems) {
+          if (item.type === 'selection') {
+            formattedUserPrompt += `[Code Selection: ${item.name}]\n\`\`\`\n${item.content}\n\`\`\`\n\n`;
+          } else if (item.type === 'file') {
+            formattedUserPrompt += `[File Reference: ${item.name} (${item.path || ''})]\n\`\`\`\n${item.content}\n\`\`\`\n\n`;
+          }
+        }
+        formattedUserPrompt += '--- End of Context ---\n\n';
+      }
+      formattedUserPrompt += prompt;
+
+      messages = [
+        { role: 'system', content: systemContent },
+        { role: 'user', content: formattedUserPrompt }
+      ];
     }
-
-    formattedUserPrompt += prompt;
-
-    const messages = [
-      { role: 'system', content: systemContent },
-      { role: 'user', content: formattedUserPrompt }
-    ];
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -221,6 +237,7 @@ export class LLMEngine {
       model: model.model,
       messages,
       stream: true,
+      tools: await orchestrator.getAvailableTools(),
       temperature: model.defaultCompletionOptions?.temperature ?? 0.2,
       max_tokens: model.defaultCompletionOptions?.maxTokens ?? 4096,
       ...(model.requestOptions?.extraBody || {})
@@ -246,6 +263,7 @@ export class LLMEngine {
     const decoder = new TextDecoder('utf-8');
     let buffer = '';
     let fullText = '';
+    let toolCalls: any[] = [];
 
     while (true) {
       const { done, value } = await reader.read();
@@ -262,10 +280,32 @@ export class LLMEngine {
 
         try {
           const json = JSON.parse(trimmed.substring(6));
-          const delta = json.choices?.[0]?.delta?.content;
-          if (delta) {
-            fullText += delta;
-            callbacks.onChunk(delta);
+          const delta = json.choices?.[0]?.delta;
+          
+          if (delta?.content) {
+            fullText += delta.content;
+            callbacks.onChunk(delta.content);
+          }
+
+          if (delta?.tool_calls) {
+            for (const tc of delta.tool_calls) {
+              if (tc.index !== undefined) {
+                if (!toolCalls[tc.index]) {
+                  toolCalls[tc.index] = {
+                    id: tc.id,
+                    type: 'function',
+                    function: { name: tc.function?.name || '', arguments: '' }
+                  };
+                  // Notify UI that a tool is starting
+                  if (tc.function?.name) {
+                    callbacks.onChunk(`\n> ⚙️ **Running Tool:** \`${tc.function.name}\`...\n`);
+                  }
+                }
+                if (tc.function?.arguments) {
+                  toolCalls[tc.index].function.arguments += tc.function.arguments;
+                }
+              }
+            }
           }
         } catch {
           // Incomplete chunk handled in next read
@@ -273,15 +313,55 @@ export class LLMEngine {
       }
     }
 
-    callbacks.onComplete(fullText);
+    // Clean up empty items if array has holes
+    toolCalls = toolCalls.filter(Boolean);
 
-    // Token usage tracking
-    if (callbacks.onTokensUsed) {
-      const promptText = messages.map((m) => m.content).join(' ');
-      const promptTokens = estimateTokens(promptText);
-      const completionTokens = estimateTokens(fullText);
-      const modelId = model.id || model.name;
-      callbacks.onTokensUsed(modelId, promptTokens, completionTokens);
+    // If tool calls were made, execute them and recurse
+    if (toolCalls.length > 0) {
+      messages.push({
+        role: 'assistant',
+        content: fullText || null,
+        tool_calls: toolCalls
+      });
+
+      for (const toolCall of toolCalls) {
+        try {
+          const args = JSON.parse(toolCall.function.arguments);
+          const result = await orchestrator.executeTool(toolCall.function.name, args);
+          
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            name: toolCall.function.name,
+            content: result
+          });
+          
+          callbacks.onChunk(`> ✅ **Tool Result:** \`${result.substring(0, 100).replace(/\n/g, ' ')}...\`\n\n`);
+        } catch (err: any) {
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            name: toolCall.function.name,
+            content: `Error: ${err.message}`
+          });
+          callbacks.onChunk(`> ❌ **Tool Error:** ${err.message}\n\n`);
+        }
+      }
+
+      // Recursive call for the model to process the tool results
+      return this.streamOpenAICompatible(model, prompt, contextItems, optimizerConfig, callbacks, signal, messages);
+    } else {
+      // Finished
+      callbacks.onComplete(fullText);
+
+      // Token usage tracking (approximation, doesn't count tool results perfectly yet)
+      if (callbacks.onTokensUsed) {
+        const promptText = messages.map((m) => m.content).join(' ');
+        const promptTokens = estimateTokens(promptText);
+        const completionTokens = estimateTokens(fullText);
+        const modelId = model.id || model.name;
+        callbacks.onTokensUsed(modelId, promptTokens, completionTokens);
+      }
     }
   }
 
