@@ -15,7 +15,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   private readonly _logger = Logger.getInstance();
   private readonly _configManager = ConfigManager.getInstance();
   private readonly _conversationManager = ConversationManager.getInstance();
-  private _activeCts?: vscode.CancellationTokenSource | undefined;
+  private _activeTasks: Map<string, vscode.CancellationTokenSource> = new Map();
   
   constructor(extensionUri: vscode.Uri, context: vscode.ExtensionContext) {
     this._extensionUri = extensionUri;
@@ -373,11 +373,8 @@ ${diff}`;
 
         this.postMessage({ type: 'setLoading', payload: { isLoading: true } });
 
-        if (this._activeCts) {
-          this._activeCts.cancel();
-          this._activeCts.dispose();
-        }
-        this._activeCts = new vscode.CancellationTokenSource();
+        const cts = new vscode.CancellationTokenSource();
+        this._activeTasks.set(assistantMsgId, cts);
 
         const tokenOptimizerRaw = this._context.globalState.get<Record<string, unknown>>('chanakya.tokenOptimizerConfig') || {};
         const activeModelId = this._configManager.getConfig().activeChatModelId || 'default';
@@ -399,7 +396,7 @@ ${diff}`;
           prompt: text,
           contextItems: enrichedContextItems,
           optimizerConfig: activeModelConfig,
-          cancellationToken: this._activeCts.token,
+          cancellationToken: cts.token,
           existingMessages: existingMessages,
           callbacks: {
             onChunk: (chunk) => {
@@ -414,8 +411,7 @@ ${diff}`;
                 payload: { messageId: assistantMsgId }
               });
               
-              const finalMessages = [
-                ...existingMessages,
+              const appendedMessages = [
                 userMessage,
                 {
                   id: assistantMsgId,
@@ -426,13 +422,15 @@ ${diff}`;
                 }
               ] as any[];
               
-              const updatedConv = this._conversationManager.updateActiveConversation(finalMessages);
+              const updatedConv = this._conversationManager.appendMessages(activeId, appendedMessages);
               this.postMessage({
                 type: 'activeConversationChanged',
                 payload: { conversation: updatedConv }
               });
-              
-              this.postMessage({ type: 'setLoading', payload: { isLoading: false } });
+              this._activeTasks.delete(assistantMsgId);
+              if (this._activeTasks.size === 0) {
+                this.postMessage({ type: 'setLoading', payload: { isLoading: false } });
+              }
             },
             onError: (error) => {
               this.postMessage({
@@ -444,8 +442,7 @@ ${diff}`;
                 payload: { messageId: assistantMsgId }
               });
               
-              const finalMessages = [
-                ...existingMessages,
+              const appendedMessages = [
                 userMessage,
                 {
                   id: assistantMsgId,
@@ -456,13 +453,15 @@ ${diff}`;
                 }
               ] as any[];
               
-              const updatedConv = this._conversationManager.updateActiveConversation(finalMessages);
+              const updatedConv = this._conversationManager.appendMessages(activeId, appendedMessages);
               this.postMessage({
                 type: 'activeConversationChanged',
                 payload: { conversation: updatedConv }
               });
-              
-              this.postMessage({ type: 'setLoading', payload: { isLoading: false } });
+              this._activeTasks.delete(assistantMsgId);
+              if (this._activeTasks.size === 0) {
+                this.postMessage({ type: 'setLoading', payload: { isLoading: false } });
+              }
             },
             onTokensUsed: (modelId, promptTokens, completionTokens, durationMs, ttftMs, isError) => {
               this._saveTokenUsage(modelId, promptTokens, completionTokens, durationMs, ttftMs, isError).catch(() => { /* non-fatal */ });
@@ -480,12 +479,25 @@ ${diff}`;
       }
 
       case 'abortGeneration': {
-        if (this._activeCts) {
-          this._activeCts.cancel();
-          this._activeCts.dispose();
-          this._activeCts = undefined;
+        if (message.payload?.messageId) {
+          const cts = this._activeTasks.get(message.payload.messageId);
+          if (cts) {
+            cts.cancel();
+            cts.dispose();
+            this._activeTasks.delete(message.payload.messageId);
+          }
+        } else {
+          // Cancel all if no specific ID is given
+          for (const cts of this._activeTasks.values()) {
+            cts.cancel();
+            cts.dispose();
+          }
+          this._activeTasks.clear();
         }
-        this.postMessage({ type: 'setLoading', payload: { isLoading: false } });
+        
+        if (this._activeTasks.size === 0) {
+          this.postMessage({ type: 'setLoading', payload: { isLoading: false } });
+        }
         break;
       }
 

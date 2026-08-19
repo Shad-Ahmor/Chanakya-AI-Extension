@@ -51,7 +51,7 @@ export interface DetectedLocalModel {
 export type FromWebviewMessage =
   | { type: 'ready' }
   | { type: 'sendMessage'; payload: { text: string; contextItems: ContextItem[] } }
-  | { type: 'abortGeneration' }
+  | { type: 'abortGeneration'; payload?: { messageId?: string } }
   | { type: 'searchWorkspaceFiles'; payload: { query: string } }
   | { type: 'readFileContent'; payload: { path: string } }
   | { type: 'insertCode'; payload: { code: string } }

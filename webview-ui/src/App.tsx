@@ -33,7 +33,6 @@ export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [promptQueue, setPromptQueue] = useState<{text: string, contextItems: ContextItem[]}[]>([]);
   const [contextItems, setContextItems] = useState<ContextItem[]>([]);
   const initialViewMode = (window as any).CHANAKYA_VIEW_MODE === 'dashboard' ? 'dashboard' : 'chat';
   const [viewMode, setViewMode] = useState<'chat' | 'modelhub' | 'dashboard'>(initialViewMode);
@@ -196,15 +195,6 @@ export default function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Queue Execution Effect
-  useEffect(() => {
-    if (!isLoading && promptQueue.length > 0) {
-      const nextTask = promptQueue[0];
-      setPromptQueue(prev => prev.slice(1));
-      handleSendPrompt(nextTask.text, nextTask.contextItems);
-    }
-  }, [isLoading]);
-
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setInput(val);
@@ -259,14 +249,6 @@ export default function App() {
     const itemsToSend = overrideContextItems || [...contextItems];
     
     if (!textToSend.trim() && itemsToSend.length === 0) return;
-
-    if (isLoading) {
-      setPromptQueue(prev => [...prev, { text: textToSend, contextItems: itemsToSend }]);
-      setInput('');
-      setContextItems([]);
-      if (textareaRef.current) textareaRef.current.style.height = 'auto';
-      return;
-    }
 
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
@@ -736,14 +718,6 @@ export default function App() {
 
         {/* Chat Input Container */}
         <div className="flex flex-col gap-2 relative">
-          {promptQueue.length > 0 && (
-            <div className="flex items-center justify-between px-3 py-1.5 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-xs font-semibold text-yellow-500 shadow-sm animate-pulse">
-              <span>{promptQueue.length} Task(s) Pending in Queue...</span>
-              <button onClick={() => setPromptQueue([])} className="hover:text-yellow-400 underline" title="Clear Queue">
-                Clear
-              </button>
-            </div>
-          )}
           
           <div className="relative bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] rounded-xl shadow-sm focus-within:border-[var(--vscode-focusBorder)] focus-within:ring-1 focus-within:ring-[var(--vscode-focusBorder)] transition-all flex flex-col p-2 z-10">
             <textarea

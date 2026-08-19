@@ -136,4 +136,31 @@ export class ConversationManager {
     this.saveToDisk();
     return conv;
   }
+
+  public appendMessages(id: string | null, newMessages: ChatMessage[]): Conversation {
+    let conv = this.conversations.find((c) => c.id === (id || this.activeConversationId));
+    
+    if (!conv) {
+      conv = this.createNewConversation();
+    }
+    
+    // Append instead of overwrite
+    const existingIds = new Set(conv.messages.map(m => m.id));
+    for (const msg of newMessages) {
+      if (!existingIds.has(msg.id)) {
+        conv.messages.push(msg);
+      } else {
+        // If it exists, update it
+        const idx = conv.messages.findIndex(m => m.id === msg.id);
+        if (idx !== -1) {
+          conv.messages[idx] = msg;
+        }
+      }
+    }
+    
+    conv.updatedAt = Date.now();
+    this.conversations.sort((a, b) => b.updatedAt - a.updatedAt);
+    this.saveToDisk();
+    return conv;
+  }
 }
