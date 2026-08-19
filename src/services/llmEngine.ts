@@ -172,78 +172,81 @@ export class LLMEngine {
     const orchestrator = AgentOrchestrator.getInstance();
     let useXmlTools = model.isLocal || ['vllm', 'ollama', 'lmstudio', 'custom'].includes(model.provider);
 
-    let messages = existingMessages;
-    if (!messages) {
-      let systemContent =
-        'You are an expert AI software engineer and autonomous agent for VS Code. ' +
-        'You have access to tools to run terminal commands, read files, and write code. ' +
-        'Provide clear, concise, accurate, and production-ready code. ' +
-        'Format all code snippets with correct markdown syntax highlighting.';
+    let systemContent =
+      'You are an expert AI software engineer and autonomous agent for VS Code. ' +
+      'You have access to tools to run terminal commands, read files, and write code. ' +
+      'Provide clear, concise, accurate, and production-ready code. ' +
+      'Format all code snippets with correct markdown syntax highlighting.';
 
-      if (useXmlTools) {
-        systemContent += '\n\n' + await orchestrator.getXMLToolInstructions();
+    if (useXmlTools) {
+      systemContent += '\n\n' + await orchestrator.getXMLToolInstructions();
+    }
+
+    if (optimizerConfig) {
+      if (optimizerConfig.responseConciseness === 'ultra_concise') {
+        systemContent += ' Provide ONLY code, absolutely no explanations or conversational fluff.';
+      } else if (optimizerConfig.responseConciseness === 'concise') {
+        systemContent += ' Keep explanations extremely short and to the point.';
+      }
+      
+      if (optimizerConfig.rules && optimizerConfig.rules.length > 0) {
+        systemContent += '\n\nCoding Rules to Strictly Follow:\n' + optimizerConfig.rules.map((r: string) => '- ' + r).join('\n');
       }
 
-      if (optimizerConfig) {
-        if (optimizerConfig.responseConciseness === 'ultra_concise') {
-          systemContent += ' Provide ONLY code, absolutely no explanations or conversational fluff.';
-        } else if (optimizerConfig.responseConciseness === 'concise') {
-          systemContent += ' Keep explanations extremely short and to the point.';
-        }
-        
-        if (optimizerConfig.rules && optimizerConfig.rules.length > 0) {
-          systemContent += '\n\nCoding Rules to Strictly Follow:\n' + optimizerConfig.rules.map((r: string) => '- ' + r).join('\n');
-        }
-
-        if (optimizerConfig.negativePrompts && optimizerConfig.negativePrompts.length > 0) {
-          systemContent += '\n\nNegative Constraints (DO NOT DO THESE):\n' + optimizerConfig.negativePrompts.map((r: string) => '- ' + r).join('\n');
-        }
-
-        if (optimizerConfig.programmingLanguages && optimizerConfig.programmingLanguages.length > 0) {
-          systemContent += `\n\nTarget Languages/Ecosystems: ${optimizerConfig.programmingLanguages.join(', ')}. Do not provide solutions outside these.`;
-        }
-
-        if (optimizerConfig.taskType) {
-          systemContent += `\n\n[Task Context] Type: ${optimizerConfig.taskType.toUpperCase()}`;
-          if (optimizerConfig.taskType === 'coding' && optimizerConfig.platformTarget && optimizerConfig.platformTarget.length > 0) {
-            systemContent += ` | Target Platform(s): ${optimizerConfig.platformTarget.join(', ')}`;
-          }
-          systemContent += '\nStrictly adapt your reasoning and output format for this specific task type and target context.';
-        }
+      if (optimizerConfig.negativePrompts && optimizerConfig.negativePrompts.length > 0) {
+        systemContent += '\n\nNegative Constraints (DO NOT DO THESE):\n' + optimizerConfig.negativePrompts.map((r: string) => '- ' + r).join('\n');
       }
 
-      let formattedUserPrompt = '';
-      if (contextItems.length > 0) {
-        formattedUserPrompt += '--- Context Items Attached ---\n\n';
-        for (const item of contextItems) {
-          if (item.type === 'selection') {
-            formattedUserPrompt += `[Code Selection: ${item.name}]\n\`\`\`\n${item.content}\n\`\`\`\n\n`;
-          } else if (item.type === 'file') {
-            formattedUserPrompt += `[File Reference: ${item.name} (${item.path || ''})]\n\`\`\`\n${item.content}\n\`\`\`\n\n`;
-          }
-        }
-        formattedUserPrompt += '--- End of Context ---\n\n';
+      if (optimizerConfig.programmingLanguages && optimizerConfig.programmingLanguages.length > 0) {
+        systemContent += `\n\nTarget Languages/Ecosystems: ${optimizerConfig.programmingLanguages.join(', ')}. Do not provide solutions outside these.`;
       }
-      formattedUserPrompt += prompt;
 
-      messages = [
-        { role: 'system', content: systemContent },
-        { role: 'user', content: formattedUserPrompt }
-      ];
-
-      // Retrieve and Inject RAG Memories
-      try {
-        const memoryRetriever = MemoryRetriever.getInstance();
-        const memories = await memoryRetriever.retrieve(prompt, 3);
-        if (memories.length > 0) {
-          const memoryPrompt = memoryRetriever.formatMemoriesForPrompt(memories);
-          messages[0].content += memoryPrompt;
-          callbacks.onChunk(`> 🧠 **Agent Memory Activated:** Retrieved ${memories.length} relevant past experiences.\n\n`);
+      if (optimizerConfig.taskType) {
+        systemContent += `\n\n[Task Context] Type: ${optimizerConfig.taskType.toUpperCase()}`;
+        if (optimizerConfig.taskType === 'coding' && optimizerConfig.platformTarget && optimizerConfig.platformTarget.length > 0) {
+          systemContent += ` | Target Platform(s): ${optimizerConfig.platformTarget.join(', ')}`;
         }
-      } catch (err) {
-        this.logger.error('Failed to inject memory RAG', err);
+        systemContent += '\nStrictly adapt your reasoning and output format for this specific task type and target context.';
       }
     }
+
+    let formattedUserPrompt = '';
+    if (contextItems.length > 0) {
+      formattedUserPrompt += '--- Context Items Attached ---\n\n';
+      for (const item of contextItems) {
+        if (item.type === 'selection') {
+          formattedUserPrompt += `[Code Selection: ${item.name}]\n\`\`\`\n${item.content}\n\`\`\`\n\n`;
+        } else if (item.type === 'file') {
+          formattedUserPrompt += `[File Reference: ${item.name} (${item.path || ''})]\n\`\`\`\n${item.content}\n\`\`\`\n\n`;
+        }
+      }
+      formattedUserPrompt += '--- End of Context ---\n\n';
+    }
+    formattedUserPrompt += prompt;
+
+    // Retrieve and Inject RAG Memories
+    try {
+      const memoryRetriever = MemoryRetriever.getInstance();
+      const memories = await memoryRetriever.retrieve(prompt, 3);
+      if (memories.length > 0) {
+        const memoryPrompt = memoryRetriever.formatMemoriesForPrompt(memories);
+        systemContent += memoryPrompt;
+        callbacks.onChunk(`> 🧠 **Agent Memory Activated:** Retrieved ${memories.length} relevant past experiences.\n\n`);
+      }
+    } catch (err) {
+      this.logger.error('Failed to inject memory RAG', err);
+    }
+
+    let messages: any[] = [{ role: 'system', content: systemContent }];
+    
+    if (existingMessages && existingMessages.length > 0) {
+      const history = existingMessages
+        .filter(m => m.role !== 'system')
+        .map(m => ({ role: m.role, content: m.content }));
+      messages.push(...history);
+    }
+    
+    messages.push({ role: 'user', content: formattedUserPrompt });
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
