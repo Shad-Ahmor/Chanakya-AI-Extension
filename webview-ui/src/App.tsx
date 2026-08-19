@@ -35,7 +35,7 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'chat' | 'modelhub' | 'dashboard'>(initialViewMode);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [rawYaml, setRawYaml] = useState<string>('');
-  const [initialDashboardTab, setInitialDashboardTab] = useState<'visual' | 'yaml' | 'settings' | 'token_optimizer' | 'analytics'>('analytics');
+  const [initialDashboardTab, setInitialDashboardTab] = useState<'visual' | 'yaml' | 'settings' | 'token_optimizer' | 'analytics'>('visual');
   
   // @ mentions autocomplete state
   const [showMentionMenu, setShowMentionMenu] = useState(false);

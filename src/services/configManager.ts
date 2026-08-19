@@ -108,7 +108,8 @@ export class ConfigManager {
 
       // For custom endpoints or Ollama, endpoint fallback
       if (model.provider === 'ollama' && !endpoint.includes('/api/tags')) {
-        endpoint = `${apiBase.replace(/\/+$/, '')}/api/tags`;
+        const base = apiBase.replace(/\/v1\/?$/, '').replace(/\/+$/, '');
+        endpoint = `${base}/api/tags`;
       }
 
       const headers: Record<string, string> = {
