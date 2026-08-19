@@ -4,6 +4,8 @@ import { ContextItem } from '../types/ipc';
 import { ConfigManager } from './configManager';
 import { Logger } from '../utils/logger';
 import { AgentOrchestrator } from './agentOrchestrator';
+import { MemoryRetriever } from './memory/MemoryRetriever';
+import { ReflectionEngine } from './memory/ReflectionEngine';
 
 export interface StreamCallbacks {
   onChunk: (chunk: string) => void;
@@ -43,8 +45,9 @@ export class LLMEngine {
     optimizerConfig?: any;
     callbacks: StreamCallbacks;
     cancellationToken?: vscode.CancellationToken;
+    existingMessages?: any[];
   }): Promise<void> {
-    const { prompt, contextItems, optimizerConfig, callbacks, cancellationToken } = params;
+    const { prompt, contextItems, optimizerConfig, callbacks, cancellationToken, existingMessages } = params;
     const config = this.configManager.getConfig();
     const activeModel =
       config.models.find((m) => m.id === config.activeChatModelId) || config.models[0];
@@ -131,10 +134,10 @@ export class LLMEngine {
       }
 
       if (activeModel.provider === 'gemini' && !activeModel.apiBase?.includes('/v1')) {
-        await this.streamGemini(activeModel, prompt, optimizedContextItems, optimizerConfig, wrappedCallbacks, abortController.signal);
+        await this.streamGemini(activeModel, prompt, optimizedContextItems, optimizerConfig, wrappedCallbacks, abortController.signal, existingMessages);
       } else {
         // OpenAI-compatible / Ollama / LM Studio / Enterprise AI Foundry
-        await this.streamOpenAICompatible(activeModel, prompt, optimizedContextItems, optimizerConfig, wrappedCallbacks, abortController.signal);
+        await this.streamOpenAICompatible(activeModel, prompt, optimizedContextItems, optimizerConfig, wrappedCallbacks, abortController.signal, existingMessages);
       }
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') {
@@ -167,7 +170,7 @@ export class LLMEngine {
     const apiBase = (model.apiBase || 'https://api.openai.com/v1').replace(/\/+$/, '');
     const endpoint = `${apiBase}/chat/completions`;
     const orchestrator = AgentOrchestrator.getInstance();
-    const useXmlTools = model.isLocal || ['vllm', 'ollama', 'lmstudio', 'custom'].includes(model.provider);
+    let useXmlTools = model.isLocal || ['vllm', 'ollama', 'lmstudio', 'custom'].includes(model.provider);
 
     let messages = existingMessages;
     if (!messages) {
@@ -227,6 +230,19 @@ export class LLMEngine {
         { role: 'system', content: systemContent },
         { role: 'user', content: formattedUserPrompt }
       ];
+
+      // Retrieve and Inject RAG Memories
+      try {
+        const memoryRetriever = MemoryRetriever.getInstance();
+        const memories = await memoryRetriever.retrieve(prompt, 3);
+        if (memories.length > 0) {
+          const memoryPrompt = memoryRetriever.formatMemoriesForPrompt(memories);
+          messages[0].content += memoryPrompt;
+          callbacks.onChunk(`> 🧠 **Agent Memory Activated:** Retrieved ${memories.length} relevant past experiences.\n\n`);
+        }
+      } catch (err) {
+        this.logger.error('Failed to inject memory RAG', err);
+      }
     }
 
     const headers: Record<string, string> = {
@@ -258,14 +274,19 @@ export class LLMEngine {
       signal
     });
 
-    let toolsDisabledDueToError = false;
+
 
     if (!res.ok) {
       const errBody = await res.text();
       if (res.status === 400 && errBody.includes('--enable-auto-tool-choice')) {
-        this.logger.log('Local LLM does not support auto tool choice without flags. Retrying without tools.');
+        this.logger.log('Local LLM does not support auto tool choice without flags. Switching to XML Tool Parser.');
         delete payload.tools;
-        toolsDisabledDueToError = true;
+        useXmlTools = true; // Dynamically switch to XML parsing
+        
+        // Inject XML instructions into the system prompt for the retry
+        if (messages && messages.length > 0 && messages[0].role === 'system') {
+          messages[0].content += '\n\n' + await orchestrator.getXMLToolInstructions();
+        }
         
         res = await fetch(endpoint, {
           method: 'POST',
@@ -421,13 +442,12 @@ export class LLMEngine {
       return this.streamOpenAICompatible(model, prompt, contextItems, optimizerConfig, callbacks, signal, messages);
     } else {
       // Finished
-      if (toolsDisabledDueToError) {
-        const warning = '\n\n> ⚠️ **Agentic Tools Disabled:** Your local LLM server requires the `--enable-auto-tool-choice` and `--tool-call-parser` flags to support autonomous file creation. Please restart your server with these flags to enable full Agentic features.';
-        fullText += warning;
-        callbacks.onChunk(warning);
-      }
-
       callbacks.onComplete(fullText);
+
+      // Post-task Memory Reflection (only if it wasn't a tiny conversational prompt)
+      if (!existingMessages && prompt.length > 20) {
+        ReflectionEngine.getInstance().evaluateTask(prompt, true, fullText).catch(e => this.logger.error(e));
+      }
 
       // Token usage tracking (approximation, doesn't count tool results perfectly yet)
       if (callbacks.onTokensUsed) {
@@ -449,7 +469,8 @@ export class LLMEngine {
     contextItems: ContextItem[],
     optimizerConfig: any,
     callbacks: StreamCallbacks,
-    signal: AbortSignal
+    signal: AbortSignal,
+    existingMessages?: any[]
   ): Promise<void> {
     const apiKey = model.apiKey || '';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model.model}:streamGenerateContent?alt=sse&key=${apiKey}`;
@@ -462,7 +483,29 @@ export class LLMEngine {
     }
     fullPrompt += prompt;
 
-    const contents = [{ role: 'user', parts: [{ text: fullPrompt }] }];
+    // Retrieve and Inject RAG Memories
+    try {
+      const memoryRetriever = MemoryRetriever.getInstance();
+      const memories = await memoryRetriever.retrieve(prompt, 3);
+      if (memories.length > 0) {
+        fullPrompt = memoryRetriever.formatMemoriesForPrompt(memories) + '\n\n' + fullPrompt;
+        callbacks.onChunk(`> 🧠 **Agent Memory Activated:** Retrieved ${memories.length} relevant past experiences.\n\n`);
+      }
+    } catch (err) {
+      this.logger.error('Failed to inject memory RAG', err);
+    }
+
+    let contents: any[] = [];
+    if (existingMessages && existingMessages.length > 0) {
+      contents = existingMessages
+        .filter(m => m.role !== 'system') // Gemini doesn't mix system in contents
+        .map(m => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }]
+        }));
+    }
+    
+    contents.push({ role: 'user', parts: [{ text: fullPrompt }] });
 
     let systemInstruction = 'You are Chanakya AI, an expert and elite coding assistant. Provide clean, efficient, and well-documented code.';
     if (optimizerConfig) {
@@ -543,6 +586,11 @@ export class LLMEngine {
     }
 
     callbacks.onComplete(fullText);
+
+    // Post-task Memory Reflection
+    if (prompt.length > 20) {
+      ReflectionEngine.getInstance().evaluateTask(prompt, true, fullText).catch(e => this.logger.error(e));
+    }
 
     // Token usage tracking
     if (callbacks.onTokensUsed) {

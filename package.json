@@ -205,6 +205,7 @@
 	},
 	"devDependencies": {
 		"@types/node": "20.x",
+		"@types/uuid": "^10.0.0",
 		"@types/vscode": "^1.90.0",
 		"@typescript-eslint/eslint-plugin": "^7.14.1",
 		"@typescript-eslint/parser": "^7.14.1",
@@ -215,7 +216,10 @@
 		"webpack-cli": "^5.1.4"
 	},
 	"dependencies": {
+		"@huggingface/transformers": "^4.2.0",
 		"@modelcontextprotocol/sdk": "^1.30.0",
+		"uuid": "^14.0.2",
+		"vectra": "^0.15.0",
 		"yaml": "^2.9.0"
 	}
 }

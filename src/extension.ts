@@ -8,16 +8,21 @@ import { McpService } from './services/mcpService';
 import { ContextItem } from './types/ipc';
 import { Logger } from './utils/logger';
 import { InlineEditCommand } from './commands/inlineEdit';
+import { VectorStore } from './services/memory/VectorStore';
+import { ConversationManager } from './services/ConversationManager';
 
 /**
  * Chanakya AI Enhancer Extension Activation Entrypoint (Phases 1-5 Complete)
  */
-export function activate(context: vscode.ExtensionContext): void {
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const logger = Logger.getInstance();
   logger.log('Activating Chanakya AI Enhancer (Full Continue/Copilot Engine with FIM Autocomplete)...');
 
   // 1. Initialize Configuration Manager
   const configManager = ConfigManager.getInstance();
+
+  // Initialize Conversation Manager
+  ConversationManager.initialize(context);
 
   // 1.5 Initialize MCP Service
   const mcpService = McpService.getInstance();
@@ -25,6 +30,10 @@ export function activate(context: vscode.ExtensionContext): void {
   if (wsFolders && wsFolders.length > 0) {
     mcpService.loadConfig(wsFolders[0].uri.fsPath);
   }
+
+  // 1.8 Initialize Vector Database for Memory RAG
+  const vectorStore = VectorStore.getInstance();
+  vectorStore.initialize(context.globalStorageUri);
 
   // 2. Register Sidebar Provider (Replaces Full Screen Dashboard)
   const sidebarProvider = new SidebarProvider(context.extensionUri, context);

@@ -4,6 +4,7 @@ import { LLMEngine } from '../services/llmEngine';
 import { ContextItem, FromWebviewMessage, ToWebviewMessage } from '../types/ipc';
 import { Logger } from '../utils/logger';
 import { SecurityUtils } from '../utils/security';
+import { ConversationManager } from '../services/ConversationManager';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'chanakya-ai-launcher';
@@ -13,6 +14,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   private readonly _context: vscode.ExtensionContext;
   private readonly _logger = Logger.getInstance();
   private readonly _configManager = ConfigManager.getInstance();
+  private readonly _conversationManager = ConversationManager.getInstance();
   private _activeCts?: vscode.CancellationTokenSource | undefined;
   
   constructor(extensionUri: vscode.Uri, context: vscode.ExtensionContext) {
@@ -159,6 +161,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         this.postMessage({
           type: 'configResult',
           payload: { config, rawYaml }
+        });
+        
+        // Also send conversations on ready
+        this.postMessage({
+          type: 'conversationsLoaded',
+          payload: {
+            conversations: this._conversationManager.getAllConversations(),
+            activeId: this._conversationManager.getActiveConversationId()
+          }
         });
         break;
       }
@@ -372,11 +383,22 @@ ${diff}`;
         const activeModelId = this._configManager.getConfig().activeChatModelId || 'default';
         const activeModelConfig = tokenOptimizerRaw[activeModelId] || tokenOptimizerRaw['default'] || {};
 
+        const activeId = this._conversationManager.getActiveConversationId();
+        let existingMessages = activeId ? this._conversationManager.loadConversation(activeId)?.messages || [] : [];
+        
+        const userMessage = {
+          id: `usr-${Date.now()}`,
+          role: 'user',
+          content: text,
+          timestamp: Date.now()
+        };
+
         await LLMEngine.getInstance().streamChat({
           prompt: text,
           contextItems: enrichedContextItems,
           optimizerConfig: activeModelConfig,
           cancellationToken: this._activeCts.token,
+          existingMessages: existingMessages,
           callbacks: {
             onChunk: (chunk) => {
               this.postMessage({
@@ -384,11 +406,29 @@ ${diff}`;
                 payload: { messageId: assistantMsgId, chunk }
               });
             },
-            onComplete: (_fullText) => {
+            onComplete: (fullText) => {
               this.postMessage({
                 type: 'streamEnd',
                 payload: { messageId: assistantMsgId }
               });
+              
+              const finalMessages = [
+                ...existingMessages,
+                userMessage,
+                {
+                  id: assistantMsgId,
+                  role: 'assistant',
+                  content: fullText,
+                  timestamp: Date.now()
+                }
+              ] as any[];
+              
+              const updatedConv = this._conversationManager.updateActiveConversation(finalMessages);
+              this.postMessage({
+                type: 'activeConversationChanged',
+                payload: { conversation: updatedConv }
+              });
+              
               this.postMessage({ type: 'setLoading', payload: { isLoading: false } });
             },
             onError: (error) => {

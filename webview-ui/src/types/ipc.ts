@@ -1,43 +1,53 @@
 import { AppConfig, ModelConfig } from './config';
 
 export interface ContextItem {
-  id: string;
-  type: 'file' | 'selection' | 'terminal' | 'codebase';
-  name: string;
-  content: string;
-  path?: string;
-  range?: {
-    startLine: number;
-    endLine: number;
-  };
+  readonly id: string;
+  readonly type: 'file' | 'selection' | 'terminal' | 'codebase';
+  readonly name: string;
+  readonly content: string;
+  readonly path?: string | undefined;
+  readonly range?: {
+    readonly startLine: number;
+    readonly endLine: number;
+  } | undefined;
 }
 
 export interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  contextItems?: ContextItem[];
-  isStreaming?: boolean;
-  timestamp: number;
-  optimizationStats?: {
-    originalTokens: number;
-    optimizedTokens: number;
-  };
+  readonly id: string;
+  readonly role: 'user' | 'assistant' | 'system';
+  readonly content: string;
+  readonly contextItems?: ContextItem[] | undefined;
+  readonly isStreaming?: boolean | undefined;
+  readonly timestamp: number;
+  readonly optimizationStats?: {
+    readonly originalTokens: number;
+    readonly optimizedTokens: number;
+  } | undefined;
+}
+
+export interface Conversation {
+  readonly id: string;
+  title: string;
+  messages: ChatMessage[];
+  updatedAt: number;
 }
 
 export interface WorkspaceFileResult {
-  label: string;
-  path: string;
+  readonly label: string;
+  readonly path: string;
 }
 
 export interface DetectedLocalModel {
-  name: string;
-  model: string;
-  provider: 'ollama' | 'lmstudio';
-  apiBase: string;
-  size?: string;
+  readonly name: string;
+  readonly model: string;
+  readonly provider: 'ollama' | 'lmstudio';
+  readonly apiBase: string;
+  readonly size?: string | undefined;
 }
 
+/**
+ * Messages sent FROM React Webview TO Extension Host
+ */
 export type FromWebviewMessage =
   | { type: 'ready' }
   | { type: 'sendMessage'; payload: { text: string; contextItems: ContextItem[] } }
@@ -53,18 +63,26 @@ export type FromWebviewMessage =
   | { type: 'getConfig' }
   | { type: 'getVscodeSettings' }
   | { type: 'updateVscodeSetting'; payload: { key: string; value: any } }
-  | { type: 'saveConfig'; payload: { config: AppConfig; rawYaml?: string } }
+  | { type: 'saveConfig'; payload: { config: AppConfig; rawYaml?: string | undefined } }
   | { type: 'testModelConnection'; payload: { modelConfig: ModelConfig } }
   | { type: 'detectLocalModels' }
   | { type: 'openConfigFile' }
   | { type: 'readTerminalContent' }
   | { type: 'generateCommitMessage' }
+  | { type: 'getTokenStats' }
+  | { type: 'clearTokenStats' }
   | { type: 'getTokenOptimizerConfig' }
   | { type: 'revertSnapshot' }
   | { type: 'saveTokenOptimizerConfig'; payload: Record<string, unknown> }
-  | { type: 'getTokenStats' }
-  | { type: 'clearTokenStats' };
+  | { type: 'loadConversations' }
+  | { type: 'loadConversation'; payload: { id: string } }
+  | { type: 'newConversation' }
+  | { type: 'deleteConversation'; payload: { id: string } }
+  | { type: 'clearAllConversations' };
 
+/**
+ * Messages sent FROM Extension Host TO React Webview
+ */
 export type ToWebviewMessage =
   | { type: 'addMessage'; payload: ChatMessage }
   | { type: 'streamChunk'; payload: { messageId: string; chunk: string } }
@@ -77,9 +95,11 @@ export type ToWebviewMessage =
   | { type: 'clearChat' }
   | { type: 'configResult'; payload: { config: AppConfig; rawYaml: string } }
   | { type: 'vscodeSettingsResult'; payload: { settings: Record<string, any> } }
-  | { type: 'testModelResult'; payload: { modelId: string; success: boolean; latencyMs?: number; error?: string } }
+  | { type: 'testModelResult'; payload: { modelId: string; success: boolean; latencyMs?: number | undefined; error?: string | undefined } }
   | { type: 'openSettingsTab' }
   | { type: 'localModelsDetected'; payload: { models: DetectedLocalModel[] } }
-  | { type: 'tokenOptimizerConfig'; payload: Record<string, unknown> }
   | { type: 'optimizationStats'; payload: { messageId: string; originalTokens: number; optimizedTokens: number } }
-  | { type: 'tokenStatsResult'; payload: Record<string, unknown> };
+  | { type: 'tokenStatsResult'; payload: Record<string, unknown> }
+  | { type: 'tokenOptimizerConfig'; payload: Record<string, unknown> }
+  | { type: 'conversationsLoaded'; payload: { conversations: Conversation[]; activeId: string | null } }
+  | { type: 'activeConversationChanged'; payload: { conversation: Conversation } };

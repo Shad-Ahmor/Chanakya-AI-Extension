@@ -19,6 +19,17 @@ export interface ChatMessage {
   readonly contextItems?: ContextItem[] | undefined;
   readonly isStreaming?: boolean | undefined;
   readonly timestamp: number;
+  readonly optimizationStats?: {
+    readonly originalTokens: number;
+    readonly optimizedTokens: number;
+  } | undefined;
+}
+
+export interface Conversation {
+  readonly id: string;
+  title: string;
+  messages: ChatMessage[];
+  updatedAt: number;
 }
 
 export interface WorkspaceFileResult {
@@ -62,7 +73,12 @@ export type FromWebviewMessage =
   | { type: 'clearTokenStats' }
   | { type: 'getTokenOptimizerConfig' }
   | { type: 'revertSnapshot' }
-  | { type: 'saveTokenOptimizerConfig'; payload: Record<string, unknown> };
+  | { type: 'saveTokenOptimizerConfig'; payload: Record<string, unknown> }
+  | { type: 'loadConversations' }
+  | { type: 'loadConversation'; payload: { id: string } }
+  | { type: 'newConversation' }
+  | { type: 'deleteConversation'; payload: { id: string } }
+  | { type: 'clearAllConversations' };
 
 /**
  * Messages sent FROM Extension Host TO React Webview
@@ -84,4 +100,6 @@ export type ToWebviewMessage =
   | { type: 'localModelsDetected'; payload: { models: DetectedLocalModel[] } }
   | { type: 'optimizationStats'; payload: { messageId: string; originalTokens: number; optimizedTokens: number } }
   | { type: 'tokenStatsResult'; payload: Record<string, unknown> }
-  | { type: 'tokenOptimizerConfig'; payload: Record<string, unknown> };
+  | { type: 'tokenOptimizerConfig'; payload: Record<string, unknown> }
+  | { type: 'conversationsLoaded'; payload: { conversations: Conversation[]; activeId: string | null } }
+  | { type: 'activeConversationChanged'; payload: { conversation: Conversation } };

@@ -16,7 +16,11 @@ const config = {
     devtoolModuleFilenameTemplate: '../[resource-path]'
   },
   externals: {
-    vscode: 'commonjs vscode' // the vscode-module is created on-the-fly and must be excluded. Add other modules here that should not be bundled.
+    vscode: 'commonjs vscode',
+    'onnxruntime-node': 'commonjs onnxruntime-node',
+    '@huggingface/transformers': 'commonjs @huggingface/transformers',
+    'vectra': 'commonjs vectra',
+    'sharp': 'commonjs sharp'
   },
   resolve: {
     extensions: ['.ts', '.js']
