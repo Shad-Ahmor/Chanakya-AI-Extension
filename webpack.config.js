@@ -1,0 +1,43 @@
+//@ts-check
+'use strict';
+
+const path = require('path');
+
+/**@type {import('webpack').Configuration}*/
+const config = {
+  target: 'node', // VS Code extensions run in Node.js environment
+  mode: 'none',
+
+  entry: './src/extension.ts',
+  output: {
+    path: path.resolve(__dirname, 'dist'),
+    filename: 'extension.js',
+    libraryTarget: 'commonjs2',
+    devtoolModuleFilenameTemplate: '../[resource-path]'
+  },
+  externals: {
+    vscode: 'commonjs vscode' // the vscode-module is created on-the-fly and must be excluded. Add other modules here that should not be bundled.
+  },
+  resolve: {
+    extensions: ['.ts', '.js']
+  },
+  module: {
+    rules: [
+      {
+        test: /\.ts$/,
+        exclude: /node_modules/,
+        use: [
+          {
+            loader: 'ts-loader'
+          }
+        ]
+      }
+    ]
+  },
+  devtool: 'nosources-source-map',
+  infrastructureLogging: {
+    level: 'log'
+  }
+};
+
+module.exports = config;
