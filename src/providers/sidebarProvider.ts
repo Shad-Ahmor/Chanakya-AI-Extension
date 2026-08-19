@@ -602,6 +602,53 @@ ${diff}`;
         break;
       }
 
+      case 'newConversation': {
+        const newConv = this._conversationManager.createNewConversation();
+        this.postMessage({
+          type: 'activeConversationChanged',
+          payload: { conversation: newConv }
+        });
+        this.postMessage({
+          type: 'conversationsLoaded',
+          payload: {
+            conversations: this._conversationManager.getAllConversations(),
+            activeId: newConv.id
+          }
+        });
+        break;
+      }
+
+      case 'loadConversation': {
+        const conv = this._conversationManager.loadConversation(message.payload.id);
+        if (conv) {
+          this.postMessage({
+            type: 'activeConversationChanged',
+            payload: { conversation: conv }
+          });
+        }
+        break;
+      }
+
+      case 'deleteConversation': {
+        this._conversationManager.deleteConversation(message.payload.id);
+        const conversations = this._conversationManager.getAllConversations();
+        const activeId = this._conversationManager.getActiveConversationId();
+        this.postMessage({
+          type: 'conversationsLoaded',
+          payload: { conversations, activeId }
+        });
+        const activeConv = activeId ? this._conversationManager.loadConversation(activeId) : null;
+        if (activeConv) {
+          this.postMessage({
+            type: 'activeConversationChanged',
+            payload: { conversation: activeConv }
+          });
+        } else {
+          this.postMessage({ type: 'clearChat' });
+        }
+        break;
+      }
+
       case 'revertSnapshot': {
         try {
           const workspaceFolders = vscode.workspace.workspaceFolders;
