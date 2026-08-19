@@ -112,6 +112,80 @@ function ChipInput({
   );
 }
 
+function RuleListInput({
+  label,
+  placeholder,
+  items,
+  onAdd,
+  onRemove,
+  suggestions = [],
+}: {
+  label: string;
+  placeholder: string;
+  items: string[];
+  onAdd: (v: string) => void;
+  onRemove: (v: string) => void;
+  suggestions?: string[];
+}) {
+  const [value, setValue] = useState('');
+  const [showSug, setShowSug] = useState(false);
+  const filtered = suggestions.filter((s) => s.toLowerCase().includes(value.toLowerCase()) && !items.includes(s));
+  
+  const commit = (v: string) => {
+    const trimmed = v.trim();
+    if (trimmed && !items.includes(trimmed)) onAdd(trimmed);
+    setValue('');
+    setShowSug(false);
+  };
+
+  return (
+    <div className="mb-4">
+      <label className="block text-[var(--vscode-foreground)] font-semibold text-xs mb-2">{label}</label>
+      
+      {/* List of active rules */}
+      <div className="flex flex-col gap-2 mb-3">
+        {items.map((item) => (
+          <div key={item} className="flex items-start gap-2 p-2 rounded bg-[var(--vscode-textBlockQuote-background)] border border-[var(--vscode-widget-border)]">
+            <span className="flex-1 text-[11px] text-[var(--vscode-foreground)] leading-relaxed">{item}</span>
+            <button type="button" onClick={() => onRemove(item)} className="text-[var(--vscode-errorForeground)] hover:opacity-70 transition p-1" title="Remove rule">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ))}
+        {items.length === 0 && <div className="text-[11px] text-[var(--vscode-descriptionForeground)] italic py-1">No custom rules added yet.</div>}
+      </div>
+
+      {/* Input area */}
+      <div className="relative">
+        <div className="flex gap-2">
+          <input
+            type="text" value={value} placeholder={placeholder}
+            onChange={(e) => { setValue(e.target.value); setShowSug(true); }}
+            onFocus={() => setShowSug(true)}
+            onBlur={() => setTimeout(() => setShowSug(false), 200)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit(value); } }}
+            className="flex-1 bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] text-[var(--vscode-input-foreground)] rounded px-3 py-2 text-xs outline-none focus:border-[var(--vscode-focusBorder)]"
+          />
+          <button type="button" onClick={() => commit(value)} className="px-3 py-2 bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] hover:bg-[var(--vscode-button-hoverBackground)] rounded text-xs font-semibold transition whitespace-nowrap">
+            Add Custom
+          </button>
+        </div>
+        
+        {showSug && filtered.length > 0 && (
+          <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-[var(--vscode-editorWidget-background)] border border-[var(--vscode-widget-border)] rounded shadow-xl max-h-48 overflow-y-auto">
+            <div className="px-2 py-1.5 text-[10px] font-bold text-[var(--vscode-descriptionForeground)] uppercase tracking-wider bg-[var(--vscode-editor-background)] sticky top-0">Suggested Templates</div>
+            {filtered.map((s) => (
+              <button key={s} type="button" onMouseDown={() => commit(s)} className="w-full text-left px-3 py-2 text-xs hover:bg-[var(--vscode-list-hoverBackground)] text-[var(--vscode-foreground)] transition border-b border-[var(--vscode-widget-border)] last:border-0">
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SavingsCard({ cfg }: { cfg: TokenOptimizerConfig }) {
   let savings = 0;
   if (cfg.enabled) savings += 15;
@@ -445,13 +519,13 @@ export default function TokenOptimizerView({ config }: { config: any }) {
         {/* Custom Rules */}
         <Section icon={<Info className="w-4 h-4 text-sky-400" />} title="Coding Rules (System Context)">
           <p className="text-[11px] text-[var(--vscode-descriptionForeground)] mb-3">Har prompt ke sath ye rules attach honge. Bar-bar same instruction dene ki zarurat nahi. e.g. "Always use async/await"</p>
-          <ChipInput label="Rules" placeholder="Add a rule & press Enter" items={cfg.rules} onAdd={(v) => addToList('rules', v)} onRemove={(v) => removeFromList('rules', v)} suggestions={['Always use async/await over .then()', 'Never use var, use const/let', 'Use TypeScript strict mode', 'Prefer functional components', 'Always handle errors with try/catch', 'Never use any type in TypeScript', 'Use named exports over default', 'Keep functions under 50 lines', 'Write self-documenting code']} />
+          <RuleListInput label="Rules" placeholder="Type your own custom rule or choose from templates below..." items={cfg.rules} onAdd={(v) => addToList('rules', v)} onRemove={(v) => removeFromList('rules', v)} suggestions={['Always use async/await over .then()', 'Never use var, use const/let', 'Use TypeScript strict mode', 'Prefer functional components', 'Always handle errors with try/catch', 'Never use any type in TypeScript', 'Use named exports over default', 'Keep functions under 50 lines', 'Write self-documenting code']} />
         </Section>
 
         {/* Negative Prompts */}
         <Section icon={<MessageSquareX className="w-4 h-4 text-red-400" />} title="Negative Prompts (What NOT to do)">
           <p className="text-[11px] text-[var(--vscode-descriptionForeground)] mb-3">AI ko specifically batao kya <strong>nahi karna</strong>. Yeh system prompt mein add hota hai — AI un cheezeon se bachta hai.</p>
-          <ChipInput label="Negative Instructions" placeholder="Add a negative prompt & press Enter" items={cfg.negativePrompts} onAdd={(v) => addToList('negativePrompts', v)} onRemove={(v) => removeFromList('negativePrompts', v)} suggestions={['Do not explain the code, just write it', 'Do not add unnecessary comments', 'Do not use deprecated APIs', 'Do not add console.log statements', 'Do not write unit tests unless asked', 'Do not suggest refactoring unless asked', 'Do not add boilerplate imports', 'Do not explain basic concepts']} />
+          <RuleListInput label="Negative Instructions" placeholder="Type what the AI should NOT do..." items={cfg.negativePrompts} onAdd={(v) => addToList('negativePrompts', v)} onRemove={(v) => removeFromList('negativePrompts', v)} suggestions={['Do not explain the code, just write it', 'Do not add unnecessary comments', 'Do not use deprecated APIs', 'Do not add console.log statements', 'Do not write unit tests unless asked', 'Do not suggest refactoring unless asked', 'Do not add boilerplate imports', 'Do not explain basic concepts']} />
         </Section>
 
         <div className="flex justify-end pt-2">
