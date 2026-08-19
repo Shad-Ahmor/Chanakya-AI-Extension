@@ -317,9 +317,14 @@ ${diff}`;
         }
         this._activeCts = new vscode.CancellationTokenSource();
 
+        const tokenOptimizerRaw = this._context.globalState.get<Record<string, unknown>>('chanakya.tokenOptimizerConfig') || {};
+        const activeModelId = this._configManager.getConfig().activeChatModelId || 'default';
+        const activeModelConfig = tokenOptimizerRaw[activeModelId] || tokenOptimizerRaw['default'] || {};
+
         await LLMEngine.getInstance().streamChat({
           prompt: text,
           contextItems: enrichedContextItems,
+          optimizerConfig: activeModelConfig,
           cancellationToken: this._activeCts.token,
           callbacks: {
             onChunk: (chunk) => {

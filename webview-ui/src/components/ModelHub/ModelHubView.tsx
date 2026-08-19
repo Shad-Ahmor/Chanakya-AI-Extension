@@ -266,7 +266,7 @@ export default function ModelHubView({ config, rawYaml, onUpdateConfig, onClose,
         {activeTab === 'settings' ? (
           <SettingsView />
         ) : activeTab === 'token_optimizer' ? (
-          <TokenOptimizerView />
+          <TokenOptimizerView config={config} />
         ) : activeTab === 'analytics' ? (
           <AnalyticsDashboard
             config={config}

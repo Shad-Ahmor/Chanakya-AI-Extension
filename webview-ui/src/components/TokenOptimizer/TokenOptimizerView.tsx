@@ -28,6 +28,8 @@ export interface TokenOptimizerConfig {
   skipDocstrings: boolean;
   skipImports: boolean;
   responseConciseness: 'normal' | 'concise' | 'ultra_concise';
+  removeEmptyLines: boolean;
+  removeConsoleLogs: boolean;
 }
 
 export const DEFAULT_TOKEN_CONFIG: TokenOptimizerConfig = {
@@ -41,6 +43,8 @@ export const DEFAULT_TOKEN_CONFIG: TokenOptimizerConfig = {
   skipDocstrings: false,
   skipImports: false,
   responseConciseness: 'concise',
+  removeEmptyLines: true,
+  removeConsoleLogs: false,
 };
 
 function ChipInput({
@@ -167,8 +171,11 @@ function Section({ icon, title, children, defaultOpen = true }: { icon: React.Re
   );
 }
 
-export default function TokenOptimizerView() {
-  const [cfg, setCfg] = useState<TokenOptimizerConfig>(DEFAULT_TOKEN_CONFIG);
+export default function TokenOptimizerView({ config }: { config: any }) {
+  const [selectedModelId, setSelectedModelId] = useState<string>(config?.activeChatModelId || config?.models?.[0]?.id || config?.models?.[0]?.name || 'default');
+  const [allConfigs, setAllConfigs] = useState<Record<string, TokenOptimizerConfig>>({});
+  
+  const cfg = allConfigs[selectedModelId] || DEFAULT_TOKEN_CONFIG;
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -176,7 +183,12 @@ export default function TokenOptimizerView() {
     const handler = (event: MessageEvent) => {
       const msg = event.data;
       if (msg.type === 'tokenOptimizerConfig' && msg.payload) {
-        setCfg({ ...DEFAULT_TOKEN_CONFIG, ...msg.payload });
+        // If it's a legacy flat config, convert it to a record with 'default'
+        if (msg.payload.enabled !== undefined) {
+          setAllConfigs({ default: { ...DEFAULT_TOKEN_CONFIG, ...msg.payload } });
+        } else {
+          setAllConfigs(msg.payload);
+        }
       }
     };
     window.addEventListener('message', handler);
@@ -184,22 +196,31 @@ export default function TokenOptimizerView() {
   }, []);
 
   const update = useCallback(<K extends keyof TokenOptimizerConfig>(key: K, value: TokenOptimizerConfig[K]) => {
-    setCfg((prev) => ({ ...prev, [key]: value }));
+    setAllConfigs((prev) => ({
+      ...prev,
+      [selectedModelId]: { ...(prev[selectedModelId] || DEFAULT_TOKEN_CONFIG), [key]: value }
+    }));
     setSaved(false);
-  }, []);
+  }, [selectedModelId]);
 
   const addToList = (key: 'programmingLanguages' | 'frameworks' | 'rules' | 'negativePrompts', val: string) => {
-    setCfg((prev) => ({ ...prev, [key]: [...prev[key], val] }));
+    setAllConfigs((prev) => {
+      const current = prev[selectedModelId] || DEFAULT_TOKEN_CONFIG;
+      return { ...prev, [selectedModelId]: { ...current, [key]: [...current[key], val] } };
+    });
     setSaved(false);
   };
 
   const removeFromList = (key: 'programmingLanguages' | 'frameworks' | 'rules' | 'negativePrompts', val: string) => {
-    setCfg((prev) => ({ ...prev, [key]: prev[key].filter((v) => v !== val) }));
+    setAllConfigs((prev) => {
+      const current = prev[selectedModelId] || DEFAULT_TOKEN_CONFIG;
+      return { ...prev, [selectedModelId]: { ...current, [key]: current[key].filter((v) => v !== val) } };
+    });
     setSaved(false);
   };
 
   const handleSave = () => {
-    vscode.postMessage({ type: 'saveTokenOptimizerConfig', payload: cfg as unknown as Record<string, unknown> });
+    vscode.postMessage({ type: 'saveTokenOptimizerConfig', payload: allConfigs as unknown as Record<string, unknown> });
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };
@@ -208,7 +229,7 @@ export default function TokenOptimizerView() {
     <div className="h-full overflow-y-auto">
       <div className="max-w-2xl mx-auto py-6 px-2">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <Zap className="w-5 h-5 text-emerald-400" />
@@ -225,6 +246,29 @@ export default function TokenOptimizerView() {
               {saved ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
               {saved ? 'Saved!' : 'Save'}
             </button>
+          </div>
+        </div>
+
+        {/* Model Selector Dropdown */}
+        <div className="mb-6 p-4 rounded-xl border border-[var(--vscode-widget-border)] bg-[var(--vscode-editorWidget-background)] flex items-center justify-between">
+          <div>
+            <div className="text-sm font-bold text-[var(--vscode-foreground)] mb-1">Configure For Model</div>
+            <div className="text-xs text-[var(--vscode-descriptionForeground)]">Set different token optimization rules per model</div>
+          </div>
+          <div className="relative min-w-[250px]">
+            <select
+              value={selectedModelId}
+              onChange={(e) => setSelectedModelId(e.target.value)}
+              className="w-full appearance-none bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] text-[var(--vscode-input-foreground)] rounded-lg px-3 py-2 text-sm outline-none focus:border-[var(--vscode-focusBorder)] pr-8 cursor-pointer font-bold"
+            >
+              <option value="default">Default Configuration</option>
+              {config?.models?.map((m: any) => (
+                <option key={m.id || m.name} value={m.id || m.name}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="w-4 h-4 text-[var(--vscode-descriptionForeground)] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
         </div>
 
@@ -285,6 +329,8 @@ export default function TokenOptimizerView() {
               { key: 'skipComments', label: 'Remove Inline Comments', desc: '// ... aur # ... wali lines hata do' },
               { key: 'skipDocstrings', label: 'Remove Docstrings', desc: '"""...""" aur /** ... */ blocks hata do' },
               { key: 'skipImports', label: 'Remove Import Lines', desc: 'import/require statements remove karo' },
+              { key: 'removeEmptyLines', label: 'Remove Empty Lines', desc: 'Sare extra empty blank lines hata do' },
+              { key: 'removeConsoleLogs', label: 'Remove Console.logs', desc: 'console.log/print statements hata do' },
             ] as const).map(({ key, label, desc }) => (
               <label key={key} className="flex items-start gap-3 p-2.5 rounded-lg hover:bg-[var(--vscode-list-hoverBackground)] cursor-pointer transition">
                 <div onClick={() => update(key, !cfg[key])} className={`mt-0.5 rounded-full relative flex-shrink-0 cursor-pointer transition-colors ${cfg[key] ? 'bg-emerald-500' : 'bg-[var(--vscode-input-border)]'}`} style={{ height: '18px', minWidth: '32px' }}>

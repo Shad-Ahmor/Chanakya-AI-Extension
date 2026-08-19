@@ -38,10 +38,11 @@ export class LLMEngine {
   public async streamChat(params: {
     prompt: string;
     contextItems: ContextItem[];
+    optimizerConfig?: any;
     callbacks: StreamCallbacks;
     cancellationToken?: vscode.CancellationToken;
   }): Promise<void> {
-    const { prompt, contextItems, callbacks, cancellationToken } = params;
+    const { prompt, contextItems, optimizerConfig, callbacks, cancellationToken } = params;
     const config = this.configManager.getConfig();
     const activeModel =
       config.models.find((m) => m.id === config.activeChatModelId) || config.models[0];
@@ -89,11 +90,37 @@ export class LLMEngine {
     };
 
     try {
+      // 1. Optimize Context Items based on optimizerConfig
+      let optimizedContextItems = contextItems.map(item => {
+        let content = item.content;
+        if (optimizerConfig) {
+          if (optimizerConfig.skipComments) {
+            content = content.replace(/\/\/.*$/gm, '');
+            content = content.replace(/#.*$/gm, ''); // Python style
+          }
+          if (optimizerConfig.skipDocstrings) {
+            content = content.replace(/\/\*[\s\S]*?\*\//g, '');
+            content = content.replace(/"""[\s\S]*?"""/g, ''); // Python style
+          }
+          if (optimizerConfig.skipImports) {
+            content = content.replace(/^(import|require|from)\s+.*$/gm, '');
+          }
+          if (optimizerConfig.removeEmptyLines) {
+            content = content.replace(/^\s*[\r\n]/gm, '');
+          }
+          if (optimizerConfig.removeConsoleLogs) {
+            content = content.replace(/console\.(log|info|debug|warn|error|trace).*$/gm, '');
+            content = content.replace(/print\(.*$/gm, ''); // Python
+          }
+        }
+        return { ...item, content: content.trim() };
+      });
+
       if (activeModel.provider === 'gemini' && !activeModel.apiBase?.includes('/v1')) {
-        await this.streamGemini(activeModel, prompt, contextItems, wrappedCallbacks, abortController.signal);
+        await this.streamGemini(activeModel, prompt, optimizedContextItems, optimizerConfig, wrappedCallbacks, abortController.signal);
       } else {
         // OpenAI-compatible / Ollama / LM Studio / Enterprise AI Foundry
-        await this.streamOpenAICompatible(activeModel, prompt, contextItems, wrappedCallbacks, abortController.signal);
+        await this.streamOpenAICompatible(activeModel, prompt, optimizedContextItems, optimizerConfig, wrappedCallbacks, abortController.signal);
       }
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') {
@@ -118,6 +145,7 @@ export class LLMEngine {
     model: ModelConfig,
     prompt: string,
     contextItems: ContextItem[],
+    optimizerConfig: any,
     callbacks: StreamCallbacks,
     signal: AbortSignal
   ): Promise<void> {
@@ -125,10 +153,30 @@ export class LLMEngine {
     const endpoint = `${apiBase}/chat/completions`;
 
     // Construct system and user prompt with context items
-    const systemContent =
+    let systemContent =
       'You are an expert AI software engineer and code assistant for VS Code. ' +
       'Provide clear, concise, accurate, and production-ready code. ' +
       'Format all code snippets with correct markdown syntax highlighting.';
+
+    if (optimizerConfig) {
+      if (optimizerConfig.responseConciseness === 'ultra_concise') {
+        systemContent += ' Provide ONLY code, absolutely no explanations or conversational fluff.';
+      } else if (optimizerConfig.responseConciseness === 'concise') {
+        systemContent += ' Keep explanations extremely short and to the point.';
+      }
+      
+      if (optimizerConfig.rules && optimizerConfig.rules.length > 0) {
+        systemContent += '\n\nCoding Rules to Strictly Follow:\n' + optimizerConfig.rules.map((r: string) => '- ' + r).join('\n');
+      }
+
+      if (optimizerConfig.negativePrompts && optimizerConfig.negativePrompts.length > 0) {
+        systemContent += '\n\nNegative Constraints (DO NOT DO THESE):\n' + optimizerConfig.negativePrompts.map((r: string) => '- ' + r).join('\n');
+      }
+
+      if (optimizerConfig.programmingLanguages && optimizerConfig.programmingLanguages.length > 0) {
+        systemContent += `\n\nTarget Languages/Ecosystems: ${optimizerConfig.programmingLanguages.join(', ')}. Do not provide solutions outside these.`;
+      }
+    }
 
     let formattedUserPrompt = '';
 
@@ -236,6 +284,7 @@ export class LLMEngine {
     model: ModelConfig,
     prompt: string,
     contextItems: ContextItem[],
+    optimizerConfig: any,
     callbacks: StreamCallbacks,
     signal: AbortSignal
   ): Promise<void> {
@@ -250,16 +299,37 @@ export class LLMEngine {
     }
     fullPrompt += prompt;
 
+    const contents = [{ role: 'user', parts: [{ text: fullPrompt }] }];
+
+    let systemInstruction = 'You are Chanakya AI, an expert and elite coding assistant. Provide clean, efficient, and well-documented code.';
+    if (optimizerConfig) {
+      if (optimizerConfig.responseConciseness === 'ultra_concise') {
+        systemInstruction += ' Provide ONLY code, absolutely no explanations or conversational fluff.';
+      } else if (optimizerConfig.responseConciseness === 'concise') {
+        systemInstruction += ' Keep explanations extremely short and to the point.';
+      }
+      if (optimizerConfig.rules && optimizerConfig.rules.length > 0) {
+        systemInstruction += '\n\nCoding Rules to Strictly Follow:\n' + optimizerConfig.rules.map((r: string) => '- ' + r).join('\n');
+      }
+      if (optimizerConfig.negativePrompts && optimizerConfig.negativePrompts.length > 0) {
+        systemInstruction += '\n\nNegative Constraints (DO NOT DO THESE):\n' + optimizerConfig.negativePrompts.map((r: string) => '- ' + r).join('\n');
+      }
+    }
+
+    const bodyPayload: Record<string, unknown> = {
+      contents,
+      generationConfig: {
+        temperature: model.defaultCompletionOptions?.temperature ?? 0.2,
+        maxOutputTokens: model.defaultCompletionOptions?.maxTokens ?? 4096,
+        topP: 0.95
+      },
+      systemInstruction: { parts: [{ text: systemInstruction }] }
+    };
+
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
-        generationConfig: {
-          temperature: model.defaultCompletionOptions?.temperature ?? 0.2,
-          maxOutputTokens: model.defaultCompletionOptions?.maxTokens ?? 4096
-        }
-      }),
+      body: JSON.stringify(bodyPayload),
       signal
     });
 
