@@ -42,7 +42,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     completionTokens: number,
     durationMs: number = 0,
     ttftMs: number = 0,
-    isError: boolean = false
+    isError: boolean = false,
+    originalTokens: number = 0,
+    optimizedTokens: number = 0
   ): Promise<void> {
     const key = 'chanakya.tokenStats';
     const existing = this._context.globalState.get<Record<string, { promptTokens: number; completionTokens: number; requests: number }>>(key) || {};
@@ -64,7 +66,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       completionTokens,
       durationMs,
       ttftMs,
-      isError
+      isError,
+      originalTokens,
+      optimizedTokens
     });
     
     // Cap at 2000 items
@@ -463,8 +467,8 @@ ${diff}`;
                 this.postMessage({ type: 'setLoading', payload: { isLoading: false } });
               }
             },
-            onTokensUsed: (modelId, promptTokens, completionTokens, durationMs, ttftMs, isError) => {
-              this._saveTokenUsage(modelId, promptTokens, completionTokens, durationMs, ttftMs, isError).catch(() => { /* non-fatal */ });
+            onTokensUsed: (modelId, promptTokens, completionTokens, durationMs, ttftMs, isError, originalTokens, optimizedTokens) => {
+              this._saveTokenUsage(modelId, promptTokens, completionTokens, durationMs, ttftMs, isError, originalTokens, optimizedTokens).catch(() => { /* non-fatal */ });
             },
             onOptimizationStats: (originalTokens, optimizedTokens) => {
               currentOptStats = { originalTokens, optimizedTokens };

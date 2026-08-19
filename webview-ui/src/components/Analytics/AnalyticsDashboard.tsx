@@ -25,6 +25,8 @@ interface ModelStat {
   avgDuration?: number;
   errors?: number;
   avgTTFT?: number;
+  originalTokens: number;
+  optimizedTokens: number;
 }
 
 interface TokenStats {
@@ -39,6 +41,8 @@ export interface TokenUsageRecord {
   durationMs: number;
   ttftMs: number;
   isError: boolean;
+  originalTokens?: number;
+  optimizedTokens?: number;
 }
 
 
@@ -251,7 +255,9 @@ export default function AnalyticsDashboard({ config, onSetActiveModel }: Props) 
           completionTokens: 0,
           avgDuration: 0,
           avgTTFT: 0,
-          errors: 0
+          errors: 0,
+          originalTokens: 0,
+          optimizedTokens: 0
         };
       }
       const st = filteredStats[r.modelId];
@@ -263,6 +269,8 @@ export default function AnalyticsDashboard({ config, onSetActiveModel }: Props) 
       st.avgDuration = (st.avgDuration || 0) + r.durationMs;
       st.avgTTFT = (st.avgTTFT || 0) + r.ttftMs;
       if (r.isError) st.errors = (st.errors || 0) + 1;
+      st.originalTokens += r.originalTokens || 0;
+      st.optimizedTokens += r.optimizedTokens || 0;
     }
   });
 
@@ -276,13 +284,12 @@ export default function AnalyticsDashboard({ config, onSetActiveModel }: Props) 
   });
 
   // Top cards use active model's filtered stats
-  const activeStats = filteredStats[selectedModelId] || { requests: 0, promptTokens: 0, completionTokens: 0, avgDuration: 0, avgTTFT: 0, errors: 0 };
+  const activeStats = filteredStats[selectedModelId] || { requests: 0, promptTokens: 0, completionTokens: 0, avgDuration: 0, avgTTFT: 0, errors: 0, originalTokens: 0, optimizedTokens: 0 };
   const cardReqs = activeStats.requests;
   const cardPromptTokens = activeStats.promptTokens;
   const cardCompTokens = activeStats.completionTokens;
   const cardTotalTokens = cardPromptTokens + cardCompTokens;
   const cardAvgDur = activeStats.avgDuration || 0;
-  const cardAvgTTFT = activeStats.avgTTFT || 0;
   const cardErrors = activeStats.errors || 0;
 
   // Calculate Line Chart points
@@ -376,9 +383,17 @@ export default function AnalyticsDashboard({ config, onSetActiveModel }: Props) 
           <StatCard icon={<Zap className="w-4 h-4" />} label="TOTAL TOKENS USED" value={fmt(cardTotalTokens)} color="#6366f1" />
           <StatCard icon={<LogOut className="w-4 h-4" />} label="PROMPT TOKENS" value={fmt(cardPromptTokens)} color="#f43f5e" />
           <StatCard icon={<LogIn className="w-4 h-4" />} label="COMPLETION TOKENS" value={fmt(cardCompTokens)} color="#34d399" />
+          <StatCard 
+            icon={<ArrowUpRight className="w-4 h-4" />} 
+            label="TOKENS SAVED" 
+            value={activeStats.originalTokens > 0 
+              ? `${((1 - activeStats.optimizedTokens / activeStats.originalTokens) * 100).toFixed(1)}%` 
+              : '0%'} 
+            sub={`${fmt(activeStats.originalTokens - activeStats.optimizedTokens)} tokens reduced`}
+            color="#a78bfa" 
+          />
           <StatCard icon={<Clock className="w-4 h-4" />} label="AVG DURATION" value={`${cardAvgDur.toFixed(1)}s`} color="#f59e0b" />
           <StatCard icon={<AlertCircle className="w-4 h-4" />} label="ERRORS" value={fmt(cardErrors)} color="#ef4444" />
-          <StatCard icon={<Activity className="w-4 h-4" />} label="AVGTTFT" value={`${cardAvgTTFT.toFixed(2)}s`} color="#8b5cf6" />
         </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_180px]">
@@ -399,6 +414,7 @@ export default function AnalyticsDashboard({ config, onSetActiveModel }: Props) 
                     <th className="p-3 text-xs font-semibold text-[var(--vscode-foreground)]">Total Tokens</th>
                     <th className="p-3 text-xs font-semibold text-[var(--vscode-foreground)]">Avg Duration</th>
                     <th className="p-3 text-xs font-semibold text-[var(--vscode-foreground)]">Avg TTFT</th>
+                    <th className="p-3 text-xs font-semibold text-[var(--vscode-foreground)]">Tokens Saved</th>
                     <th className="p-3 text-xs font-semibold text-[var(--vscode-foreground)] text-right">ERROR Rate</th>
                   </tr>
                 </thead>
@@ -444,6 +460,9 @@ export default function AnalyticsDashboard({ config, onSetActiveModel }: Props) 
                             <td className="p-3 text-xs">{fmt(totalTokens)}</td>
                             <td className="p-3 text-xs">{avgDur.toFixed(1)}s</td>
                             <td className="p-3 text-xs">{avgTtft.toFixed(2)}s</td>
+                            <td className="p-3 text-xs font-semibold text-purple-400">
+                              {st?.originalTokens ? `${((1 - st.optimizedTokens / st.originalTokens) * 100).toFixed(1)}%` : '0%'}
+                            </td>
                             <td className={`p-3 text-xs text-right font-medium ${errRate > 0 ? 'text-red-400' : ''}`}>
                               {errRate.toFixed(1)}%
                             </td>

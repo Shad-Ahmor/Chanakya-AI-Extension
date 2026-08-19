@@ -11,7 +11,7 @@ export interface StreamCallbacks {
   onChunk: (chunk: string) => void;
   onComplete: (fullText: string) => void;
   onError: (error: Error) => void;
-  onTokensUsed?: (modelId: string, promptTokens: number, completionTokens: number, durationMs?: number, ttftMs?: number, isError?: boolean) => void;
+  onTokensUsed?: (modelId: string, promptTokens: number, completionTokens: number, durationMs?: number, ttftMs?: number, isError?: boolean, originalTokens?: number, optimizedTokens?: number) => void;
   onOptimizationStats?: (originalTokens: number, optimizedTokens: number) => void;
 }
 
@@ -70,6 +70,8 @@ export class LLMEngine {
     const startTime = Date.now();
     let firstChunkTime: number | null = null;
     let isError = false;
+    let originalTokens = 0;
+    let optimizedTokens = 0;
 
     const wrappedCallbacks: StreamCallbacks = {
       onChunk: (chunk) => {
@@ -89,15 +91,12 @@ export class LLMEngine {
         const ttftMs = firstChunkTime ? (firstChunkTime - startTime) / 1000 : durationMs;
         
         if (callbacks.onTokensUsed) {
-          callbacks.onTokensUsed(modelId, promptTokens, completionTokens, durationMs, ttftMs, isError);
+          callbacks.onTokensUsed(modelId, promptTokens, completionTokens, durationMs, ttftMs, isError, originalTokens, optimizedTokens);
         }
       }
     };
 
     try {
-      let originalTokens = 0;
-      let optimizedTokens = 0;
-
       // 1. Optimize Context Items based on optimizerConfig
       let optimizedContextItems = contextItems.map(item => {
         originalTokens += estimateTokens(item.content);
