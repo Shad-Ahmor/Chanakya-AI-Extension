@@ -440,6 +440,24 @@ ${diff}`;
                 type: 'streamEnd',
                 payload: { messageId: assistantMsgId }
               });
+              
+              const finalMessages = [
+                ...existingMessages,
+                userMessage,
+                {
+                  id: assistantMsgId,
+                  role: 'assistant',
+                  content: `⚠️ **Error:** ${error.message}`,
+                  timestamp: Date.now()
+                }
+              ] as any[];
+              
+              const updatedConv = this._conversationManager.updateActiveConversation(finalMessages);
+              this.postMessage({
+                type: 'activeConversationChanged',
+                payload: { conversation: updatedConv }
+              });
+              
               this.postMessage({ type: 'setLoading', payload: { isLoading: false } });
             },
             onTokensUsed: (modelId, promptTokens, completionTokens, durationMs, ttftMs, isError) => {
