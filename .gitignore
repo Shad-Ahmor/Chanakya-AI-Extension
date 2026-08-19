@@ -6,3 +6,11 @@ out
 .vscode-test
 .env
 *.log
+
+# Test and Scratch files
+test-*.html
+test-*.js
+*.backup*
+*.bak
+.agents/
+GEMINI.md
