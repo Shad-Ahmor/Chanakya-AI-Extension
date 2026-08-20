@@ -18,6 +18,8 @@ html, body, #root {
   font-size: var(--vscode-font-size, 13px);
   color: var(--vscode-foreground);
   background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /* -- Scrollbar -------------------------------------------- */
