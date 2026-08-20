@@ -188,7 +188,8 @@ export class LLMEngine {
       '2. If you need to install dependencies (e.g. Django, pip, npm), write a `requirements.txt` or `package.json` first, then run the terminal command.\n' +
       '3. `run_terminal_command` is SYNCHRONOUS. It will wait up to 15 seconds to return output. If you run `pip install`, it will return the success/failure output. You MUST wait for it to succeed before running subsequent commands like `migrate`.\n' +
       '4. ALWAYS prefer `replace_in_file` over `edit_file` when modifying existing files to prevent accidental deletion of code. Only use `edit_file` if you need to rewrite the ENTIRE file from scratch.\n' +
-      '5. PROACTIVE RECOMMENDATIONS: When faced with design choices or implementations, propose 2-3 high-level recommendations with pros/cons and ask the user to select one (just like Antigravity does). Do not just blindly code sub-optimal solutions.';
+      '5. When scaffolding full projects or creating multiple files, ALWAYS use the `create_multiple_files` tool in a single response to avoid being stopped after creating just one file.\n' +
+      '6. PROACTIVE RECOMMENDATIONS: When faced with design choices or implementations, propose 2-3 high-level recommendations with pros/cons and ask the user to select one (just like Antigravity does). Do not just blindly code sub-optimal solutions.';
 
     if (useXmlTools) {
       systemContent += '\n\n' + await orchestrator.getXMLToolInstructions();
@@ -580,7 +581,8 @@ export class LLMEngine {
       '2. If you need to install dependencies (e.g. Django, pip, npm), write a `requirements.txt` or `package.json` first, then run the terminal command.\n' +
       '3. `run_terminal_command` executes in the VS Code Integrated Terminal visually for the user. Do not wait for long processes like dev servers to finish; just start them.\n' +
       '4. Provide clean, efficient, and well-documented code.\n' +
-      '5. PROACTIVE RECOMMENDATIONS: When faced with design choices or implementations, propose 2-3 high-level recommendations with pros/cons and ask the user to select one (just like Antigravity does). Do not just blindly code sub-optimal solutions.';
+      '5. When scaffolding full projects or creating multiple files, ALWAYS use the `create_multiple_files` tool in a single response to avoid being stopped after creating just one file.\n' +
+      '6. PROACTIVE RECOMMENDATIONS: When faced with design choices or implementations, propose 2-3 high-level recommendations with pros/cons and ask the user to select one (just like Antigravity does). Do not just blindly code sub-optimal solutions.';
     if (optimizerConfig) {
       if (optimizerConfig.responseConciseness === 'ultra_concise') {
         systemInstruction += ' Provide ONLY code, absolutely no explanations or conversational fluff. If you are outputting code to the chat, ALWAYS wrap it in markdown code blocks (```language). Do NOT wrap JSON tool arguments in markdown backticks.';
