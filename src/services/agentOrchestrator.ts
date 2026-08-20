@@ -105,6 +105,22 @@ export class AgentOrchestrator {
       {
         type: 'function',
         function: {
+          name: 'replace_in_file',
+          description: 'Replaces a specific block of text in a file. Always use this instead of edit_file when modifying existing files. targetContent MUST precisely match the file contents, including leading whitespace.',
+          parameters: {
+            type: 'object',
+            properties: {
+              filePath: { type: 'string', description: 'Path to the file.' },
+              targetContent: { type: 'string', description: 'The exact code block to be replaced (including exact leading whitespaces).' },
+              replacementContent: { type: 'string', description: 'The new code to insert in place of targetContent.' }
+            },
+            required: ['filePath', 'targetContent', 'replacementContent']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
           name: 'create_file',
           description: 'Creates a new file with the specified content. Also creates necessary parent directories.',
           parameters: {
@@ -181,6 +197,8 @@ Only one tool call per response is supported. Do not output anything else if you
           return await this.listDirectory(args.dirPath);
         case 'edit_file':
           return await this.editFile(args.filePath, args.content);
+        case 'replace_in_file':
+          return await this.replaceInFile(args.filePath, args.targetContent, args.replacementContent);
         case 'create_file':
           return await this.createFile(args.filePath, args.content);
         default:
@@ -205,20 +223,50 @@ Only one tool call per response is supported. Do not output anything else if you
     return new Promise((resolve) => {
       const execCwd = cwd ? this.resolvePath(cwd) : (vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd());
       
-      // Look for existing Chanakya Agent terminal
-      let terminal = vscode.window.terminals.find(t => t.name === 'Chanakya Agent');
-      if (!terminal) {
-        terminal = vscode.window.createTerminal({
-          name: 'Chanakya Agent',
-          cwd: execCwd
-        });
-      }
+      this.logger.log(`[Terminal] Running: ${command} in ${execCwd}`);
       
-      terminal.show(false);
-      terminal.sendText(command);
+      // We will run this via cp.exec to capture output synchronously.
+      // But we also want a timeout so we don't block forever on servers.
+      const child = cp.exec(command, { cwd: execCwd, maxBuffer: 1024 * 1024 * 5 }); // 5MB buffer
       
-      // Resolve immediately to prevent blocking the LLM for long-running commands like pip install or migrations.
-      resolve(`Command '${command}' has been sent to the VS Code 'Chanakya Agent' Terminal and is running. The user can see it live. Proceed with your next step without waiting for it to finish.`);
+      let output = '';
+      let isDone = false;
+      
+      child.stdout?.on('data', (data) => {
+        output += data.toString();
+      });
+      
+      child.stderr?.on('data', (data) => {
+        output += data.toString();
+      });
+      
+      const timeoutTimer = setTimeout(() => {
+        if (!isDone) {
+          isDone = true;
+          // Don't kill it, it might be a server!
+          resolve(`Command '${command}' is running in the background.\nOutput so far:\n${output.substring(0, 5000)}`);
+        }
+      }, 15000); // 15 seconds max wait
+      
+      child.on('close', (code) => {
+        if (!isDone) {
+          isDone = true;
+          clearTimeout(timeoutTimer);
+          if (code === 0) {
+            resolve(`Command executed successfully (exit code 0).\nOutput:\n${output.substring(0, 10000)}`);
+          } else {
+            resolve(`Command failed with exit code ${code}.\nOutput:\n${output.substring(0, 10000)}`);
+          }
+        }
+      });
+      
+      child.on('error', (err) => {
+        if (!isDone) {
+          isDone = true;
+          clearTimeout(timeoutTimer);
+          resolve(`Failed to start command: ${err.message}`);
+        }
+      });
     });
   }
 
@@ -270,6 +318,32 @@ Only one tool call per response is supported. Do not output anything else if you
     }
     
     return `Successfully modified file: ${filePath}`;
+  }
+
+  private async replaceInFile(filePath: string, targetContent: string, replacementContent: string): Promise<string> {
+    const fullPath = this.resolvePath(filePath);
+    try {
+      let content = await fs.readFile(fullPath, 'utf8');
+      
+      if (!content.includes(targetContent)) {
+        return `Error: The targetContent was not found in ${filePath}. Make sure leading whitespaces are exact. Try viewing the file first.`;
+      }
+      
+      content = content.replace(targetContent, replacementContent);
+      await fs.writeFile(fullPath, content, 'utf8');
+      
+      // Open in UI
+      try {
+        const doc = await vscode.workspace.openTextDocument(fullPath);
+        await vscode.window.showTextDocument(doc, { preview: false, preserveFocus: true });
+      } catch (e) {
+        this.logger.error(`Failed to open document ${fullPath} in UI`, e);
+      }
+      
+      return `Successfully replaced content in file: ${filePath}`;
+    } catch (err: any) {
+      return `Failed to read/write file: ${err.message}`;
+    }
   }
 
   private async createFile(filePath: string, content: string): Promise<string> {

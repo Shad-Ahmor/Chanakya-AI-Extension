@@ -10,6 +10,7 @@ import { Logger } from './utils/logger';
 import { InlineEditCommand } from './commands/inlineEdit';
 import { VectorStore } from './services/memory/VectorStore';
 import { ConversationManager } from './services/ConversationManager';
+import { EvaluationService } from './services/evaluationService';
 
 /**
  * Chanakya AI Enhancer Extension Activation Entrypoint (Phases 1-5 Complete)
@@ -23,6 +24,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // Initialize Conversation Manager
   ConversationManager.initialize(context);
+  
+  // Initialize EvaluationService
+  EvaluationService.getInstance().initialize(context);
 
   // 1.5 Initialize MCP Service
   const mcpService = McpService.getInstance();

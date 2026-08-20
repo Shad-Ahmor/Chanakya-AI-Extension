@@ -3,6 +3,10 @@ import { vscode } from './vscode';
 import { ChatMessage, ContextItem, ToWebviewMessage, WorkspaceFileResult } from './types/ipc';
 import { AppConfig } from './types/config';
 import ChatMessageItem from './components/Chat/ChatMessageItem';
+import { ActionHubModal } from './components/Chat/ActionHubModal';
+import { RulesHubModal } from './components/Chat/RulesHubModal';
+import { MentionHubModal } from './components/Chat/MentionHubModal';
+import { GoalHubModal } from './components/Chat/GoalHubModal';
 import ModelHubView from './components/ModelHub/ModelHubView';
 import {
   Sparkles,
@@ -53,6 +57,18 @@ export default function App() {
   // slash command state
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [slashQuery, setSlashQuery] = useState('');
+  
+  // Action Hub state
+  const [showActionHub, setShowActionHub] = useState(false);
+  
+  // Rules Hub state
+  const [showRulesHub, setShowRulesHub] = useState(false);
+
+  // Mention Hub state
+  const [showMentionHub, setShowMentionHub] = useState(false);
+
+  // Goal Hub state
+  const [showGoalHub, setShowGoalHub] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -82,6 +98,27 @@ export default function App() {
 
         case 'addMessage': {
           setMessages((prev) => [...prev, message.payload]);
+          break;
+        }
+
+        case 'updateTaskStatus': {
+          setMessages((prev) =>
+            prev.map((msg) => {
+              if (msg.id === message.payload.messageId) {
+                const currentTasks = msg.taskStatuses || [];
+                const taskIndex = currentTasks.findIndex((t) => t.id === message.payload.task.id);
+                let newTasks;
+                if (taskIndex >= 0) {
+                  newTasks = [...currentTasks];
+                  newTasks[taskIndex] = message.payload.task;
+                } else {
+                  newTasks = [...currentTasks, message.payload.task];
+                }
+                return { ...msg, taskStatuses: newTasks };
+              }
+              return msg;
+            })
+          );
           break;
         }
 
@@ -182,6 +219,21 @@ export default function App() {
             } else {
               return [conv, ...prev].sort((a, b) => b.updatedAt - a.updatedAt);
             }
+          });
+          break;
+        }
+
+        case 'fileAttached': {
+          const { name, path, content } = message.payload;
+          setContextItems((prev) => {
+            if (prev.some(item => item.path === path)) return prev;
+            return [...prev, {
+              id: `file-${Date.now()}`,
+              type: 'file',
+              name: name,
+              path: path,
+              content: content
+            }];
           });
           break;
         }
@@ -308,29 +360,6 @@ export default function App() {
     config?.models[0];
 
   const isEnterprise = activeModel?.requestOptions?.headers && Object.keys(activeModel.requestOptions.headers).length > 0;
-
-  const handleToolbarInsert = (action: 'mention' | 'slash', cmd?: string) => {
-    let newVal = input;
-    if (action === 'mention') {
-      newVal = input + (input.endsWith(' ') || input === '' ? '@' : ' @');
-      setInput(newVal);
-      setMentionQuery('');
-      setShowMentionMenu(true);
-      setShowSlashMenu(false);
-    } else if (action === 'slash' && cmd) {
-      newVal = input + (input.endsWith(' ') || input === '' ? `/${cmd} ` : ` /${cmd} `);
-      setInput(newVal);
-      setShowSlashMenu(false);
-      setShowMentionMenu(false);
-    }
-    
-    setTimeout(() => {
-      if (textareaRef.current) {
-        textareaRef.current.focus();
-        textareaRef.current.setSelectionRange(newVal.length, newVal.length);
-      }
-    }, 0);
-  };
 
   if ((viewMode === 'modelhub' || viewMode === 'dashboard') && config) {
     return (
@@ -739,35 +768,35 @@ export default function App() {
             <div className="flex items-center gap-0.5">
               <button
                 title="Attach File"
-                onClick={() => handleToolbarInsert('mention')}
+                onClick={() => vscode.postMessage({ type: 'openFilePicker' })}
                 className="p-1.5 hover:bg-vscode-list-hoverBackground rounded-lg transition text-vscode-descriptionForeground hover:text-vscode-foreground"
               >
                 <Paperclip className="w-4 h-4" />
               </button>
               <button
                 title="Mention Context"
-                onClick={() => handleToolbarInsert('mention')}
+                onClick={() => setShowMentionHub(true)}
                 className="p-1.5 hover:bg-vscode-list-hoverBackground rounded-lg transition text-vscode-descriptionForeground hover:text-vscode-foreground"
               >
                 <AtSign className="w-4 h-4" />
               </button>
               <button
-                title="Rules"
-                onClick={() => handleToolbarInsert('slash', 'rules')}
+                title="Rules Hub"
+                onClick={() => setShowRulesHub(true)}
                 className="p-1.5 hover:bg-vscode-list-hoverBackground rounded-lg transition text-vscode-descriptionForeground hover:text-vscode-foreground"
               >
                 <ScrollText className="w-4 h-4" />
               </button>
               <button
-                title="Action"
-                onClick={() => handleToolbarInsert('slash', 'action')}
+                title="Action Hub"
+                onClick={() => setShowActionHub(true)}
                 className="p-1.5 hover:bg-vscode-list-hoverBackground rounded-lg transition text-vscode-descriptionForeground hover:text-vscode-foreground"
               >
                 <Zap className="w-4 h-4" />
               </button>
               <button
-                title="Goal"
-                onClick={() => handleToolbarInsert('slash', 'goal')}
+                title="Goal Hub"
+                onClick={() => setShowGoalHub(true)}
                 className="p-1.5 hover:bg-vscode-list-hoverBackground rounded-lg transition text-vscode-descriptionForeground hover:text-vscode-foreground"
               >
                 <Target className="w-4 h-4" />
@@ -806,6 +835,62 @@ export default function App() {
         </div>
       </div>
       </footer>
+
+      {showActionHub && (
+        <ActionHubModal 
+          onClose={() => setShowActionHub(false)}
+          onSelectAction={(prompt) => {
+            setInput((prev) => prev + (prev.length > 0 && !prev.endsWith(' ') ? ' ' : '') + prompt);
+            setShowActionHub(false);
+            if (textareaRef.current) {
+              textareaRef.current.focus();
+            }
+          }}
+        />
+      )}
+
+      {showRulesHub && (
+        <RulesHubModal 
+          onClose={() => setShowRulesHub(false)}
+          onSelectRule={(rulePrompt) => {
+            setInput((prev) => prev + (prev.length > 0 && !prev.endsWith(' ') ? '\n\n' : '') + rulePrompt);
+            setShowRulesHub(false);
+            if (textareaRef.current) {
+              textareaRef.current.focus();
+            }
+          }}
+        />
+      )}
+
+      {showMentionHub && (
+        <MentionHubModal 
+          onClose={() => setShowMentionHub(false)}
+          onSelectMention={(prompt) => {
+            setShowMentionHub(false);
+            if (prompt === 'FILE_PICKER') {
+              vscode.postMessage({ type: 'openFilePicker' });
+            } else {
+              setInput((prev) => prev + (prev.length > 0 && !prev.endsWith(' ') ? ' ' : '') + prompt);
+              if (textareaRef.current) {
+                textareaRef.current.focus();
+              }
+            }
+          }}
+        />
+      )}
+
+      {showGoalHub && (
+        <GoalHubModal 
+          onClose={() => setShowGoalHub(false)}
+          onSelectGoal={(prompt) => {
+            setInput((prev) => prev + (prev.length > 0 && !prev.endsWith(' ') ? '\n\n' : '') + prompt);
+            setShowGoalHub(false);
+            if (textareaRef.current) {
+              textareaRef.current.focus();
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -218,6 +218,7 @@
 	"dependencies": {
 		"@huggingface/transformers": "^4.2.0",
 		"@modelcontextprotocol/sdk": "^1.30.0",
+		"js-tiktoken": "^1.0.21",
 		"uuid": "^14.0.2",
 		"vectra": "^0.15.0",
 		"yaml": "^2.9.0"

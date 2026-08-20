@@ -2,7 +2,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ChatMessage } from '../../types/ipc';
 import CodeBlock from './CodeBlock';
-import { Code, FileText, Bot, User, Sparkles, Undo2, ArrowDownRight } from 'lucide-react';
+import { Code, FileText, Bot, User, Sparkles, Undo2, ArrowDownRight, Loader2, ChevronRight } from 'lucide-react';
 import { vscode } from '../../vscode';
 
 interface Props {
@@ -55,6 +55,38 @@ export default function ChatMessageItem({ message }: Props) {
           )}
         </div>
       </div>
+
+      {/* Dynamic Task Status Chips (Antigravity Style) */}
+      {!isUser && message.taskStatuses && message.taskStatuses.length > 0 && (
+        <div className="flex flex-col gap-1.5 my-2">
+          {message.taskStatuses.map((task) => (
+            <div
+              key={task.id}
+              className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] font-mono border transition-all ${
+                task.status === 'running'
+                  ? 'bg-sky-500/10 border-sky-400/30 text-sky-300'
+                  : task.status === 'error'
+                  ? 'bg-red-500/10 border-red-400/30 text-red-300'
+                  : 'bg-white/5 border-white/10 text-white/60 hover:text-white/80'
+              }`}
+            >
+              {task.status === 'running' ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-400" />
+              ) : task.status === 'error' ? (
+                <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5 text-white/40" />
+              )}
+              <span className="flex-1">{task.label}</span>
+              {task.durationMs && (
+                <span className="text-[10px] opacity-50 font-sans">
+                  {task.status === 'running' ? '...' : `${(task.durationMs / 1000).toFixed(1)}s`}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Context Item Pills */}
       {message.contextItems && message.contextItems.length > 0 && (

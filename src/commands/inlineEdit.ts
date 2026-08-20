@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { LLMEngine } from '../services/llmEngine';
+import { LLMGateway } from '../services/llmGateway';
 import { InlineEditProvider } from '../providers/inlineEditProvider';
 
 export class InlineEditCommand {
@@ -64,10 +64,10 @@ ${selectedText}`;
       },
       async (_progress, token) => {
         try {
-          const llmEngine = LLMEngine.getInstance();
+          const llmGateway = LLMGateway.getInstance();
           
           let resultText = '';
-          await llmEngine.streamChat({
+          await llmGateway.streamChat({
             prompt,
             contextItems: [],
             cancellationToken: token,

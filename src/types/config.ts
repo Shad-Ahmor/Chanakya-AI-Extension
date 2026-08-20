@@ -25,6 +25,7 @@ export interface TokenUsageRecord {
   readonly durationMs: number;
   readonly ttftMs: number;
   readonly isError: boolean;
+  readonly evaluationScore?: number;
 }
 
 

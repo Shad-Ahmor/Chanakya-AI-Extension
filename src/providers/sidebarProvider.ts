@@ -1,10 +1,12 @@
 import * as vscode from 'vscode';
 import { ConfigManager } from '../services/configManager';
 import { LLMEngine } from '../services/llmEngine';
+import { LLMGateway } from '../services/llmGateway';
 import { ContextItem, FromWebviewMessage, ToWebviewMessage } from '../types/ipc';
 import { Logger } from '../utils/logger';
 import { SecurityUtils } from '../utils/security';
 import { ConversationManager } from '../services/ConversationManager';
+import { WorkspaceIndexer } from '../services/workspaceIndexer';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'chanakya-ai-launcher';
@@ -335,12 +337,31 @@ ${diff}`;
         // Create snapshot before AI runs
         this._createGitSnapshot(text);
 
+        // 1. Immediately render the assistant message so we can attach tasks to it
+        this.postMessage({
+          type: 'addMessage',
+          payload: {
+            id: assistantMsgId,
+            role: 'assistant',
+            content: '',
+            isStreaming: true,
+            timestamp: Date.now()
+          }
+        });
+        this.postMessage({ type: 'setLoading', payload: { isLoading: true } });
+
         let enrichedContextItems = [...(contextItems || [])];
         const hasCodebase = enrichedContextItems.find(i => i.type === 'codebase');
         
         if (hasCodebase) {
+          const ragTaskId = `task-${Date.now()}`;
+          this.postMessage({
+            type: 'updateTaskStatus',
+            payload: { messageId: assistantMsgId, task: { id: ragTaskId, status: 'running', label: 'Indexing Workspace...' } }
+          });
+          const startTime = Date.now();
+          
           try {
-            this.postMessage({ type: 'setLoading', payload: { isLoading: true } });
             const words = text.toLowerCase().replace(/[^a-z0-9]/g, ' ').split(/\s+/).filter((w: string) => w.length > 4);
             const keywords = words.slice(0, 3);
             
@@ -359,23 +380,58 @@ ${diff}`;
                 });
               }
             }
+            this.postMessage({
+              type: 'updateTaskStatus',
+              payload: { messageId: assistantMsgId, task: { id: ragTaskId, status: 'done', label: `Workspace Indexed`, durationMs: Date.now() - startTime } }
+            });
           } catch (e) {
             this._logger.error('Codebase RAG failed', e);
+            this.postMessage({
+              type: 'updateTaskStatus',
+              payload: { messageId: assistantMsgId, task: { id: ragTaskId, status: 'error', label: `Workspace Indexing Failed`, durationMs: Date.now() - startTime } }
+            });
           }
         }
 
-        this.postMessage({
-          type: 'addMessage',
-          payload: {
-            id: assistantMsgId,
-            role: 'assistant',
-            content: '',
-            isStreaming: true,
-            timestamp: Date.now()
+        // Smart @mentions Integration
+        const mentionRegex = /@([a-zA-Z0-9_\-\.]+)/g;
+        let match;
+        while ((match = mentionRegex.exec(text)) !== null) {
+          const mention = match[1];
+          const mentionTaskId = `task-${mention}-${Date.now()}`;
+          this.postMessage({
+            type: 'updateTaskStatus',
+            payload: { messageId: assistantMsgId, task: { id: mentionTaskId, status: 'running', label: `Extracting ${mention}...` } }
+          });
+          const startTime = Date.now();
+          try {
+            const contextData = await WorkspaceIndexer.getInstance().getFileContext(mention);
+            if (contextData) {
+              enrichedContextItems.push({
+                id: `mention-${contextData.fileName}`,
+                type: 'file',
+                name: contextData.fileName,
+                content: contextData.content
+              });
+              this._logger.log(`Added @mention context for ${mention}`);
+              this.postMessage({
+                type: 'updateTaskStatus',
+                payload: { messageId: assistantMsgId, task: { id: mentionTaskId, status: 'done', label: `Read ${contextData.fileName}`, durationMs: Date.now() - startTime } }
+              });
+            } else {
+              this.postMessage({
+                type: 'updateTaskStatus',
+                payload: { messageId: assistantMsgId, task: { id: mentionTaskId, status: 'error', label: `File not found: ${mention}`, durationMs: Date.now() - startTime } }
+              });
+            }
+          } catch (err) {
+            this._logger.error(`Failed to process @mention for ${mention}`, err);
+            this.postMessage({
+              type: 'updateTaskStatus',
+              payload: { messageId: assistantMsgId, task: { id: mentionTaskId, status: 'error', label: `Error reading ${mention}`, durationMs: Date.now() - startTime } }
+            });
           }
-        });
-
-        this.postMessage({ type: 'setLoading', payload: { isLoading: true } });
+        }
 
         const cts = new vscode.CancellationTokenSource();
         this._activeTasks.set(assistantMsgId, cts);
@@ -396,7 +452,7 @@ ${diff}`;
 
         let currentOptStats: { originalTokens: number; optimizedTokens: number } | undefined = undefined;
 
-        await LLMEngine.getInstance().streamChat({
+        await LLMGateway.getInstance().streamChat({
           prompt: text,
           contextItems: enrichedContextItems,
           optimizerConfig: activeModelConfig,
@@ -621,8 +677,35 @@ ${diff}`;
       }
 
       case 'copyToClipboard': {
-        await vscode.env.clipboard.writeText(message.payload.text);
-        vscode.window.showInformationMessage('Copied to clipboard!');
+        vscode.env.clipboard.writeText(message.payload.text);
+        vscode.window.showInformationMessage('Copied to clipboard');
+        break;
+      }
+      
+      case 'openFilePicker': {
+        const uris = await vscode.window.showOpenDialog({
+          canSelectMany: true,
+          openLabel: 'Attach to Chat',
+        });
+        
+        if (uris && uris.length > 0) {
+          for (const uri of uris) {
+            try {
+              const fileContent = await vscode.workspace.fs.readFile(uri);
+              const contentStr = new TextDecoder('utf-8').decode(fileContent);
+              this._view?.webview.postMessage({
+                type: 'fileAttached',
+                payload: {
+                  name: vscode.workspace.asRelativePath(uri),
+                  path: uri.fsPath,
+                  content: contentStr
+                }
+              });
+            } catch (err) {
+              vscode.window.showErrorMessage(`Failed to attach file: ${uri.fsPath}`);
+            }
+          }
+        }
         break;
       }
 

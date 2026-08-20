@@ -1,12 +1,13 @@
 import * as vscode from 'vscode';
 import { CodeContext } from '../types';
+import { TokenOptimizer } from '../utils/tokenOptimizer';
 
 /**
  * ContextExtractor safely extracts lightweight, token-budgeted context from the active editor.
  */
 export class ContextExtractor {
   private static readonly MAX_SURROUNDING_LINES = 25;
-  private static readonly MAX_SELECTION_LENGTH = 12000; // ~3000 tokens max to protect token quota
+  private static readonly MAX_SELECTION_TOKENS = 3000; // ~3000 tokens max to protect token quota
 
   /**
    * Extracts active editor context with intelligent token/character budgeting.
@@ -21,12 +22,8 @@ export class ContextExtractor {
     const selection = editor.selection;
     let selectedText = document.getText(selection);
 
-    // If selection exceeds safe limit, truncate with notice
-    if (selectedText.length > this.MAX_SELECTION_LENGTH) {
-      selectedText =
-        selectedText.substring(0, this.MAX_SELECTION_LENGTH) +
-        '\n\n/* ... [Truncated by Chanakya AI Enhancer to conserve token quota] ... */';
-    }
+    // If selection exceeds safe limit, truncate using TokenOptimizer
+    selectedText = TokenOptimizer.truncateText(selectedText, this.MAX_SELECTION_TOKENS, false);
 
     let surroundingContext = '';
     if (!selection.isEmpty) {
@@ -39,8 +36,17 @@ export class ContextExtractor {
       const beforeText = document.getText(beforeRange);
       const afterText = document.getText(afterRange);
 
-      surroundingContext = `// --- Surrounding Context (Lines ${startLine + 1} to ${endLine + 1}) ---\n${beforeText}\n/* [SELECTED CODE BLOCK] */\n${afterText}`;
+      // Truncate surrounding context if it's too large to save tokens
+      const safeBeforeText = TokenOptimizer.truncateText(beforeText, 1000, true);
+      const safeAfterText = TokenOptimizer.truncateText(afterText, 1000, false);
+
+      surroundingContext = `// --- Surrounding Context (Lines ${startLine + 1} to ${endLine + 1}) ---\n${safeBeforeText}\n/* [SELECTED CODE BLOCK] */\n${safeAfterText}`;
+      // Minify surrounding context to aggressively save tokens
+      surroundingContext = TokenOptimizer.minifyCode(surroundingContext, document.languageId);
     }
+    
+    // Minify selected code
+    selectedText = TokenOptimizer.minifyCode(selectedText, document.languageId);
 
     return {
       languageId: document.languageId,

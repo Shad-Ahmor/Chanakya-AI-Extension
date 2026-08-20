@@ -27,6 +27,7 @@ interface ModelStat {
   avgTTFT?: number;
   originalTokens: number;
   optimizedTokens: number;
+  avgEvalScore?: number;
 }
 
 interface TokenStats {
@@ -43,6 +44,7 @@ export interface TokenUsageRecord {
   isError: boolean;
   originalTokens?: number;
   optimizedTokens?: number;
+  evaluationScore?: number;
 }
 
 
@@ -257,7 +259,8 @@ export default function AnalyticsDashboard({ config, onSetActiveModel }: Props) 
           avgTTFT: 0,
           errors: 0,
           originalTokens: 0,
-          optimizedTokens: 0
+          optimizedTokens: 0,
+          avgEvalScore: 0,
         };
       }
       const st = filteredStats[r.modelId];
@@ -271,6 +274,11 @@ export default function AnalyticsDashboard({ config, onSetActiveModel }: Props) 
       if (r.isError) st.errors = (st.errors || 0) + 1;
       st.originalTokens += r.originalTokens || 0;
       st.optimizedTokens += r.optimizedTokens || 0;
+      if (r.evaluationScore !== undefined) {
+        st.avgEvalScore = (st.avgEvalScore || 0) + r.evaluationScore;
+        // Hack: temporarily use a new field _evalCount in st to track count of evaluated reqs
+        (st as any)._evalCount = ((st as any)._evalCount || 0) + 1;
+      }
     }
   });
 
@@ -280,6 +288,11 @@ export default function AnalyticsDashboard({ config, onSetActiveModel }: Props) 
     if (st.requests > 0) {
       st.avgDuration = st.avgDuration! / st.requests;
       st.avgTTFT = st.avgTTFT! / st.requests;
+    }
+    if ((st as any)._evalCount > 0) {
+      st.avgEvalScore = st.avgEvalScore! / (st as any)._evalCount;
+    } else {
+      st.avgEvalScore = undefined; // No evaluations yet
     }
   });
 
@@ -393,6 +406,7 @@ export default function AnalyticsDashboard({ config, onSetActiveModel }: Props) 
             color="#a78bfa" 
           />
           <StatCard icon={<Clock className="w-4 h-4" />} label="AVG DURATION" value={`${cardAvgDur.toFixed(1)}s`} color="#f59e0b" />
+          <StatCard icon={<CheckCircle2 className="w-4 h-4" />} label="EVAL SCORE" value={activeStats.avgEvalScore ? `${activeStats.avgEvalScore.toFixed(1)}/10` : 'N/A'} color="#10b981" />
           <StatCard icon={<AlertCircle className="w-4 h-4" />} label="ERRORS" value={fmt(cardErrors)} color="#ef4444" />
         </div>
 

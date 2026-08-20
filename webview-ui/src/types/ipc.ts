@@ -12,6 +12,13 @@ export interface ContextItem {
   } | undefined;
 }
 
+export interface TaskStatus {
+  readonly id: string;
+  readonly status: 'running' | 'done' | 'error';
+  readonly label: string;
+  readonly durationMs?: number | undefined;
+}
+
 export interface ChatMessage {
   readonly id: string;
   readonly role: 'user' | 'assistant' | 'system';
@@ -19,6 +26,7 @@ export interface ChatMessage {
   readonly contextItems?: ContextItem[] | undefined;
   readonly isStreaming?: boolean | undefined;
   readonly timestamp: number;
+  readonly taskStatuses?: TaskStatus[] | undefined;
   readonly optimizationStats?: {
     readonly originalTokens: number;
     readonly optimizedTokens: number;
@@ -78,7 +86,8 @@ export type FromWebviewMessage =
   | { type: 'loadConversation'; payload: { id: string } }
   | { type: 'newConversation' }
   | { type: 'deleteConversation'; payload: { id: string } }
-  | { type: 'clearAllConversations' };
+  | { type: 'clearAllConversations' }
+  | { type: 'openFilePicker' };
 
 /**
  * Messages sent FROM Extension Host TO React Webview
@@ -96,10 +105,12 @@ export type ToWebviewMessage =
   | { type: 'configResult'; payload: { config: AppConfig; rawYaml: string } }
   | { type: 'vscodeSettingsResult'; payload: { settings: Record<string, any> } }
   | { type: 'testModelResult'; payload: { modelId: string; success: boolean; latencyMs?: number | undefined; error?: string | undefined } }
+  | { type: 'updateTaskStatus'; payload: { messageId: string; task: TaskStatus } }
   | { type: 'openSettingsTab' }
   | { type: 'localModelsDetected'; payload: { models: DetectedLocalModel[] } }
   | { type: 'optimizationStats'; payload: { messageId: string; originalTokens: number; optimizedTokens: number } }
   | { type: 'tokenStatsResult'; payload: Record<string, unknown> }
   | { type: 'tokenOptimizerConfig'; payload: Record<string, unknown> }
   | { type: 'conversationsLoaded'; payload: { conversations: Conversation[]; activeId: string | null } }
-  | { type: 'activeConversationChanged'; payload: { conversation: Conversation } };
+  | { type: 'activeConversationChanged'; payload: { conversation: Conversation } }
+  | { type: 'fileAttached'; payload: { name: string; path: string; content: string } };

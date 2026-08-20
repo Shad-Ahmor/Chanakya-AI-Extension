@@ -5,6 +5,7 @@ import { ConfigManager } from './configManager';
 import { Logger } from '../utils/logger';
 import { AgentOrchestrator } from './agentOrchestrator';
 import { MemoryRetriever } from './memory/MemoryRetriever';
+import { TokenOptimizer } from '../utils/tokenOptimizer';
 import { ReflectionEngine } from './memory/ReflectionEngine';
 
 export interface StreamCallbacks {
@@ -178,8 +179,8 @@ export class LLMEngine {
       'CRITICAL RULES:\n' +
       '1. NEVER hallucinate imports or function names. ALWAYS use the `search_code` tool to verify exact names before importing or calling them.\n' +
       '2. If you need to install dependencies (e.g. Django, pip, npm), write a `requirements.txt` or `package.json` first, then run the terminal command.\n' +
-      '3. `run_terminal_command` executes in the VS Code Integrated Terminal visually for the user. Do not wait for long processes like dev servers to finish; just start them.\n' +
-      '4. Provide clear, concise, accurate, and production-ready code. Format all code snippets with correct markdown syntax highlighting.\n' +
+      '3. `run_terminal_command` is SYNCHRONOUS. It will wait up to 15 seconds to return output. If you run `pip install`, it will return the success/failure output. You MUST wait for it to succeed before running subsequent commands like `migrate`.\n' +
+      '4. ALWAYS prefer `replace_in_file` over `edit_file` when modifying existing files to prevent accidental deletion of code. Only use `edit_file` if you need to rewrite the ENTIRE file from scratch.\n' +
       '5. PROACTIVE RECOMMENDATIONS: When faced with design choices or implementations, propose 2-3 high-level recommendations with pros/cons and ask the user to select one (just like Antigravity does). Do not just blindly code sub-optimal solutions.';
 
     if (useXmlTools) {
@@ -244,15 +245,20 @@ export class LLMEngine {
     let messages: any[] = [{ role: 'system', content: systemContent }];
     
     if (existingMessages && existingMessages.length > 0) {
-      // Limit history to the last 6 messages to prevent token explosion
-      const recentHistory = existingMessages.slice(-6);
-      const history = recentHistory
+      // Transform existing messages into standard format
+      const history = existingMessages
         .filter(m => m.role !== 'system')
         .map(m => ({ role: m.role, content: m.content }));
+      
       messages.push(...history);
     }
     
     messages.push({ role: 'user', content: formattedUserPrompt });
+
+    // Enforce a strict max token limit for the entire conversation payload
+    // Leaving buffer for max completion tokens. e.g. for a 128k context model, we can safely use 16k for prompt history.
+    // We'll enforce an aggressive 8000 tokens maximum to reduce latency and costs.
+    messages = TokenOptimizer.trimMessages(messages, 8000);
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
