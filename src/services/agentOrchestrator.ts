@@ -61,9 +61,9 @@ export class AgentOrchestrator {
           parameters: {
             type: 'object',
             properties: {
-              filePath: { type: 'string', description: 'Absolute or workspace-relative path to the file.' }
+              path: { type: 'string', description: 'Absolute or workspace-relative path to the file.' }
             },
-            required: ['filePath']
+            required: ['path']
           }
         }
       },
@@ -89,9 +89,9 @@ export class AgentOrchestrator {
           parameters: {
             type: 'object',
             properties: {
-              dirPath: { type: 'string', description: 'Absolute or workspace-relative directory path.' }
+              path: { type: 'string', description: 'Absolute or workspace-relative directory path.' }
             },
-            required: ['dirPath']
+            required: ['path']
           }
         }
       },
@@ -103,10 +103,10 @@ export class AgentOrchestrator {
           parameters: {
             type: 'object',
             properties: {
-              filePath: { type: 'string', description: 'Path to the file.' },
+              path: { type: 'string', description: 'Path to the file.' },
               content: { type: 'string', description: 'The entire new content of the file.' }
             },
-            required: ['filePath', 'content']
+            required: ['path', 'content']
           }
         }
       },
@@ -118,11 +118,11 @@ export class AgentOrchestrator {
           parameters: {
             type: 'object',
             properties: {
-              filePath: { type: 'string', description: 'Path to the file.' },
+              path: { type: 'string', description: 'Path to the file.' },
               targetContent: { type: 'string', description: 'The exact code block to be replaced (including exact leading whitespaces).' },
               replacementContent: { type: 'string', description: 'The new code to insert in place of targetContent.' }
             },
-            required: ['filePath', 'targetContent', 'replacementContent']
+            required: ['path', 'targetContent', 'replacementContent']
           }
         }
       },
@@ -134,10 +134,10 @@ export class AgentOrchestrator {
           parameters: {
             type: 'object',
             properties: {
-              filePath: { type: 'string', description: 'Path to the new file.' },
+              path: { type: 'string', description: 'Path to the new file.' },
               content: { type: 'string', description: 'The content of the file.' }
             },
-            required: ['filePath', 'content']
+            required: ['path', 'content']
           }
         }
       },
@@ -149,9 +149,9 @@ export class AgentOrchestrator {
           parameters: {
             type: 'object',
             properties: {
-              filePath: { type: 'string', description: 'Path to the file to delete.' }
+              path: { type: 'string', description: 'Path to the file to delete.' }
             },
-            required: ['filePath']
+            required: ['path']
           }
         }
       },
@@ -163,9 +163,9 @@ export class AgentOrchestrator {
           parameters: {
             type: 'object',
             properties: {
-              dirPath: { type: 'string', description: 'Path to the directory to delete.' }
+              path: { type: 'string', description: 'Path to the directory to delete.' }
             },
-            required: ['dirPath']
+            required: ['path']
           }
         }
       },
@@ -237,25 +237,26 @@ Only one tool call per response is supported. Do not output anything else if you
   public async executeTool(name: string, args: any): Promise<string> {
     this.logger.log(`[Agent] Executing tool: ${name}`);
     try {
+      const targetPath = args.path || args.filePath || args.dirPath;
       switch (name) {
         case 'run_terminal_command':
           return await this.runTerminalCommand(args.command, args.cwd);
         case 'view_file':
-          return await this.viewFile(args.filePath);
+          return await this.viewFile(targetPath);
         case 'search_code':
           return await this.searchCode(args.query);
         case 'list_directory':
-          return await this.listDirectory(args.dirPath);
+          return await this.listDirectory(targetPath);
         case 'edit_file':
-          return await this.editFile(args.filePath, args.content);
+          return await this.editFile(targetPath, args.content);
         case 'replace_in_file':
-          return await this.replaceInFile(args.filePath, args.targetContent, args.replacementContent);
+          return await this.replaceInFile(targetPath, args.targetContent, args.replacementContent);
         case 'create_file':
-          return await this.createFile(args.filePath, args.content);
+          return await this.createFile(targetPath, args.content);
         case 'delete_file':
-          return await this.deleteFile(args.filePath);
+          return await this.deleteFile(targetPath);
         case 'delete_directory':
-          return await this.deleteDirectory(args.dirPath);
+          return await this.deleteDirectory(targetPath);
         case 'ask_user_options':
           return new Promise<string>((resolve) => {
             this.pendingUserOptionResolver = resolve;
