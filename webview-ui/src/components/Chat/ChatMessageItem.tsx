@@ -2,8 +2,9 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ChatMessage } from '../../types/ipc';
 import CodeBlock from './CodeBlock';
-import { Code, FileText, Bot, User, Sparkles, Undo2, ArrowDownRight, Loader2, ChevronRight } from 'lucide-react';
+import { Code, FileText, Bot, User, Sparkles, Undo2, ArrowDownRight, Loader2, ChevronRight, Copy, Check } from 'lucide-react';
 import { vscode } from '../../vscode';
+import { useState } from 'react';
 
 interface Props {
   message: ChatMessage;
@@ -11,6 +12,16 @@ interface Props {
 
 export default function ChatMessageItem({ message }: Props) {
   const isUser = message.role === 'user';
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyMessage = () => {
+    vscode.postMessage({
+      type: 'copyToClipboard',
+      payload: { text: message.content }
+    });
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
     <div
@@ -41,6 +52,17 @@ export default function ChatMessageItem({ message }: Props) {
           </span>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleCopyMessage}
+            className={`text-[10px] flex items-center gap-1 px-1.5 py-0.5 rounded cursor-pointer transition-colors ${
+              copied 
+                ? 'bg-emerald-500/20 text-emerald-300' 
+                : 'hover:bg-white/10 text-white/50 hover:text-white'
+            }`}
+            title="Copy message"
+          >
+            {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+          </button>
           <span className="text-[10px] opacity-60 font-normal font-mono">
             {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </span>
