@@ -132,6 +132,34 @@ export class AgentOrchestrator {
             required: ['filePath', 'content']
           }
         }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'delete_file',
+          description: 'Deletes a file permanently. Use carefully.',
+          parameters: {
+            type: 'object',
+            properties: {
+              filePath: { type: 'string', description: 'Path to the file to delete.' }
+            },
+            required: ['filePath']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'delete_directory',
+          description: 'Deletes a directory and all its contents recursively. Use with extreme caution.',
+          parameters: {
+            type: 'object',
+            properties: {
+              dirPath: { type: 'string', description: 'Path to the directory to delete.' }
+            },
+            required: ['dirPath']
+          }
+        }
       }
     ];
 
@@ -201,6 +229,10 @@ Only one tool call per response is supported. Do not output anything else if you
           return await this.replaceInFile(args.filePath, args.targetContent, args.replacementContent);
         case 'create_file':
           return await this.createFile(args.filePath, args.content);
+        case 'delete_file':
+          return await this.deleteFile(args.filePath);
+        case 'delete_directory':
+          return await this.deleteDirectory(args.dirPath);
         default:
           if (name.startsWith('mcp_')) {
             // Format: mcp_serverName_toolName
@@ -361,5 +393,25 @@ Only one tool call per response is supported. Do not output anything else if you
     }
     
     return `Successfully created file: ${filePath}`;
+  }
+
+  private async deleteFile(filePath: string): Promise<string> {
+    const fullPath = this.resolvePath(filePath);
+    try {
+      await fs.unlink(fullPath);
+      return `Successfully deleted file: ${filePath}`;
+    } catch (e: any) {
+      return `Failed to delete file ${filePath}: ${e.message}`;
+    }
+  }
+
+  private async deleteDirectory(dirPath: string): Promise<string> {
+    const fullPath = this.resolvePath(dirPath);
+    try {
+      await fs.rm(fullPath, { recursive: true, force: true });
+      return `Successfully deleted directory: ${dirPath}`;
+    } catch (e: any) {
+      return `Failed to delete directory ${dirPath}: ${e.message}`;
+    }
   }
 }

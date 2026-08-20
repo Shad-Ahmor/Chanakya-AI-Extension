@@ -194,7 +194,7 @@ export class LLMEngine {
 
     if (optimizerConfig) {
       if (optimizerConfig.responseConciseness === 'ultra_concise') {
-        systemContent += ' Provide ONLY code, absolutely no explanations or conversational fluff. ALWAYS wrap code in markdown code blocks (```language).';
+        systemContent += ' Provide ONLY code, absolutely no explanations or conversational fluff. If you are outputting code to the chat, ALWAYS wrap it in markdown code blocks (```language). Do NOT wrap JSON tool arguments in markdown backticks.';
       } else if (optimizerConfig.responseConciseness === 'concise') {
         systemContent += ' Keep explanations extremely short and to the point.';
       }
@@ -440,7 +440,9 @@ export class LLMEngine {
         }
 
         try {
-          const args = JSON.parse(toolCall.function.arguments);
+          let cleanArgs = toolCall.function.arguments.trim();
+          cleanArgs = cleanArgs.replace(/^```[a-z]*\n/i, '').replace(/\n```$/, '');
+          const args = JSON.parse(cleanArgs);
           const result = await orchestrator.executeTool(toolCall.function.name, args);
           
           if (!useXmlTools) {
@@ -561,7 +563,7 @@ export class LLMEngine {
       '5. PROACTIVE RECOMMENDATIONS: When faced with design choices or implementations, propose 2-3 high-level recommendations with pros/cons and ask the user to select one (just like Antigravity does). Do not just blindly code sub-optimal solutions.';
     if (optimizerConfig) {
       if (optimizerConfig.responseConciseness === 'ultra_concise') {
-        systemInstruction += ' Provide ONLY code, absolutely no explanations or conversational fluff. ALWAYS wrap code in markdown code blocks (```language).';
+        systemInstruction += ' Provide ONLY code, absolutely no explanations or conversational fluff. If you are outputting code to the chat, ALWAYS wrap it in markdown code blocks (```language). Do NOT wrap JSON tool arguments in markdown backticks.';
       } else if (optimizerConfig.responseConciseness === 'concise') {
         systemInstruction += ' Keep explanations extremely short and to the point.';
       }
