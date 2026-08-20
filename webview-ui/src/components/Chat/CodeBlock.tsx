@@ -23,9 +23,10 @@ interface CodeBlockProps {
   value: string;
   meta?: string;
   isStreaming?: boolean;
+  toolName?: string;
 }
 
-export default function CodeBlock({ language, value, meta, isStreaming }: CodeBlockProps) {
+export default function CodeBlock({ language, value, meta, isStreaming, toolName }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const [inserted, setInserted] = useState(false);
   const [applied, setApplied] = useState(false);
@@ -85,10 +86,17 @@ export default function CodeBlock({ language, value, meta, isStreaming }: CodeBl
   };
 
   const handleApply = () => {
-    vscode.postMessage({
-      type: 'applyCodeMerge',
-      payload: { code: value }
-    });
+    if (toolName) {
+      vscode.postMessage({
+        type: 'executeToolManual',
+        payload: { toolName, argsString: value }
+      });
+    } else {
+      vscode.postMessage({
+        type: 'applyCodeMerge',
+        payload: { code: value }
+      });
+    }
     setApplied(true);
     setTimeout(() => setApplied(false), 2000);
   };

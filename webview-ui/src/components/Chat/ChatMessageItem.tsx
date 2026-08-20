@@ -208,7 +208,12 @@ export default function ChatMessageItem({ message }: Props) {
                       {!block.parsed && <Loader2 className="w-3 h-3 animate-spin ml-auto text-sky-400" />}
                     </div>
                     <div className="p-0 text-xs">
-                      <CodeBlock language="json" value={block.parsed ? JSON.stringify(block.parsed.arguments || block.parsed, null, 2) : block.content.trim()} isStreaming={!block.parsed} />
+                      <CodeBlock 
+                        language="json" 
+                        value={block.parsed ? JSON.stringify(block.parsed.arguments || block.parsed, null, 2) : block.content.trim()} 
+                        isStreaming={!block.parsed}
+                        toolName={block.parsed?.name}
+                      />
                     </div>
                   </div>
                 );

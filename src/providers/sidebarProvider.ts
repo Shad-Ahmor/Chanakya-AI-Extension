@@ -635,6 +635,37 @@ ${diff}`;
         break;
       }
 
+      case 'executeToolManual': {
+        const { toolName, argsString } = message.payload;
+        try {
+          const args = JSON.parse(argsString);
+          
+          // Execute via Orchestrator
+          const { AgentOrchestrator } = require('../services/agentOrchestrator');
+          const orchestrator = AgentOrchestrator.getInstance();
+          
+          vscode.window.withProgress(
+            {
+              location: vscode.ProgressLocation.Notification,
+              title: `Chanakya AI: Executing ${toolName}...`,
+              cancellable: false
+            },
+            async () => {
+              try {
+                const result = await orchestrator.executeTool(toolName, args);
+                vscode.window.showInformationMessage(`Chanakya AI: Tool executed successfully.`);
+                this._logger.log(`Manual tool ${toolName} execution result: ${result}`);
+              } catch (e: any) {
+                vscode.window.showErrorMessage(`Chanakya AI: Failed to execute tool: ${e.message}`);
+              }
+            }
+          );
+        } catch (e: any) {
+          vscode.window.showErrorMessage(`Chanakya AI: Invalid arguments for tool ${toolName}`);
+        }
+        break;
+      }
+
       case 'applyCodeMerge': {
         try {
           const editor = vscode.window.activeTextEditor;
