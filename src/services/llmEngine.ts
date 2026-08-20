@@ -189,7 +189,13 @@ export class LLMEngine {
       '3. `run_terminal_command` is SYNCHRONOUS. It will wait up to 15 seconds to return output. If you run `pip install`, it will return the success/failure output. You MUST wait for it to succeed before running subsequent commands like `migrate`.\n' +
       '4. ALWAYS prefer `replace_in_file` over `edit_file` when modifying existing files to prevent accidental deletion of code. Only use `edit_file` if you need to rewrite the ENTIRE file from scratch.\n' +
       '5. When scaffolding full projects or creating multiple files, use the `create_file` tool one by one. The system will automatically execute it and return the result to you so you can iteratively call the next tool until the project is complete.\n' +
-      '6. PROACTIVE RECOMMENDATIONS: When faced with design choices or implementations, propose 2-3 high-level recommendations with pros/cons and ask the user to select one (just like Antigravity does). Do not just blindly code sub-optimal solutions.';
+      '6. PROACTIVE RECOMMENDATIONS: When faced with design choices or implementations, propose 2-3 high-level recommendations with pros/cons and ask the user to select one (just like Antigravity does). Do not just blindly code sub-optimal solutions.\n' +
+      '7. PLANNING MODE (For Complex Tasks/Projects):\n' +
+      'When asked to build a project or do a complex task, YOU MUST follow this strict workflow:\n' +
+      '  Phase 1: Write an `implementation_plan.md` using `create_file` detailing your approach. Then STOP and ask the user to type "Proceed" to approve it. DO NOT generate other files yet.\n' +
+      '  Phase 2: Once approved, write a `plan.md` file using `create_file` containing a checklist of all files to be created/edited/deleted, their paths, and specific actions (e.g. `- [ ] create src/App.tsx - Add main component`).\n' +
+      '  Phase 3: Execute the tasks one by one autonomously. After completing each file, you MUST use `replace_in_file` to update `plan.md` by checking off the completed task (`- [x]`).\n' +
+      '  Phase 4: Continue this loop until all tasks in `plan.md` are marked `[x]`. If disconnected, you can read `plan.md` to resume exactly where you left off.';
 
     if (useXmlTools) {
       systemContent += '\n\n' + await orchestrator.getXMLToolInstructions();
@@ -585,7 +591,13 @@ export class LLMEngine {
       '3. `run_terminal_command` executes in the VS Code Integrated Terminal visually for the user. Do not wait for long processes like dev servers to finish; just start them.\n' +
       '4. Provide clean, efficient, and well-documented code.\n' +
       '5. When scaffolding full projects or creating multiple files, use the `create_file` tool one by one. The system will automatically execute it and return the result to you so you can iteratively call the next tool until the project is complete.\n' +
-      '6. PROACTIVE RECOMMENDATIONS: When faced with design choices or implementations, propose 2-3 high-level recommendations with pros/cons and ask the user to select one (just like Antigravity does). Do not just blindly code sub-optimal solutions.';
+      '6. PROACTIVE RECOMMENDATIONS: When faced with design choices or implementations, propose 2-3 high-level recommendations with pros/cons and ask the user to select one (just like Antigravity does). Do not just blindly code sub-optimal solutions.\n' +
+      '7. PLANNING MODE (For Complex Tasks/Projects):\n' +
+      'When asked to build a project or do a complex task, YOU MUST follow this strict workflow:\n' +
+      '  Phase 1: Write an `implementation_plan.md` using `create_file` detailing your approach. Then STOP and ask the user to type "Proceed" to approve it. DO NOT generate other files yet.\n' +
+      '  Phase 2: Once approved, write a `plan.md` file using `create_file` containing a checklist of all files to be created/edited/deleted, their paths, and specific actions (e.g. `- [ ] create src/App.tsx - Add main component`).\n' +
+      '  Phase 3: Execute the tasks one by one autonomously. After completing each file, you MUST use `replace_in_file` to update `plan.md` by checking off the completed task (`- [x]`).\n' +
+      '  Phase 4: Continue this loop until all tasks in `plan.md` are marked `[x]`. If disconnected, you can read `plan.md` to resume exactly where you left off.';
       
     systemInstruction += '\n\n' + await AgentOrchestrator.getInstance().getXMLToolInstructions();
 
