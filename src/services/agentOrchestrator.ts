@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as cp from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs/promises';
+import { EventEmitter } from 'events';
 import { Logger } from '../utils/logger';
 import { McpService } from './mcpService';
 export interface ToolDefinition {
@@ -21,6 +22,7 @@ export class AgentOrchestrator {
   private static instance: AgentOrchestrator;
   private readonly logger = Logger.getInstance();
   private pendingUserOptionResolver: ((value: string) => void) | null = null;
+  public readonly events = new EventEmitter();
 
   public resolveUserOption(choice: string) {
     if (this.pendingUserOptionResolver) {
@@ -376,6 +378,10 @@ Only one tool call per response is supported. Do not output anything else if you
     try {
       const doc = await vscode.workspace.openTextDocument(fullPath);
       await vscode.window.showTextDocument(doc, { preview: false, preserveFocus: true });
+      const basename = path.basename(fullPath);
+      if (['implementation_plan.md', 'plan.md', 'task.md', 'walkthrough.md'].includes(basename)) {
+        this.events.emit('artifactUpdated', { name: basename, content: content });
+      }
     } catch (e) {
       this.logger.error(`Failed to open document ${fullPath} in UI`, e);
     }
@@ -399,11 +405,15 @@ Only one tool call per response is supported. Do not output anything else if you
       try {
         const doc = await vscode.workspace.openTextDocument(fullPath);
         await vscode.window.showTextDocument(doc, { preview: false, preserveFocus: true });
-      } catch (e) {
-        this.logger.error(`Failed to open document ${fullPath} in UI`, e);
+      const basename = path.basename(fullPath);
+      if (['implementation_plan.md', 'plan.md', 'task.md', 'walkthrough.md'].includes(basename)) {
+        this.events.emit('artifactUpdated', { name: basename, content: content });
       }
-      
-      return `Successfully replaced content in file: ${filePath}`;
+    } catch (e) {
+      this.logger.error(`Failed to open document ${fullPath} in UI`, e);
+    }
+    
+    return `Successfully replaced content in file: ${filePath}`;
     } catch (err: any) {
       return `Failed to read/write file: ${err.message}`;
     }
@@ -419,6 +429,10 @@ Only one tool call per response is supported. Do not output anything else if you
     try {
       const doc = await vscode.workspace.openTextDocument(fullPath);
       await vscode.window.showTextDocument(doc, { preview: false, preserveFocus: true });
+      const basename = path.basename(fullPath);
+      if (['implementation_plan.md', 'plan.md', 'task.md', 'walkthrough.md'].includes(basename)) {
+        this.events.emit('artifactUpdated', { name: basename, content: content });
+      }
     } catch (e) {
       this.logger.error(`Failed to open document ${fullPath} in UI`, e);
     }

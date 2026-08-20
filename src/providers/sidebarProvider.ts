@@ -35,6 +35,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         }
       })
     );
+
+    // Listen for backend artifact updates and pass them to the UI
+    import('../services/agentOrchestrator').then((m) => {
+      m.AgentOrchestrator.getInstance().events.on('artifactUpdated', (payload) => {
+        if (this._view) {
+          this.postMessage({
+            type: 'artifactUpdated',
+            payload
+          });
+        }
+      });
+    });
   }
 
   /** Persist token usage per model to globalState */
@@ -242,6 +254,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         const filePath = this._configManager.getConfigFilePath();
         const doc = await vscode.workspace.openTextDocument(filePath);
         await vscode.window.showTextDocument(doc);
+        break;
+      }
+
+      case 'submitProceed': {
+        // Find active conversation
+        const activeId = this._conversationManager.getActiveConversationId();
+        if (activeId) {
+          // Send "Proceed" as user message internally
+          this._handleWebviewMessage({ type: 'sendMessage', payload: { text: 'Proceed', contextItems: [] } });
+        } else {
+          vscode.window.showErrorMessage('No active conversation to proceed.');
+        }
         break;
       }
 

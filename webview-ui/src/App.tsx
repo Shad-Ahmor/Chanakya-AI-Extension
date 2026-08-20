@@ -7,6 +7,7 @@ import { ActionHubModal } from './components/Chat/ActionHubModal';
 import { RulesHubModal } from './components/Chat/RulesHubModal';
 import { MentionHubModal } from './components/Chat/MentionHubModal';
 import { GoalHubModal } from './components/Chat/GoalHubModal';
+import { ArtifactModal } from './components/Chat/ArtifactModal';
 import ModelHubView from './components/ModelHub/ModelHubView';
 import {
   Sparkles,
@@ -69,6 +70,10 @@ export default function App() {
 
   // Goal Hub state
   const [showGoalHub, setShowGoalHub] = useState(false);
+
+  // Artifacts State
+  const [artifacts, setArtifacts] = useState<Record<string, string>>({});
+  const [activeArtifactModal, setActiveArtifactModal] = useState<{name: string, content: string} | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -236,6 +241,14 @@ export default function App() {
               content: content
             }];
           });
+          break;
+        }
+
+        case 'artifactUpdated': {
+          setArtifacts((prev) => ({
+            ...prev,
+            [message.payload.name]: message.payload.content
+          }));
           break;
         }
       }
@@ -529,6 +542,25 @@ export default function App() {
           <span>Unit Tests</span>
         </button>
       </div>
+
+      {/* Artifacts Top Bar */}
+      {Object.keys(artifacts).length > 0 && (
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-white/5 bg-black/30 overflow-x-auto">
+          <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Artifacts</span>
+          <div className="flex gap-2">
+            {Object.entries(artifacts).map(([name, content]) => (
+              <button
+                key={name}
+                onClick={() => setActiveArtifactModal({ name, content })}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium border border-sky-500/20 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20 transition shadow-sm"
+              >
+                <FileText className="w-3 h-3 text-sky-400" />
+                <span>{name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Messages List */}
       <main 
@@ -899,6 +931,18 @@ export default function App() {
             if (textareaRef.current) {
               textareaRef.current.focus();
             }
+          }}
+        />
+      )}
+
+      {activeArtifactModal && (
+        <ArtifactModal
+          name={activeArtifactModal.name}
+          content={activeArtifactModal.content}
+          onClose={() => setActiveArtifactModal(null)}
+          onProceed={() => {
+            setActiveArtifactModal(null);
+            vscode.postMessage({ type: 'submitProceed' });
           }}
         />
       )}

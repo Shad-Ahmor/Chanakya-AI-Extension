@@ -94,7 +94,8 @@ export type FromWebviewMessage =
   | { type: 'deleteConversation'; payload: { id: string } }
   | { type: 'clearAllConversations' }
   | { type: 'openFilePicker' }
-  | { type: 'showInformationMessage'; payload: { message: string } };
+  | { type: 'showInformationMessage'; payload: { message: string } }
+  | { type: 'submitProceed' };
 
 /**
  * Messages sent FROM Extension Host TO React Webview
@@ -120,4 +121,5 @@ export type ToWebviewMessage =
   | { type: 'tokenOptimizerConfig'; payload: Record<string, unknown> }
   | { type: 'conversationsLoaded'; payload: { conversations: Conversation[]; activeId: string | null } }
   | { type: 'activeConversationChanged'; payload: { conversation: Conversation } }
-  | { type: 'fileAttached'; payload: { name: string; path: string; content: string } };
+  | { type: 'fileAttached'; payload: { name: string; path: string; content: string } }
+  | { type: 'artifactUpdated'; payload: { name: string; content: string } };

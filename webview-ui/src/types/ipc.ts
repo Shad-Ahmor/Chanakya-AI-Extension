@@ -62,7 +62,7 @@ export interface DetectedLocalModel {
 export type FromWebviewMessage =
   | { type: 'ready' }
   | { type: 'sendMessage'; payload: { text: string; contextItems: ContextItem[] } }
-  | { type: 'abortGeneration' }
+  | { type: 'abortGeneration'; payload?: { messageId?: string } }
   | { type: 'searchWorkspaceFiles'; payload: { query: string } }
   | { type: 'readFileContent'; payload: { path: string } }
   | { type: 'insertCode'; payload: { code: string } }
@@ -94,7 +94,8 @@ export type FromWebviewMessage =
   | { type: 'deleteConversation'; payload: { id: string } }
   | { type: 'clearAllConversations' }
   | { type: 'openFilePicker' }
-  | { type: 'showInformationMessage'; payload: { message: string } };
+  | { type: 'showInformationMessage'; payload: { message: string } }
+  | { type: 'submitProceed' };
 
 /**
  * Messages sent FROM Extension Host TO React Webview
@@ -115,9 +116,10 @@ export type ToWebviewMessage =
   | { type: 'updateTaskStatus'; payload: { messageId: string; task: TaskStatus } }
   | { type: 'openSettingsTab' }
   | { type: 'localModelsDetected'; payload: { models: DetectedLocalModel[] } }
-  | { type: 'optimizationStats'; payload: { messageId: string; originalTokens: number; optimizedTokens: number } }
+  | { type: 'optimizationStats'; payload: { messageId: string; originalTokens: number; optimizedTokens: number; evaluationScore?: number } }
   | { type: 'tokenStatsResult'; payload: Record<string, unknown> }
   | { type: 'tokenOptimizerConfig'; payload: Record<string, unknown> }
   | { type: 'conversationsLoaded'; payload: { conversations: Conversation[]; activeId: string | null } }
   | { type: 'activeConversationChanged'; payload: { conversation: Conversation } }
-  | { type: 'fileAttached'; payload: { name: string; path: string; content: string } };
+  | { type: 'fileAttached'; payload: { name: string; path: string; content: string } }
+  | { type: 'artifactUpdated'; payload: { name: string; content: string } };
