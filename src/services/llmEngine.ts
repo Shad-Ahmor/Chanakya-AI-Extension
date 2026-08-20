@@ -167,6 +167,11 @@ export class LLMEngine {
     signal: AbortSignal,
     existingMessages?: any[]
   ): Promise<void> {
+    if (signal?.aborted) {
+      this.logger.warn('Generation aborted before starting streamOpenAICompatible.');
+      return;
+    }
+
     const apiBase = (model.apiBase || 'https://api.openai.com/v1').replace(/\/+$/, '');
     const endpoint = `${apiBase}/chat/completions`;
     const orchestrator = AgentOrchestrator.getInstance();
@@ -189,7 +194,7 @@ export class LLMEngine {
 
     if (optimizerConfig) {
       if (optimizerConfig.responseConciseness === 'ultra_concise') {
-        systemContent += ' Provide ONLY code, absolutely no explanations or conversational fluff.';
+        systemContent += ' Provide ONLY code, absolutely no explanations or conversational fluff. ALWAYS wrap code in markdown code blocks (```language).';
       } else if (optimizerConfig.responseConciseness === 'concise') {
         systemContent += ' Keep explanations extremely short and to the point.';
       }
@@ -422,6 +427,11 @@ export class LLMEngine {
       }
 
       for (const toolCall of toolCalls) {
+        if (signal?.aborted) {
+          this.logger.warn('Generation aborted by user during tool execution.');
+          return;
+        }
+
         try {
           const args = JSON.parse(toolCall.function.arguments);
           const result = await orchestrator.executeTool(toolCall.function.name, args);
@@ -459,6 +469,10 @@ export class LLMEngine {
         }
       }
 
+      if (signal?.aborted) {
+        this.logger.warn('Generation aborted by user before recursive call.');
+        return;
+      }
       // Recursive call for the model to process the tool results
       return this.streamOpenAICompatible(model, prompt, contextItems, optimizerConfig, callbacks, signal, messages);
     } else {
@@ -540,7 +554,7 @@ export class LLMEngine {
       '5. PROACTIVE RECOMMENDATIONS: When faced with design choices or implementations, propose 2-3 high-level recommendations with pros/cons and ask the user to select one (just like Antigravity does). Do not just blindly code sub-optimal solutions.';
     if (optimizerConfig) {
       if (optimizerConfig.responseConciseness === 'ultra_concise') {
-        systemInstruction += ' Provide ONLY code, absolutely no explanations or conversational fluff.';
+        systemInstruction += ' Provide ONLY code, absolutely no explanations or conversational fluff. ALWAYS wrap code in markdown code blocks (```language).';
       } else if (optimizerConfig.responseConciseness === 'concise') {
         systemInstruction += ' Keep explanations extremely short and to the point.';
       }

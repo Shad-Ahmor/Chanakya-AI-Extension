@@ -4,8 +4,20 @@ import { ChatMessage } from '../../types/ipc';
 import CodeBlock from './CodeBlock';
 import { Code, FileText, Bot, User, Sparkles, Undo2, ArrowDownRight, Loader2, ChevronRight, Copy, Check } from 'lucide-react';
 import { vscode } from '../../vscode';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
+function DynamicTimer() {
+  const [elapsed, setElapsed] = useState(0);
+  
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setElapsed(prev => prev + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+  
+  return <span>{elapsed}s</span>;
+}
 interface Props {
   message: ChatMessage;
 }
@@ -100,10 +112,20 @@ export default function ChatMessageItem({ message }: Props) {
                 <ChevronRight className="w-3.5 h-3.5 text-white/40" />
               )}
               <span className="flex-1">{task.label}</span>
-              {task.durationMs && (
+              {task.durationMs ? (
                 <span className="text-[10px] opacity-50 font-sans">
-                  {task.status === 'running' ? '...' : `${(task.durationMs / 1000).toFixed(1)}s`}
+                  {task.status === 'running' ? (
+                    <>Timed <DynamicTimer /></>
+                  ) : (
+                    `${(task.durationMs / 1000).toFixed(1)}s`
+                  )}
                 </span>
+              ) : (
+                task.status === 'running' && (
+                  <span className="text-[10px] opacity-50 font-sans">
+                    Timed <DynamicTimer />
+                  </span>
+                )
               )}
             </div>
           ))}

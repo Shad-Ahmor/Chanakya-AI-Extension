@@ -199,6 +199,7 @@ export class LLMGateway {
         });
         
         // If it successfully completes, we exit
+        break;
       } catch (err: any) {
         if (err.name === 'AbortError') {
           return;
