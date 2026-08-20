@@ -25,6 +25,7 @@ interface Props {
 export default function ChatMessageItem({ message }: Props) {
   const isUser = message.role === 'user';
   const [copied, setCopied] = useState(false);
+  const [answeredTools, setAnsweredTools] = useState<Record<string, string>>({});
 
   const handleCopyMessage = () => {
     vscode.postMessage({
@@ -200,6 +201,44 @@ export default function ChatMessageItem({ message }: Props) {
           <>
             {blocks.map((block, i) => {
               if (block.type === 'tool') {
+                if (block.parsed?.name === 'ask_user_options') {
+                  const args = block.parsed.arguments || {};
+                  return (
+                    <div key={i} className="my-3 border border-purple-500/30 bg-purple-500/10 rounded-xl overflow-hidden shadow-sm">
+                      <div className="flex items-center gap-2 px-3 py-2 bg-purple-500/20 border-b border-purple-500/20 font-mono text-[11px] font-bold text-purple-300">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Interactive Question</span>
+                      </div>
+                      <div className="p-3 text-sm text-white/90">
+                        <div className="mb-3 font-medium text-[13px]">{args.question || 'Please select an option:'}</div>
+                        <div className="flex flex-col gap-2">
+                          {(args.options || []).map((opt: string, idx: number) => {
+                            const isSelected = answeredTools[i] === opt;
+                            const isAnswered = answeredTools[i] !== undefined;
+                            return (
+                              <button
+                                key={idx}
+                                onClick={() => {
+                                  setAnsweredTools(prev => ({ ...prev, [i]: opt }));
+                                  vscode.postMessage({ type: 'submitUserOption', payload: { choice: opt } });
+                                }}
+                                disabled={isAnswered}
+                                className={`px-3 py-2 text-left text-[12px] rounded border transition-colors ${
+                                  isSelected 
+                                    ? 'bg-purple-500/40 border-purple-400 text-white shadow-sm' 
+                                    : 'border-purple-500/30 hover:bg-purple-500/20 text-white/80 disabled:opacity-50 disabled:hover:bg-transparent cursor-pointer'
+                                }`}
+                              >
+                                {opt}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
                 return (
                   <div key={i} className="my-3 border border-sky-500/30 bg-sky-500/10 rounded-xl overflow-hidden shadow-sm">
                     <div className="flex items-center gap-2 px-3 py-2 bg-sky-500/20 border-b border-sky-500/20 font-mono text-[11px] font-bold text-sky-300">

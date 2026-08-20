@@ -20,6 +20,14 @@ export interface ToolDefinition {
 export class AgentOrchestrator {
   private static instance: AgentOrchestrator;
   private readonly logger = Logger.getInstance();
+  private pendingUserOptionResolver: ((value: string) => void) | null = null;
+
+  public resolveUserOption(choice: string) {
+    if (this.pendingUserOptionResolver) {
+      this.pendingUserOptionResolver(choice);
+      this.pendingUserOptionResolver = null;
+    }
+  }
 
   public static getInstance(): AgentOrchestrator {
     if (!AgentOrchestrator.instance) {
@@ -160,6 +168,21 @@ export class AgentOrchestrator {
             required: ['dirPath']
           }
         }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'ask_user_options',
+          description: 'Pauses generation and asks the user a multiple-choice question. Use this when there are multiple valid paths (e.g. tech stack, design theme) and you need the user to pick one before proceeding.',
+          parameters: {
+            type: 'object',
+            properties: {
+              question: { type: 'string', description: 'The question to ask the user.' },
+              options: { type: 'array', items: { type: 'string' }, description: 'An array of strings representing the choices.' }
+            },
+            required: ['question', 'options']
+          }
+        }
       }
     ];
 
@@ -233,6 +256,11 @@ Only one tool call per response is supported. Do not output anything else if you
           return await this.deleteFile(args.filePath);
         case 'delete_directory':
           return await this.deleteDirectory(args.dirPath);
+        case 'ask_user_options':
+          return new Promise<string>((resolve) => {
+            this.pendingUserOptionResolver = resolve;
+            // The frontend will intercept the stream and show the UI, so we just wait here.
+          });
         default:
           if (name.startsWith('mcp_')) {
             // Format: mcp_serverName_toolName

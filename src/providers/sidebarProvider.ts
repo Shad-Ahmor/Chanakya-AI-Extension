@@ -635,6 +635,12 @@ ${diff}`;
         break;
       }
 
+      case 'submitUserOption': {
+        const { AgentOrchestrator } = require('../services/agentOrchestrator');
+        AgentOrchestrator.getInstance().resolveUserOption(message.payload.choice);
+        break;
+      }
+
       case 'executeToolManual': {
         const { toolName, argsString } = message.payload;
         try {

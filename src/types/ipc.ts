@@ -65,6 +65,7 @@ export type FromWebviewMessage =
   | { type: 'insertCode'; payload: { code: string } }
   | { type: 'applyCodeMerge'; payload: { code: string } }
   | { type: 'executeToolManual'; payload: { toolName: string; argsString: string } }
+  | { type: 'submitUserOption'; payload: { choice: string } }
   | { type: 'streamFileEdit'; payload: { path: string; code: string; isStreaming: boolean } }
   | { type: 'copyToClipboard'; payload: { text: string } }
   | { type: 'openSettings' }
