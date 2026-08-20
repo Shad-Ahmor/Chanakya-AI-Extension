@@ -393,20 +393,27 @@ export class LLMEngine {
 
     // Parse XML tool calls for local models
     if (useXmlTools) {
-      const xmlMatch = fullText.match(/<tool_call>([\s\S]*?)<\/tool_call>/);
-      if (xmlMatch && xmlMatch[1]) {
-        try {
-          const parsed = JSON.parse(xmlMatch[1].trim());
-          if (parsed.name && parsed.arguments) {
-            toolCalls.push({
-              id: 'call_' + Math.random().toString(36).substring(2, 9),
-              type: 'function',
-              function: { name: parsed.name, arguments: JSON.stringify(parsed.arguments) }
-            });
-            callbacks.onChunk(`\n> ⚙️ **Running XML Tool:** \`${parsed.name}\`...\n`);
+      const xmlRegex = /<tool_call>([\s\S]*?)<\/tool_call>/g;
+      let xmlMatch;
+      while ((xmlMatch = xmlRegex.exec(fullText)) !== null) {
+        if (xmlMatch && xmlMatch[1]) {
+          try {
+            // Strip markdown backticks if LLM mistakenly wrapped it
+            let jsonString = xmlMatch[1].trim();
+            jsonString = jsonString.replace(/^```[a-z]*\n/i, '').replace(/\n```$/, '');
+            
+            const parsed = JSON.parse(jsonString);
+            if (parsed.name && parsed.arguments) {
+              toolCalls.push({
+                id: 'call_' + Math.random().toString(36).substring(2, 9),
+                type: 'function',
+                function: { name: parsed.name, arguments: JSON.stringify(parsed.arguments) }
+              });
+              // Callbacks are suppressed here because the UI (ChatMessageItem) will now render it natively
+            }
+          } catch (e) {
+            this.logger.error('Failed to parse XML tool call', e);
           }
-        } catch (e) {
-          this.logger.error('Failed to parse XML tool call', e);
         }
       }
     }

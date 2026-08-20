@@ -35,6 +35,47 @@ export default function ChatMessageItem({ message }: Props) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const parseContentWithToolCalls = (content: string) => {
+    const blocks: { type: 'text' | 'tool'; content: string; parsed?: any }[] = [];
+    const regex = /<tool_call>([\s\S]*?)<\/tool_call>/g;
+    let lastIndex = 0;
+    let match;
+    
+    while ((match = regex.exec(content)) !== null) {
+      if (match.index > lastIndex) {
+        blocks.push({ type: 'text', content: content.substring(lastIndex, match.index) });
+      }
+      
+      let parsedData = null;
+      try {
+        let jsonString = match[1].trim();
+        jsonString = jsonString.replace(/^```[a-z]*\n/i, '').replace(/\n```$/, '');
+        parsedData = JSON.parse(jsonString);
+      } catch (e) {
+        // invalid JSON yet
+      }
+      
+      blocks.push({ type: 'tool', content: match[1], parsed: parsedData });
+      lastIndex = regex.lastIndex;
+    }
+    
+    if (lastIndex < content.length) {
+      const remaining = content.substring(lastIndex);
+      const openTagMatch = remaining.match(/<tool_call>([\s\S]*)$/);
+      if (openTagMatch) {
+        const textBefore = remaining.substring(0, openTagMatch.index);
+        if (textBefore) blocks.push({ type: 'text', content: textBefore });
+        blocks.push({ type: 'tool', content: openTagMatch[1], parsed: null });
+      } else {
+        blocks.push({ type: 'text', content: remaining });
+      }
+    }
+    
+    return blocks;
+  };
+
+  const blocks = isUser ? [] : parseContentWithToolCalls(message.content);
+
   return (
     <div
       className={`flex flex-col p-4 rounded-2xl transition-all leading-relaxed relative overflow-hidden ${
@@ -156,9 +197,28 @@ export default function ChatMessageItem({ message }: Props) {
         {isUser ? (
           <div className="whitespace-pre-wrap">{message.content}</div>
         ) : (
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            components={{
+          <>
+            {blocks.map((block, i) => {
+              if (block.type === 'tool') {
+                return (
+                  <div key={i} className="my-3 border border-sky-500/30 bg-sky-500/10 rounded-xl overflow-hidden shadow-sm">
+                    <div className="flex items-center gap-2 px-3 py-2 bg-sky-500/20 border-b border-sky-500/20 font-mono text-[11px] font-bold text-sky-300">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>{block.parsed?.name ? `Executing Tool: ${block.parsed.name}` : 'Preparing Tool...'}</span>
+                      {!block.parsed && <Loader2 className="w-3 h-3 animate-spin ml-auto text-sky-400" />}
+                    </div>
+                    <div className="p-0 text-xs">
+                      <CodeBlock language="json" value={block.parsed ? JSON.stringify(block.parsed.arguments || block.parsed, null, 2) : block.content.trim()} isStreaming={!block.parsed} />
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <ReactMarkdown
+                  key={i}
+                  remarkPlugins={[remarkGfm]}
+                  components={{
               code({ className, node, children, ...props }: any) {
                 const match = /language-(\w+)/.exec(className || '');
                 const isInline = !match && !String(children).includes('\n');
@@ -221,8 +281,11 @@ export default function ChatMessageItem({ message }: Props) {
               }
             }}
           >
-            {message.content}
+            {block.content}
           </ReactMarkdown>
+              );
+            })}
+          </>
         )}
 
         {/* Live Streaming Indicator */}
