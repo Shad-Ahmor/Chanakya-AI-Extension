@@ -194,7 +194,7 @@ export class LLMGateway {
           contextItems,
           ...(optimizerConfig ? { optimizerConfig } : {}),
           callbacks: interceptedCallbacks,
-          ...(cancellationToken ? { cancellationToken: this.createAbortController(cancellationToken).signal as any } : {}),
+          ...(cancellationToken ? { cancellationToken } : {}),
           ...(optimizedMessages ? { existingMessages: optimizedMessages } : {})
         });
         
@@ -230,11 +230,4 @@ export class LLMGateway {
     }
   }
 
-  private createAbortController(cancellationToken: vscode.CancellationToken): AbortController {
-    const controller = new AbortController();
-    cancellationToken.onCancellationRequested(() => {
-      controller.abort();
-    });
-    return controller;
-  }
 }
