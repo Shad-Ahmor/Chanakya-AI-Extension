@@ -815,6 +815,26 @@ ${diff}`;
         break;
       }
 
+      case 'getTokenStats': {
+        const stats = this._context.globalState.get<any>('chanakya.tokenStats') || {};
+        const history = this._context.globalState.get<any[]>('chanakya.tokenHistory') || [];
+        this.postMessage({
+          type: 'tokenStatsResult',
+          payload: { stats, history }
+        });
+        break;
+      }
+
+      case 'clearTokenStats': {
+        this._context.globalState.update('chanakya.tokenStats', undefined);
+        this._context.globalState.update('chanakya.tokenHistory', undefined);
+        this.postMessage({
+          type: 'tokenStatsResult',
+          payload: { stats: {}, history: [] }
+        });
+        break;
+      }
+
       case 'newConversation': {
         const newConv = this._conversationManager.createNewConversation();
         this.postMessage({
