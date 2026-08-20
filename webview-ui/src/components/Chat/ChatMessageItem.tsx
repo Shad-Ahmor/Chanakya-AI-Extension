@@ -252,6 +252,7 @@ export default function ChatMessageItem({ message }: Props) {
                         value={block.parsed ? JSON.stringify(block.parsed.arguments || block.parsed, null, 2) : block.content.trim()} 
                         isStreaming={!block.parsed}
                         toolName={block.parsed?.name}
+                        isToolBlock={true}
                       />
                     </div>
                   </div>

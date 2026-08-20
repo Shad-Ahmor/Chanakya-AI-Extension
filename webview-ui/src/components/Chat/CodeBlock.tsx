@@ -24,9 +24,10 @@ interface CodeBlockProps {
   meta?: string;
   isStreaming?: boolean;
   toolName?: string;
+  isToolBlock?: boolean;
 }
 
-export default function CodeBlock({ language, value, meta, isStreaming, toolName }: CodeBlockProps) {
+export default function CodeBlock({ language, value, meta, isStreaming, toolName, isToolBlock }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const [inserted, setInserted] = useState(false);
   const [applied, setApplied] = useState(false);
@@ -108,6 +109,13 @@ export default function CodeBlock({ language, value, meta, isStreaming, toolName
         payload: { toolName: finalToolName, argsString: finalArgsString }
       });
     } else {
+      if (isToolBlock) {
+        vscode.postMessage({
+          type: 'showInformationMessage',
+          payload: { message: 'Cannot execute tool: JSON is incomplete or still generating' }
+        });
+        return;
+      }
       vscode.postMessage({
         type: 'applyCodeMerge',
         payload: { code: value }

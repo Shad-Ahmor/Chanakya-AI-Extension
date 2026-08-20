@@ -93,7 +93,8 @@ export type FromWebviewMessage =
   | { type: 'newConversation' }
   | { type: 'deleteConversation'; payload: { id: string } }
   | { type: 'clearAllConversations' }
-  | { type: 'openFilePicker' };
+  | { type: 'openFilePicker' }
+  | { type: 'showInformationMessage'; payload: { message: string } };
 
 /**
  * Messages sent FROM Extension Host TO React Webview

@@ -800,6 +800,11 @@ ${diff}`;
         break;
       }
 
+      case 'showInformationMessage': {
+        vscode.window.showInformationMessage(message.payload.message);
+        break;
+      }
+
       case 'openSettings': {
         vscode.commands.executeCommand('aiEnhancer.openModelsHub', { tab: 'settings' });
         break;
