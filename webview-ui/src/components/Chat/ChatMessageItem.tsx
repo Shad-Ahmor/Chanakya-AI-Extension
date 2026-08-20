@@ -137,7 +137,7 @@ export default function ChatMessageItem({ message }: Props) {
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
-              code({ className, children, ...props }) {
+              code({ className, node, children, ...props }: any) {
                 const match = /language-(\w+)/.exec(className || '');
                 const isInline = !match && !String(children).includes('\n');
                 
@@ -155,7 +155,7 @@ export default function ChatMessageItem({ message }: Props) {
                 const language = match ? match[1] : '';
                 const codeString = String(children).replace(/\n$/, '');
 
-                return <CodeBlock language={language} value={codeString} />;
+                return <CodeBlock language={language} value={codeString} meta={node?.meta} isStreaming={message.isStreaming} />;
               },
               p({ children }) {
                 return <p className="mb-2.5 last:mb-0 leading-relaxed text-white/90">{children}</p>;

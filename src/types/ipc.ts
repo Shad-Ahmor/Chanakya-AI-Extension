@@ -64,6 +64,7 @@ export type FromWebviewMessage =
   | { type: 'readFileContent'; payload: { path: string } }
   | { type: 'insertCode'; payload: { code: string } }
   | { type: 'applyCodeMerge'; payload: { code: string } }
+  | { type: 'streamFileEdit'; payload: { path: string; code: string; isStreaming: boolean } }
   | { type: 'copyToClipboard'; payload: { text: string } }
   | { type: 'openSettings' }
   | { type: 'openModelsHub' }

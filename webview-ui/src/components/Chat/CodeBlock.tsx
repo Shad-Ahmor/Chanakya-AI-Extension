@@ -21,12 +21,15 @@ import { vscode } from '../../vscode';
 interface CodeBlockProps {
   language?: string;
   value: string;
+  meta?: string;
+  isStreaming?: boolean;
 }
 
-export default function CodeBlock({ language, value }: CodeBlockProps) {
+export default function CodeBlock({ language, value, meta, isStreaming }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const [inserted, setInserted] = useState(false);
   const [applied, setApplied] = useState(false);
+  const [filePath, setFilePath] = useState<string | null>(null);
 
   const lang = language ? language.toLowerCase().trim() : 'text';
   const lines = value.split('\n');
@@ -34,6 +37,34 @@ export default function CodeBlock({ language, value }: CodeBlockProps) {
   useEffect(() => {
     Prism.highlightAll();
   }, [value, lang]);
+
+  // Extract file path from meta or first line
+  useEffect(() => {
+    let extractedPath = null;
+    if (meta) {
+      const match = /file=["']?([^"'\s]+)["']?/.exec(meta);
+      if (match) extractedPath = match[1];
+    }
+    if (!extractedPath && lines.length > 0) {
+      const firstLine = lines[0].trim();
+      const commentMatch = /^(?:\/\/|#|<!--|\/\*)\s*file:\s*([^\s]+)/i.exec(firstLine);
+      if (commentMatch) extractedPath = commentMatch[1];
+    }
+    setFilePath(extractedPath);
+  }, [meta, lines[0]]);
+
+  // Stream file edit
+  useEffect(() => {
+    if (filePath && value) {
+      const timeoutId = setTimeout(() => {
+        vscode.postMessage({
+          type: 'streamFileEdit',
+          payload: { path: filePath, code: value, isStreaming: !!isStreaming }
+        });
+      }, 500);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [value, filePath, isStreaming]);
 
   const handleCopy = () => {
     vscode.postMessage({
@@ -82,6 +113,11 @@ export default function CodeBlock({ language, value }: CodeBlockProps) {
           <span className="text-[10px] text-white/40 font-mono">
             {lines.length} {lines.length === 1 ? 'line' : 'lines'}
           </span>
+          {filePath && (
+            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-400/30 flex items-center gap-1 font-mono ml-1">
+              <Sparkles className="w-3 h-3" /> Auto-Syncing: {filePath}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-1.5">

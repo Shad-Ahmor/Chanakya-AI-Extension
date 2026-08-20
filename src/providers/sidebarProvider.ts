@@ -676,6 +676,41 @@ ${diff}`;
         break;
       }
 
+      case 'streamFileEdit': {
+        try {
+          const fs = require('fs');
+          const path = require('path');
+          
+          let workspaceRoot = '';
+          if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+            workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
+          } else {
+            // Cannot auto-create without a workspace
+            break;
+          }
+
+          const targetPath = path.isAbsolute(message.payload.path) 
+            ? message.payload.path 
+            : path.join(workspaceRoot, message.payload.path);
+
+          const targetDir = path.dirname(targetPath);
+          if (!fs.existsSync(targetDir)) {
+            fs.mkdirSync(targetDir, { recursive: true });
+          }
+
+          fs.writeFileSync(targetPath, message.payload.code, 'utf8');
+
+          // If it's the final write (not streaming), we can open it in the editor
+          if (!message.payload.isStreaming) {
+            const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(targetPath));
+            await vscode.window.showTextDocument(doc, { preview: false, preserveFocus: true });
+          }
+        } catch (err) {
+          this._logger.error('Failed to auto-create/stream file edit', err);
+        }
+        break;
+      }
+
       case 'copyToClipboard': {
         vscode.env.clipboard.writeText(message.payload.text);
         vscode.window.showInformationMessage('Copied to clipboard');
