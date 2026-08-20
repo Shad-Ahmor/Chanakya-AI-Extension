@@ -288,9 +288,12 @@ export class LLMEngine {
       messages,
       stream: true,
       temperature: model.defaultCompletionOptions?.temperature ?? 0.2,
-      max_tokens: model.defaultCompletionOptions?.maxTokens ?? 16384,
       ...(model.requestOptions?.extraBody || {})
     };
+
+    if (model.defaultCompletionOptions?.maxTokens) {
+      payload.max_tokens = model.defaultCompletionOptions.maxTokens;
+    }
 
     if (!useXmlTools) {
       payload.tools = await orchestrator.getAvailableTools();
@@ -607,13 +610,18 @@ export class LLMEngine {
       }
     }
 
+    const generationConfig: Record<string, unknown> = {
+      temperature: model.defaultCompletionOptions?.temperature ?? 0.2,
+      topP: 0.95
+    };
+
+    if (model.defaultCompletionOptions?.maxTokens) {
+      generationConfig.maxOutputTokens = model.defaultCompletionOptions.maxTokens;
+    }
+
     const bodyPayload: Record<string, unknown> = {
       contents,
-      generationConfig: {
-        temperature: model.defaultCompletionOptions?.temperature ?? 0.2,
-        maxOutputTokens: model.defaultCompletionOptions?.maxTokens ?? 16384,
-        topP: 0.95
-      },
+      generationConfig,
       systemInstruction: { parts: [{ text: systemInstruction }] }
     };
 
