@@ -141,31 +141,7 @@ export class AgentOrchestrator {
           }
         }
       },
-      {
-        type: 'function',
-        function: {
-          name: 'create_multiple_files',
-          description: 'Creates multiple new files at once. Use this when generating full projects or scaffolding multiple files in a single response to avoid being stopped after one file.',
-          parameters: {
-            type: 'object',
-            properties: {
-              files: {
-                type: 'array',
-                description: 'List of files to create.',
-                items: {
-                  type: 'object',
-                  properties: {
-                    path: { type: 'string', description: 'Path to the new file.' },
-                    content: { type: 'string', description: 'The content of the file.' }
-                  },
-                  required: ['path', 'content']
-                }
-              }
-            },
-            required: ['files']
-          }
-        }
-      },
+
       {
         type: 'function',
         function: {
@@ -278,8 +254,7 @@ Only one tool call per response is supported. Do not output anything else if you
           return await this.replaceInFile(targetPath, args.targetContent, args.replacementContent);
         case 'create_file':
           return await this.createFile(targetPath, args.content);
-        case 'create_multiple_files':
-          return await this.createMultipleFiles(args.files);
+
         case 'delete_file':
           return await this.deleteFile(targetPath);
         case 'delete_directory':
@@ -449,40 +424,6 @@ Only one tool call per response is supported. Do not output anything else if you
     }
     
     return `Successfully created file: ${filePath}`;
-  }
-
-  private async createMultipleFiles(files: { path: string, content: string }[]): Promise<string> {
-    if (!Array.isArray(files) || files.length === 0) {
-      return 'Error: No files provided to create_multiple_files.';
-    }
-
-    let successCount = 0;
-    let errors: string[] = [];
-
-    for (const file of files) {
-      try {
-        const fullPath = this.resolvePath(file.path);
-        const dir = path.dirname(fullPath);
-        await fs.mkdir(dir, { recursive: true });
-        await fs.writeFile(fullPath, file.content, 'utf8');
-        
-        // Open in UI
-        try {
-          const doc = await vscode.workspace.openTextDocument(fullPath);
-          await vscode.window.showTextDocument(doc, { preview: false, preserveFocus: true });
-        } catch (e) {
-          this.logger.error(`Failed to open document ${fullPath} in UI`, e);
-        }
-        successCount++;
-      } catch (err: any) {
-        errors.push(`Failed to create ${file.path}: ${err.message}`);
-      }
-    }
-
-    if (errors.length > 0) {
-      return `Created ${successCount} files, but encountered ${errors.length} errors:\n${errors.join('\n')}`;
-    }
-    return `Successfully created ${successCount} files.`;
   }
 
   private async deleteFile(filePath: string): Promise<string> {

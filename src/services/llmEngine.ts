@@ -188,7 +188,7 @@ export class LLMEngine {
       '2. If you need to install dependencies (e.g. Django, pip, npm), write a `requirements.txt` or `package.json` first, then run the terminal command.\n' +
       '3. `run_terminal_command` is SYNCHRONOUS. It will wait up to 15 seconds to return output. If you run `pip install`, it will return the success/failure output. You MUST wait for it to succeed before running subsequent commands like `migrate`.\n' +
       '4. ALWAYS prefer `replace_in_file` over `edit_file` when modifying existing files to prevent accidental deletion of code. Only use `edit_file` if you need to rewrite the ENTIRE file from scratch.\n' +
-      '5. When scaffolding full projects or creating multiple files, ALWAYS use the `create_multiple_files` tool in a single response to avoid being stopped after creating just one file.\n' +
+      '5. When scaffolding full projects or creating multiple files, use the `create_file` tool one by one. The system will automatically execute it and return the result to you so you can iteratively call the next tool until the project is complete.\n' +
       '6. PROACTIVE RECOMMENDATIONS: When faced with design choices or implementations, propose 2-3 high-level recommendations with pros/cons and ask the user to select one (just like Antigravity does). Do not just blindly code sub-optimal solutions.';
 
     if (useXmlTools) {
@@ -584,8 +584,11 @@ export class LLMEngine {
       '2. If you need to install dependencies (e.g. Django, pip, npm), write a `requirements.txt` or `package.json` first, then run the terminal command.\n' +
       '3. `run_terminal_command` executes in the VS Code Integrated Terminal visually for the user. Do not wait for long processes like dev servers to finish; just start them.\n' +
       '4. Provide clean, efficient, and well-documented code.\n' +
-      '5. When scaffolding full projects or creating multiple files, ALWAYS use the `create_multiple_files` tool in a single response to avoid being stopped after creating just one file.\n' +
+      '5. When scaffolding full projects or creating multiple files, use the `create_file` tool one by one. The system will automatically execute it and return the result to you so you can iteratively call the next tool until the project is complete.\n' +
       '6. PROACTIVE RECOMMENDATIONS: When faced with design choices or implementations, propose 2-3 high-level recommendations with pros/cons and ask the user to select one (just like Antigravity does). Do not just blindly code sub-optimal solutions.';
+      
+    systemInstruction += '\n\n' + await AgentOrchestrator.getInstance().getXMLToolInstructions();
+
     if (optimizerConfig) {
       if (optimizerConfig.responseConciseness === 'ultra_concise') {
         systemInstruction += ' Provide ONLY code, absolutely no explanations or conversational fluff. If you are outputting code to the chat, ALWAYS wrap it in markdown code blocks (```language). Do NOT wrap JSON tool arguments in markdown backticks.';
@@ -668,9 +671,78 @@ export class LLMEngine {
       }
     }
 
-    const finalMsg = { role: 'assistant', content: fullText || null };
-    accumulatedNewMessages.push(finalMsg);
-    callbacks.onComplete(fullText, accumulatedNewMessages);
+    let toolCalls: any[] = [];
+    const xmlRegex = /<tool_call>([\s\S]*?)<\/tool_call>/g;
+    let xmlMatch;
+    while ((xmlMatch = xmlRegex.exec(fullText)) !== null) {
+      if (xmlMatch && xmlMatch[1]) {
+        try {
+          let jsonString = xmlMatch[1].trim();
+          jsonString = jsonString.replace(/^```[a-z]*\n/i, '').replace(/\n```$/, '');
+          
+          const parsed = JSON.parse(jsonString);
+          if (parsed.name && parsed.arguments) {
+            toolCalls.push({
+              id: 'call_' + Math.random().toString(36).substring(2, 9),
+              type: 'function',
+              function: { name: parsed.name, arguments: JSON.stringify(parsed.arguments) }
+            });
+          }
+        } catch (e) {
+          this.logger.error('Failed to parse XML tool call', e);
+        }
+      }
+    }
+
+    let messages = existingMessages ? [...existingMessages] : [];
+    
+    if (toolCalls.length > 0) {
+      const orchestrator = AgentOrchestrator.getInstance();
+      const assistantMsg = { role: 'assistant', content: fullText || null };
+      messages.push(assistantMsg);
+      accumulatedNewMessages.push(assistantMsg);
+
+      for (const toolCall of toolCalls) {
+        if (signal?.aborted) {
+          this.logger.warn('Generation aborted by user during tool execution.');
+          return;
+        }
+
+        try {
+          let cleanArgs = toolCall.function.arguments.trim();
+          cleanArgs = cleanArgs.replace(/^```[a-z]*\n/i, '').replace(/\n```$/, '');
+          const args = JSON.parse(cleanArgs);
+          const result = await orchestrator.executeTool(toolCall.function.name, args);
+          
+          const toolMsg = {
+            role: 'user',
+            content: `Tool '${toolCall.function.name}' executed successfully.\nResult:\n${result}`
+          };
+          messages.push(toolMsg);
+          accumulatedNewMessages.push(toolMsg);
+          callbacks.onChunk(`> ✅ **Tool Result:** \`${result.substring(0, 100).replace(/\n/g, ' ')}...\`\n\n`);
+        } catch (err: any) {
+          const errorMsg = {
+            role: 'user',
+            content: `Tool '${toolCall.function.name}' failed with error:\n${err.message}`
+          };
+          messages.push(errorMsg);
+          accumulatedNewMessages.push(errorMsg);
+          callbacks.onChunk(`> ❌ **Tool Error:** ${err.message}\n\n`);
+        }
+      }
+
+      if (signal?.aborted) {
+        this.logger.warn('Generation aborted by user before recursive call.');
+        return;
+      }
+
+      return this.streamGemini(model, prompt, contextItems, optimizerConfig, callbacks, signal, messages, accumulatedNewMessages);
+    } else {
+      const finalMsg = { role: 'assistant', content: fullText || null };
+      accumulatedNewMessages.push(finalMsg);
+      callbacks.onComplete(fullText, accumulatedNewMessages);
+    }
 
     // Post-task Memory Reflection
     if (prompt.length > 20) {
