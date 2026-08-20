@@ -180,7 +180,7 @@ interface Props {
 }
 
 export default function AnalyticsDashboard({ config, onSetActiveModel }: Props) {
-  const [stats, setStats] = useState<TokenStats>({});
+
   const [history, setHistory] = useState<TokenUsageRecord[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string>(config.activeChatModelId || config.models[0]?.id || '');
   const [loading, setLoading] = useState(true);
@@ -193,10 +193,8 @@ export default function AnalyticsDashboard({ config, onSetActiveModel }: Props) 
       if (msg.type === 'tokenStatsResult') {
         // Handle both old format (stats only) and new format {stats, history}
         if (msg.payload && typeof msg.payload.history !== 'undefined') {
-          setStats(msg.payload.stats);
           setHistory(msg.payload.history);
         } else {
-          setStats(msg.payload as TokenStats);
           setHistory([]);
         }
         setLoading(false);
@@ -217,35 +215,18 @@ export default function AnalyticsDashboard({ config, onSetActiveModel }: Props) 
     onSetActiveModel(model.id || model.name);
   };
 
-  // Aggregate stats
-  const totalPrompt = Object.values(stats).reduce((s, v) => s + v.promptTokens, 0);
-  const totalCompletion = Object.values(stats).reduce((s, v) => s + v.completionTokens, 0);
-  const totalTokens = totalPrompt + totalCompletion;
-
-  // Chart data — by model
-  const chartData = config.models.map((m, i) => {
-    const st = stats[m.id || m.name];
-    return {
-      label: m.name,
-      value: st ? st.promptTokens + st.completionTokens : 0,
-      color: COLORS[i % COLORS.length],
-    };
-  }).filter((d) => d.value > 0);
-
-
-
   const [timeFilter, setTimeFilter] = useState<'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly'>('monthly');
 
   // Filter history based on time period
   const now = Date.now();
   const timeThresholds = {
-    hourly: now - (24 * 60 * 60 * 1000), // Last 24 hours
-    daily: now - (7 * 24 * 60 * 60 * 1000), // Last 7 days
-    weekly: now - (4 * 7 * 24 * 60 * 60 * 1000), // Last 4 weeks
-    monthly: now - (30 * 24 * 60 * 60 * 1000), // Last 30 days
-    yearly: now - (365 * 24 * 60 * 60 * 1000), // Last 365 days
+    hourly: now - (24 * 60 * 60 * 1000),
+    daily: now - (7 * 24 * 60 * 60 * 1000),
+    weekly: now - (4 * 7 * 24 * 60 * 60 * 1000),
+    monthly: now - (30 * 24 * 60 * 60 * 1000),
+    yearly: now - (365 * 24 * 60 * 60 * 1000),
   };
-  
+
   // Calculate dynamic stats for ALL models based on the time filter
   const filteredStats: TokenStats = {};
   history.forEach(r => {
@@ -267,8 +248,6 @@ export default function AnalyticsDashboard({ config, onSetActiveModel }: Props) 
       st.requests++;
       st.promptTokens += r.promptTokens;
       st.completionTokens += r.completionTokens;
-      // Note: For simplicity we will average these later if needed, but the original logic just stored sum and averaged on display.
-      // Actually, since TokenStats requires avgDuration, let's store sums here and compute averages after the loop.
       st.avgDuration = (st.avgDuration || 0) + r.durationMs;
       st.avgTTFT = (st.avgTTFT || 0) + r.ttftMs;
       if (r.isError) st.errors = (st.errors || 0) + 1;
@@ -276,7 +255,6 @@ export default function AnalyticsDashboard({ config, onSetActiveModel }: Props) 
       st.optimizedTokens += r.optimizedTokens || 0;
       if (r.evaluationScore !== undefined) {
         st.avgEvalScore = (st.avgEvalScore || 0) + r.evaluationScore;
-        // Hack: temporarily use a new field _evalCount in st to track count of evaluated reqs
         (st as any)._evalCount = ((st as any)._evalCount || 0) + 1;
       }
     }
@@ -292,9 +270,26 @@ export default function AnalyticsDashboard({ config, onSetActiveModel }: Props) 
     if ((st as any)._evalCount > 0) {
       st.avgEvalScore = st.avgEvalScore! / (st as any)._evalCount;
     } else {
-      st.avgEvalScore = undefined; // No evaluations yet
+      st.avgEvalScore = undefined;
     }
   });
+
+  // Aggregate stats using FILTERED STATS instead of all-time stats
+  const totalPrompt = Object.values(filteredStats).reduce((s, v) => s + v.promptTokens, 0);
+  const totalCompletion = Object.values(filteredStats).reduce((s, v) => s + v.completionTokens, 0);
+  const totalTokens = totalPrompt + totalCompletion;
+
+  // Chart data — by model
+  const chartData = config.models.map((m, i) => {
+    const st = filteredStats[m.id || m.name];
+    return {
+      label: m.name,
+      value: st ? st.promptTokens + st.completionTokens : 0,
+      color: COLORS[i % COLORS.length],
+    };
+  }).filter((d) => d.value > 0);
+
+
 
   // Top cards use active model's filtered stats
   const activeStats = filteredStats[selectedModelId] || { requests: 0, promptTokens: 0, completionTokens: 0, avgDuration: 0, avgTTFT: 0, errors: 0, originalTokens: 0, optimizedTokens: 0 };
