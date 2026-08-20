@@ -248,7 +248,13 @@ export class LLMEngine {
       // Transform existing messages into standard format
       const history = existingMessages
         .filter(m => m.role !== 'system')
-        .map(m => ({ role: m.role, content: m.content }));
+        .map(m => {
+          const formatted: any = { role: m.role, content: m.content };
+          if (m.tool_calls) formatted.tool_calls = m.tool_calls;
+          if (m.tool_call_id) formatted.tool_call_id = m.tool_call_id;
+          if (m.name) formatted.name = m.name;
+          return formatted;
+        });
       
       messages.push(...history);
     }
