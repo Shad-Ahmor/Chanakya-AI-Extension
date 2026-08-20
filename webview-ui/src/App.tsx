@@ -72,6 +72,7 @@ export default function App() {
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const isScrolledToBottomRef = useRef(true);
 
   const isMac = typeof navigator !== 'undefined' && navigator.userAgent.includes('Mac');
   const shortcutModifier = isMac ? 'Cmd' : 'Ctrl';
@@ -244,7 +245,9 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (isScrolledToBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -310,6 +313,7 @@ export default function App() {
       timestamp: Date.now()
     };
 
+    isScrolledToBottomRef.current = true;
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
 
@@ -527,7 +531,14 @@ export default function App() {
       </div>
 
       {/* Messages List */}
-      <main className="flex-1 overflow-y-auto p-3.5 space-y-4">
+      <main 
+        className="flex-1 overflow-y-auto p-3.5 space-y-4"
+        onScroll={(e) => {
+          const target = e.target as HTMLElement;
+          const isAtBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 30;
+          isScrolledToBottomRef.current = isAtBottom;
+        }}
+      >
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-6 text-vscode-fg/60 select-none">
             <div className="w-14 h-14 rounded-3xl bg-gradient-to-tr from-sky-500/20 to-purple-500/20 border border-sky-400/30 flex items-center justify-center mb-3 shadow-xl animate-glow">
