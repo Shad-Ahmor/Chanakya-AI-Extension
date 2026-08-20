@@ -116,6 +116,20 @@
 					"when": "inDiffEditor",
 					"group": "navigation"
 				}
+			],
+			"webview/context": [
+				{
+					"command": "editor.action.clipboardCopyAction",
+					"group": "9_cutcopypaste@1"
+				},
+				{
+					"command": "editor.action.clipboardPasteAction",
+					"group": "9_cutcopypaste@2"
+				},
+				{
+					"command": "editor.action.clipboardCutAction",
+					"group": "9_cutcopypaste@3"
+				}
 			]
 		},
 		"viewsContainers": {
