@@ -286,7 +286,7 @@ export class LLMEngine {
       messages,
       stream: true,
       temperature: model.defaultCompletionOptions?.temperature ?? 0.2,
-      max_tokens: model.defaultCompletionOptions?.maxTokens ?? 8192,
+      max_tokens: model.defaultCompletionOptions?.maxTokens ?? 16384,
       ...(model.requestOptions?.extraBody || {})
     };
 
@@ -607,7 +607,7 @@ export class LLMEngine {
       contents,
       generationConfig: {
         temperature: model.defaultCompletionOptions?.temperature ?? 0.2,
-        maxOutputTokens: model.defaultCompletionOptions?.maxTokens ?? 8192,
+        maxOutputTokens: model.defaultCompletionOptions?.maxTokens ?? 16384,
         topP: 0.95
       },
       systemInstruction: { parts: [{ text: systemInstruction }] }
