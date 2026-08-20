@@ -10,7 +10,7 @@ import { ReflectionEngine } from './memory/ReflectionEngine';
 
 export interface StreamCallbacks {
   onChunk: (chunk: string) => void;
-  onComplete: (fullText: string) => void;
+  onComplete: (fullText: string, newMessages?: any[]) => void;
   onError: (error: Error) => void;
   onTokensUsed?: (modelId: string, promptTokens: number, completionTokens: number, durationMs?: number, ttftMs?: number, isError?: boolean, originalTokens?: number, optimizedTokens?: number) => void;
   onOptimizationStats?: (originalTokens: number, optimizedTokens: number) => void;
@@ -165,7 +165,8 @@ export class LLMEngine {
     optimizerConfig: any,
     callbacks: StreamCallbacks,
     signal: AbortSignal,
-    existingMessages?: any[]
+    existingMessages?: any[],
+    accumulatedNewMessages: any[] = []
   ): Promise<void> {
     if (signal?.aborted) {
       this.logger.warn('Generation aborted before starting streamOpenAICompatible.');
@@ -421,16 +422,20 @@ export class LLMEngine {
     // If tool calls were made, execute them and recurse
     if (toolCalls.length > 0) {
       if (!useXmlTools) {
-        messages.push({
+        const assistantMsg = {
           role: 'assistant',
           content: fullText || null,
           tool_calls: toolCalls
-        });
+        };
+        messages.push(assistantMsg);
+        accumulatedNewMessages.push(assistantMsg);
       } else {
-        messages.push({
+        const assistantMsg = {
           role: 'assistant',
           content: fullText || null
-        });
+        };
+        messages.push(assistantMsg);
+        accumulatedNewMessages.push(assistantMsg);
       }
 
       for (const toolCall of toolCalls) {
@@ -446,33 +451,41 @@ export class LLMEngine {
           const result = await orchestrator.executeTool(toolCall.function.name, args);
           
           if (!useXmlTools) {
-            messages.push({
+            const toolMsg = {
               role: 'tool',
               tool_call_id: toolCall.id,
               name: toolCall.function.name,
               content: result
-            });
+            };
+            messages.push(toolMsg);
+            accumulatedNewMessages.push(toolMsg);
           } else {
-            messages.push({
+            const toolMsg = {
               role: 'user',
               content: `Tool '${toolCall.function.name}' executed successfully.\nResult:\n${result}`
-            });
+            };
+            messages.push(toolMsg);
+            accumulatedNewMessages.push(toolMsg);
           }
           
           callbacks.onChunk(`> ✅ **Tool Result:** \`${result.substring(0, 100).replace(/\n/g, ' ')}...\`\n\n`);
         } catch (err: any) {
           if (!useXmlTools) {
-            messages.push({
+            const errorMsg = {
               role: 'tool',
               tool_call_id: toolCall.id,
               name: toolCall.function.name,
               content: `Error: ${err.message}`
-            });
+            };
+            messages.push(errorMsg);
+            accumulatedNewMessages.push(errorMsg);
           } else {
-            messages.push({
+            const errorMsg = {
               role: 'user',
               content: `Tool '${toolCall.function.name}' failed with error:\n${err.message}`
-            });
+            };
+            messages.push(errorMsg);
+            accumulatedNewMessages.push(errorMsg);
           }
           callbacks.onChunk(`> ❌ **Tool Error:** ${err.message}\n\n`);
         }
@@ -483,10 +496,14 @@ export class LLMEngine {
         return;
       }
       // Recursive call for the model to process the tool results
-      return this.streamOpenAICompatible(model, prompt, contextItems, optimizerConfig, callbacks, signal, messages);
+      return this.streamOpenAICompatible(model, prompt, contextItems, optimizerConfig, callbacks, signal, messages, accumulatedNewMessages);
     } else {
       // Finished
-      callbacks.onComplete(fullText);
+      accumulatedNewMessages.push({
+        role: 'assistant',
+        content: fullText || null
+      });
+      callbacks.onComplete(fullText, accumulatedNewMessages);
 
       // Post-task Memory Reflection (only if it wasn't a tiny conversational prompt)
       if (!existingMessages && prompt.length > 20) {
@@ -514,7 +531,8 @@ export class LLMEngine {
     optimizerConfig: any,
     callbacks: StreamCallbacks,
     signal: AbortSignal,
-    existingMessages?: any[]
+    existingMessages?: any[],
+    accumulatedNewMessages: any[] = []
   ): Promise<void> {
     const apiKey = model.apiKey || '';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model.model}:streamGenerateContent?alt=sse&key=${apiKey}`;
@@ -638,7 +656,9 @@ export class LLMEngine {
       }
     }
 
-    callbacks.onComplete(fullText);
+    const finalMsg = { role: 'assistant', content: fullText || null };
+    accumulatedNewMessages.push(finalMsg);
+    callbacks.onComplete(fullText, accumulatedNewMessages);
 
     // Post-task Memory Reflection
     if (prompt.length > 20) {

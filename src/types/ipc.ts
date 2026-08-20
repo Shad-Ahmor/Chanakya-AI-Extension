@@ -21,7 +21,7 @@ export interface TaskStatus {
 
 export interface ChatMessage {
   readonly id: string;
-  readonly role: 'user' | 'assistant' | 'system';
+  readonly role: 'user' | 'assistant' | 'system' | 'tool';
   readonly content: string;
   readonly contextItems?: ContextItem[] | undefined;
   readonly isStreaming?: boolean | undefined;
@@ -31,6 +31,9 @@ export interface ChatMessage {
     readonly originalTokens: number;
     readonly optimizedTokens: number;
   } | undefined;
+  readonly tool_calls?: any[] | undefined;
+  readonly tool_call_id?: string | undefined;
+  readonly name?: string | undefined;
 }
 
 export interface Conversation {

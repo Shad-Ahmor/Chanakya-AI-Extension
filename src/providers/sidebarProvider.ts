@@ -465,22 +465,41 @@ ${diff}`;
                 payload: { messageId: assistantMsgId, chunk }
               });
             },
-            onComplete: (fullText) => {
+            onComplete: (fullText, newMessages) => {
               this.postMessage({
                 type: 'streamEnd',
                 payload: { messageId: assistantMsgId }
               });
               
-              const appendedMessages = [
-                userMessage,
-                {
-                  id: assistantMsgId,
-                  role: 'assistant',
-                  content: fullText,
-                  timestamp: Date.now(),
-                  optimizationStats: currentOptStats
-                }
-              ] as any[];
+              let appendedMessages: any[] = [];
+              if (newMessages && newMessages.length > 0) {
+                // First message is userMessage
+                appendedMessages.push(userMessage);
+                // Map the accumulated messages
+                newMessages.forEach((msg, idx) => {
+                  appendedMessages.push({
+                    id: `${assistantMsgId}-${idx}`,
+                    role: msg.role,
+                    content: msg.content || '',
+                    timestamp: Date.now() + idx,
+                    optimizationStats: idx === newMessages.length - 1 ? currentOptStats : undefined,
+                    tool_calls: msg.tool_calls,
+                    tool_call_id: msg.tool_call_id,
+                    name: msg.name
+                  });
+                });
+              } else {
+                appendedMessages = [
+                  userMessage,
+                  {
+                    id: assistantMsgId,
+                    role: 'assistant',
+                    content: fullText,
+                    timestamp: Date.now(),
+                    optimizationStats: currentOptStats
+                  }
+                ];
+              }
               
               const updatedConv = this._conversationManager.appendMessages(activeId, appendedMessages);
               this.postMessage({
