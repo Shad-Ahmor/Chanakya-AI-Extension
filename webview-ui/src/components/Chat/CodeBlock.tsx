@@ -86,10 +86,26 @@ export default function CodeBlock({ language, value, meta, isStreaming, toolName
   };
 
   const handleApply = () => {
-    if (toolName) {
+    let finalToolName = toolName;
+    let finalArgsString = value;
+
+    // Fallback: If toolName is missing (e.g. parsing failed or still streaming), try to parse the JSON manually
+    if (!finalToolName) {
+      try {
+        const parsed = JSON.parse(value);
+        if (parsed.name && parsed.arguments) {
+          finalToolName = parsed.name;
+          finalArgsString = typeof parsed.arguments === 'string' ? parsed.arguments : JSON.stringify(parsed.arguments);
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    if (finalToolName) {
       vscode.postMessage({
         type: 'executeToolManual',
-        payload: { toolName, argsString: value }
+        payload: { toolName: finalToolName, argsString: finalArgsString }
       });
     } else {
       vscode.postMessage({
@@ -146,7 +162,7 @@ export default function CodeBlock({ language, value, meta, isStreaming, toolName
               </>
             )}
           </button>
-          
+
           <button
             onClick={handleApply}
             title="Smart merge code into active editor using Diff View"
