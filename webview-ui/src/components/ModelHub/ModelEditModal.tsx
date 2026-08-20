@@ -289,15 +289,15 @@ export default function ModelEditModal({ model, onSave, onClose }: Props) {
       setRoles(['chat', 'edit', 'apply', 'autocomplete']); setCapabilities(['tools', 'fim']);
       setContextLength(32768); setMaxTokens(8192); setHeaders([]);
     // ── Cloud: Google Gemini ─────────────────────────────────────────
-    } else if (presetType === 'gemini_25_pro') {
-      setName('Gemini 2.5 Pro'); setProvider('gemini');
-      setModelString('gemini-2.5-pro'); updateApiBase('https://generativelanguage.googleapis.com/v1beta');
+    } else if (presetType === 'gemini_31_pro') {
+      setName('Gemini 3.1 Pro'); setProvider('gemini');
+      setModelString('gemini-3.1-pro-preview'); updateApiBase('https://generativelanguage.googleapis.com/v1beta');
       setApiKey(''); setExecutionMode('online_api');
       setRoles(['chat', 'edit', 'apply']); setCapabilities(['image_input', 'tools']);
       setContextLength(1048576); setMaxTokens(65536); setHeaders([]);
-    } else if (presetType === 'gemini_25_flash') {
-      setName('Gemini 2.5 Flash'); setProvider('gemini');
-      setModelString('gemini-2.5-flash'); updateApiBase('https://generativelanguage.googleapis.com/v1beta');
+    } else if (presetType === 'gemini_31_flash') {
+      setName('Gemini 3.1 Flash'); setProvider('gemini');
+      setModelString('gemini-3.1-flash-preview'); updateApiBase('https://generativelanguage.googleapis.com/v1beta');
       setApiKey(''); setExecutionMode('online_api');
       setRoles(['chat', 'edit', 'apply', 'autocomplete']); setCapabilities(['tools']);
       setContextLength(1048576); setMaxTokens(32768); setHeaders([]);
@@ -702,8 +702,8 @@ export default function ModelEditModal({ model, onSave, onClose }: Props) {
                   </>)}
 
                   {selectedProviderGroup === 'gemini' && (<>
-                    <option value="gemini_25_pro">Gemini 2.5 Pro — Best Quality (1M ctx)</option>
-                    <option value="gemini_25_flash">Gemini 2.5 Flash — Fastest (1M ctx)</option>
+                    <option value="gemini_31_pro">Gemini 3.1 Pro Preview — Best Quality (1M ctx)</option>
+                    <option value="gemini_31_flash">Gemini 3.1 Flash Preview — Fastest (1M ctx)</option>
                     <option value="gemini_20_flash">Gemini 2.0 Flash — Stable (1M ctx)</option>
                   </>)}
 
