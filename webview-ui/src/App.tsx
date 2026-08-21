@@ -47,7 +47,7 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'chat' | 'modelhub' | 'dashboard' | 'graphify'>(initialViewMode);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [rawYaml, setRawYaml] = useState<string>('');
-  const [initialDashboardTab, setInitialDashboardTab] = useState<'visual' | 'yaml' | 'settings' | 'token_optimizer' | 'analytics'>('visual');
+  const [initialDashboardTab, setInitialDashboardTab] = useState<'visual' | 'yaml' | 'settings' | 'token_optimizer' | 'analytics' | 'graphify'>('visual');
   const [activePlan, setActivePlan] = useState<PlanState | null>(null);
   const [askUserPrompt, setAskUserPrompt] = useState<{ id: string; question: string; options?: string[]; defaultOption?: string; isMultiSelect?: boolean } | null>(null);
   
@@ -336,7 +336,8 @@ export default function App() {
         }
 
         case 'openGraphifyView': {
-          setViewMode('graphify');
+          setInitialDashboardTab('graphify');
+          setViewMode('dashboard');
           break;
         }
       }
@@ -534,13 +535,6 @@ export default function App() {
             className={`p-1.5 rounded-lg transition border ${isHistoryDrawerOpen ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' : 'hover:bg-purple-500/20 text-purple-400/80 hover:text-purple-400 border-transparent hover:border-purple-500/30'}`}
           >
             <History className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={() => setViewMode('graphify')}
-            title="Open Graphify Architecture Visualizer"
-            className="p-1.5 hover:bg-rose-500/20 rounded-lg transition text-rose-400/80 hover:text-rose-400 border border-transparent hover:border-rose-500/30"
-          >
-            <Network className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => setViewMode('dashboard')}
@@ -888,7 +882,8 @@ export default function App() {
               <button
                 onClick={() => {
                   setShowSlashMenu(false);
-                  setViewMode('graphify');
+                  setInitialDashboardTab('graphify');
+                  setViewMode('dashboard');
                 }}
                 className="w-full text-left px-3 py-2 hover:bg-cyan-500/20 hover:text-cyan-200 flex items-center gap-2 border-b border-white/5 transition"
               >
