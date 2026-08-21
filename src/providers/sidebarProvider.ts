@@ -12,6 +12,8 @@ import { DocumentParserService } from '../services/documentParserService';
 import { ContextProvider } from '../services/contextProvider';
 import { GraphifyService } from '../services/graphifyService';
 import { PlanTracker } from '../services/planTracker';
+import { McpService } from '../services/mcpService';
+import { McpDbService } from '../services/mcpDbService';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'chanakya-ai-launcher';
@@ -1062,6 +1064,116 @@ ${diff}`;
 
       case 'setTaskStatus': {
         PlanTracker.getInstance().updateTaskStatus(message.payload.taskId, message.payload.status);
+        break;
+      }
+
+      case 'getMcpHubData': {
+        try {
+          const mcpService = McpService.getInstance();
+          const db = McpDbService.getInstance();
+          const servers = await mcpService.getServersStatus();
+          const logs = db.getExecutionLogs({ limit: 40 });
+          this.postMessage({
+            type: 'mcpHubDataResult',
+            payload: { servers, logs }
+          });
+        } catch (err: any) {
+          this._logger.error('Failed to get MCP hub data:', err);
+        }
+        break;
+      }
+
+      case 'addMcpServer': {
+        try {
+          const mcpService = McpService.getInstance();
+          await mcpService.addServer(message.payload.name, message.payload.config);
+          const servers = await mcpService.getServersStatus();
+          const logs = McpDbService.getInstance().getExecutionLogs({ limit: 40 });
+          this.postMessage({
+            type: 'mcpHubDataResult',
+            payload: { servers, logs }
+          });
+          vscode.window.showInformationMessage(`Added MCP server: ${message.payload.name}`);
+        } catch (err: any) {
+          vscode.window.showErrorMessage(`Failed to add MCP server: ${err.message}`);
+        }
+        break;
+      }
+
+      case 'removeMcpServer': {
+        try {
+          const mcpService = McpService.getInstance();
+          await mcpService.removeServer(message.payload.name);
+          const servers = await mcpService.getServersStatus();
+          const logs = McpDbService.getInstance().getExecutionLogs({ limit: 40 });
+          this.postMessage({
+            type: 'mcpHubDataResult',
+            payload: { servers, logs }
+          });
+          vscode.window.showInformationMessage(`Removed MCP server: ${message.payload.name}`);
+        } catch (err: any) {
+          vscode.window.showErrorMessage(`Failed to remove MCP server: ${err.message}`);
+        }
+        break;
+      }
+
+      case 'toggleMcpServer': {
+        try {
+          const mcpService = McpService.getInstance();
+          await mcpService.toggleServer(message.payload.name, message.payload.enabled);
+          const servers = await mcpService.getServersStatus();
+          const logs = McpDbService.getInstance().getExecutionLogs({ limit: 40 });
+          this.postMessage({
+            type: 'mcpHubDataResult',
+            payload: { servers, logs }
+          });
+        } catch (err: any) {
+          vscode.window.showErrorMessage(`Failed to toggle MCP server: ${err.message}`);
+        }
+        break;
+      }
+
+      case 'pingMcpServer': {
+        try {
+          const mcpService = McpService.getInstance();
+          await mcpService.pingServer(message.payload.name);
+          const servers = await mcpService.getServersStatus();
+          const logs = McpDbService.getInstance().getExecutionLogs({ limit: 40 });
+          this.postMessage({
+            type: 'mcpHubDataResult',
+            payload: { servers, logs }
+          });
+        } catch (err: any) {
+          vscode.window.showErrorMessage(`Ping failed for ${message.payload.name}: ${err.message}`);
+        }
+        break;
+      }
+
+      case 'testMcpTool': {
+        const startTime = Date.now();
+        try {
+          const mcpService = McpService.getInstance();
+          const result = await mcpService.callTool(message.payload.serverName, message.payload.toolName, message.payload.args);
+          const latencyMs = Date.now() - startTime;
+          this.postMessage({
+            type: 'mcpToolTestResult',
+            payload: {
+              toolName: message.payload.toolName,
+              result: typeof result === 'string' ? result : JSON.stringify(result, null, 2),
+              latencyMs
+            }
+          });
+        } catch (err: any) {
+          const latencyMs = Date.now() - startTime;
+          this.postMessage({
+            type: 'mcpToolTestResult',
+            payload: {
+              toolName: message.payload.toolName,
+              error: err.message || 'Tool execution failed',
+              latencyMs
+            }
+          });
+        }
         break;
       }
 

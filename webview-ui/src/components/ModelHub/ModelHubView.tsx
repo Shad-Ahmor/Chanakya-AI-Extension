@@ -7,6 +7,7 @@ import SettingsView from '../Settings/SettingsView';
 import TokenOptimizerView from '../TokenOptimizer/TokenOptimizerView';
 import AnalyticsDashboard from '../Analytics/AnalyticsDashboard';
 import GraphifyView from '../Graphify/GraphifyView';
+import McpHubView from '../McpHub/McpHubView';
 import {
   Cpu,
   Globe,
@@ -33,11 +34,11 @@ interface Props {
   onUpdateConfig: (newConfig: AppConfig, rawYaml?: string) => void;
   onClose: () => void;
   isDashboard?: boolean;
-  initialDashboardTab?: 'visual' | 'yaml' | 'settings' | 'token_optimizer' | 'analytics' | 'graphify';
+  initialDashboardTab?: 'visual' | 'yaml' | 'settings' | 'token_optimizer' | 'analytics' | 'graphify' | 'mcp';
 }
 
 export default function ModelHubView({ config, rawYaml, onUpdateConfig, onClose, isDashboard, initialDashboardTab }: Props) {
-  const [activeTab, setActiveTab] = useState<'visual' | 'yaml' | 'settings' | 'token_optimizer' | 'analytics' | 'graphify'>(initialDashboardTab || 'visual');
+  const [activeTab, setActiveTab] = useState<'visual' | 'yaml' | 'settings' | 'token_optimizer' | 'analytics' | 'graphify' | 'mcp'>(initialDashboardTab || 'visual');
   const [filter, setFilter] = useState<'all' | 'local' | 'online' | 'chat' | 'autocomplete'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [editingModel, setEditingModel] = useState<ModelConfig | null>(null);
@@ -236,6 +237,9 @@ export default function ModelHubView({ config, rawYaml, onUpdateConfig, onClose,
               <button onClick={() => setActiveTab('graphify')} className={`pb-3 font-bold text-sm tracking-wide transition-colors ${activeTab === 'graphify' ? 'text-[var(--vscode-textLink-foreground)] border-b-2 border-[var(--vscode-textLink-foreground)]' : 'text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)]'}`}>
                 <div className="flex items-center gap-2"><Network className="w-4 h-4 text-cyan-400" /> Graphify Architecture</div>
               </button>
+              <button onClick={() => setActiveTab('mcp')} className={`pb-3 font-bold text-sm tracking-wide transition-colors ${activeTab === 'mcp' ? 'text-[var(--vscode-textLink-foreground)] border-b-2 border-[var(--vscode-textLink-foreground)]' : 'text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)]'}`}>
+                <div className="flex items-center gap-2"><Server className="w-4 h-4 text-emerald-400" /> MCP Hub</div>
+              </button>
               <button onClick={() => setActiveTab('visual')} className={`pb-3 font-bold text-sm tracking-wide transition-colors ${activeTab === 'visual' ? 'text-[var(--vscode-textLink-foreground)] border-b-2 border-[var(--vscode-textLink-foreground)]' : 'text-[var(--vscode-descriptionForeground)] hover:opacity-80'}`} style={activeTab !== 'visual' ? { color: 'var(--vscode-descriptionForeground)' } : {}}>
                 <div className="flex items-center gap-2"><Zap className="w-4 h-4" /> Models Hub <span className="bg-[var(--vscode-badge-background)] text-[var(--vscode-badge-foreground)] px-2 py-0.5 rounded-full text-[10px] ml-1">{config.models.length}</span></div>
               </button>
@@ -259,6 +263,7 @@ export default function ModelHubView({ config, rawYaml, onUpdateConfig, onClose,
           </div>
           <div className="flex items-center gap-1 bg-vscode-bg border border-vscode-border rounded-lg p-0.5">
             <button onClick={() => setActiveTab('visual')} className={`px-2.5 py-1 rounded-md text-xs font-medium transition ${activeTab === 'visual' ? 'bg-vscode-buttonBg text-vscode-buttonFg shadow-sm' : 'text-vscode-fg/70 hover:text-white'}`}>Visual Grid</button>
+            <button onClick={() => setActiveTab('mcp')} className={`px-2.5 py-1 rounded-md text-xs font-medium transition ${activeTab === 'mcp' ? 'bg-vscode-buttonBg text-vscode-buttonFg shadow-sm' : 'text-vscode-fg/70 hover:text-white'}`}>MCP Hub</button>
             <button onClick={() => { setYamlContent(YAML.stringify(config)); setActiveTab('yaml'); }} className={`px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1 transition ${activeTab === 'yaml' ? 'bg-vscode-buttonBg text-vscode-buttonFg shadow-sm' : 'text-vscode-fg/70 hover:text-white'}`}><FileCode className="w-3.5 h-3.5" /><span>config.yaml</span></button>
           </div>
           <button onClick={onClose} className="px-2.5 py-1 rounded-md border border-vscode-border hover:bg-white/10 text-xs transition">Back to Chat</button>
@@ -271,6 +276,10 @@ export default function ModelHubView({ config, rawYaml, onUpdateConfig, onClose,
         {activeTab === 'graphify' ? (
           <div className="flex-1 -m-10 h-[calc(100%+80px)] overflow-hidden">
             <GraphifyView />
+          </div>
+        ) : activeTab === 'mcp' ? (
+          <div className="flex-1 -m-10 h-[calc(100%+80px)] overflow-hidden">
+            <McpHubView />
           </div>
         ) : activeTab === 'settings' ? (
           <SettingsView />

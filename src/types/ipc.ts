@@ -122,7 +122,13 @@ export type FromWebviewMessage =
   | { type: 'calculateBlastRadius'; payload: { nodeId: string } }
   | { type: 'answerUserPrompt'; payload: { id: string; answer: string } }
   | { type: 'setTaskStatus'; payload: { taskId: string; status: 'pending' | 'in_progress' | 'completed' | 'failed' } }
-  | { type: 'exportArchitectureMd' };
+  | { type: 'exportArchitectureMd' }
+  | { type: 'getMcpHubData' }
+  | { type: 'addMcpServer'; payload: { name: string; config: any } }
+  | { type: 'removeMcpServer'; payload: { name: string } }
+  | { type: 'toggleMcpServer'; payload: { name: string; enabled: boolean } }
+  | { type: 'pingMcpServer'; payload: { name: string } }
+  | { type: 'testMcpTool'; payload: { serverName: string; toolName: string; args: Record<string, any> } };
 
 /**
  * Messages sent FROM Extension Host TO React Webview
@@ -154,6 +160,8 @@ export type ToWebviewMessage =
   | { type: 'graphifyDataResult'; payload: { data: GraphifyData } }
   | { type: 'blastRadiusResult'; payload: { result: any } }
   | { type: 'openGraphifyView' }
+  | { type: 'mcpHubDataResult'; payload: { servers: any[]; logs: any[] } }
+  | { type: 'mcpToolTestResult'; payload: { toolName: string; result?: string; error?: string; latencyMs: number } }
   | { type: 'streamThoughtChunk'; payload: { messageId: string; chunk: string } }
   | { type: 'thoughtComplete'; payload: { messageId: string; thought: string; durationMs: number } }
   | { type: 'planUpdated'; payload: { plan: any | null } }
