@@ -5,12 +5,8 @@ import { ConfigManager } from './configManager';
 import { Logger } from '../utils/logger';
 import { AgentOrchestrator } from './agentOrchestrator';
 import { TrajectoryRecorder } from './skillOpt/trajectoryRecorder';
-import { SkillRegistry } from './skillOpt/skillRegistry';
-import { RulesRegistry } from './rulesEngine/rulesRegistry';
-import { ConversationManager } from './ConversationManager';
 import { EvaluatorFactory } from './skillOpt/evaluator';
 import { MemoryRetriever } from './memory/MemoryRetriever';
-import { RagRetriever } from './ragRetriever';
 import { TokenOptimizer } from '../utils/tokenOptimizer';
 import { ReflectionEngine } from './memory/ReflectionEngine';
 import { UnifiedContextBuilder } from './unifiedContextBuilder';
@@ -351,7 +347,7 @@ export class LLMEngine {
       baseSystemPrompt: systemContent,
       optimizerConfig: optimizerConfig,
       contextItems: contextItems,
-      existingMessages: existingMessages
+      existingMessages: existingMessages || []
     });
 
     systemContent = contextResult.systemPrompt;
@@ -723,7 +719,7 @@ export class LLMEngine {
       baseSystemPrompt: systemInstruction,
       optimizerConfig: optimizerConfig,
       contextItems: contextItems,
-      existingMessages: existingMessages
+      existingMessages: existingMessages || []
     });
 
     systemInstruction = contextResult.systemPrompt;

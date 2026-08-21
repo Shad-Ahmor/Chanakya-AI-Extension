@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { vscode } from '../../vscode';
-import { Play, RotateCcw, Activity, Check, GitCommit, Plus, Edit, Trash2, Download, Upload, ToggleLeft, ToggleRight, X } from 'lucide-react';
+import { Play, RotateCcw, Activity, GitCommit, Plus, Edit, Trash2, Download, Upload, ToggleLeft, ToggleRight, X } from 'lucide-react';
 
 export default function SkillOpsView() {
   const [skills, setSkills] = useState<any[]>([]);
