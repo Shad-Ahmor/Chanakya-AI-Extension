@@ -27,6 +27,7 @@ export default function ChatMessageItem({ message, onOpenArtifact }: Props) {
   const isUser = message.role === 'user';
   const [copied, setCopied] = useState(false);
   const [answeredTools, setAnsweredTools] = useState<Record<string, string>>({});
+  const [showThought, setShowThought] = useState(false);
 
   const handleCopyMessage = () => {
     vscode.postMessage({
@@ -134,6 +135,30 @@ export default function ChatMessageItem({ message, onOpenArtifact }: Props) {
       </div>
 
       {/* Dynamic Task Status Chips (Antigravity Style) */}
+      {!isUser && (message.thought || message.isThinking) && (
+        <div className="my-2">
+          <div
+            onClick={() => setShowThought(!showThought)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono cursor-pointer border border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 transition-all select-none"
+          >
+            <span className="text-xs">🧠</span>
+            <span className="font-semibold">
+              {message.isThinking ? 'DeepSeek Reasoning in progress...' : 'DeepSeek Reasoning Process'}
+            </span>
+            {message.thoughtDurationMs ? (
+              <span className="text-[10px] opacity-70">({(message.thoughtDurationMs / 1000).toFixed(1)}s)</span>
+            ) : null}
+            <span className="text-[10px] ml-1 opacity-70">{showThought ? '▲' : '▼'}</span>
+          </div>
+
+          {showThought && message.thought && (
+            <div className="mt-1.5 p-3 rounded-lg border border-purple-500/20 bg-purple-950/20 text-purple-200/90 text-[12px] font-mono leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto">
+              {message.thought}
+            </div>
+          )}
+        </div>
+      )}
+
       {!isUser && message.taskStatuses && message.taskStatuses.length > 0 && (
         <div className="flex flex-col gap-1.5 my-2">
           {message.taskStatuses.map((task) => (

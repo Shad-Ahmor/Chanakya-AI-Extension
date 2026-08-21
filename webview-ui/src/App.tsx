@@ -10,6 +10,8 @@ import { GoalHubModal } from './components/Chat/GoalHubModal';
 import { ArtifactModal } from './components/Chat/ArtifactModal';
 import ModelHubView from './components/ModelHub/ModelHubView';
 import GraphifyView from './components/Graphify/GraphifyView';
+import { TaskPlanHUD, PlanState } from './components/Chat/TaskPlanHUD';
+import { AskUserModal } from './components/Chat/AskUserModal';
 import {
   Sparkles,
   Send,
@@ -46,6 +48,8 @@ export default function App() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [rawYaml, setRawYaml] = useState<string>('');
   const [initialDashboardTab, setInitialDashboardTab] = useState<'visual' | 'yaml' | 'settings' | 'token_optimizer' | 'analytics'>('visual');
+  const [activePlan, setActivePlan] = useState<PlanState | null>(null);
+  const [askUserPrompt, setAskUserPrompt] = useState<{ id: string; question: string; options?: string[]; defaultOption?: string; isMultiSelect?: boolean } | null>(null);
   
   // Conversation History State
   const [conversations, setConversations] = useState<any[]>([]);
@@ -138,6 +142,47 @@ export default function App() {
                 : msg
             )
           );
+          break;
+        }
+
+        case 'streamThoughtChunk': {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === message.payload.messageId
+                ? {
+                    ...msg,
+                    isThinking: true,
+                    thought: (msg.thought || '') + message.payload.chunk
+                  }
+                : msg
+            )
+          );
+          break;
+        }
+
+        case 'thoughtComplete': {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === message.payload.messageId
+                ? {
+                    ...msg,
+                    isThinking: false,
+                    thought: message.payload.thought,
+                    thoughtDurationMs: message.payload.durationMs
+                  }
+                : msg
+            )
+          );
+          break;
+        }
+
+        case 'planUpdated': {
+          setActivePlan(message.payload.plan);
+          break;
+        }
+
+        case 'askUserPrompt': {
+          setAskUserPrompt(message.payload);
           break;
         }
 
@@ -624,6 +669,9 @@ export default function App() {
         </div>
       )}
 
+      {/* DeepSeek Plan / Task Checklist HUD */}
+      <TaskPlanHUD plan={activePlan} onDismiss={() => setActivePlan(null)} />
+
       {/* Messages List */}
       <main 
         className="flex-1 overflow-y-auto p-3.5 space-y-4"
@@ -1012,6 +1060,13 @@ export default function App() {
             setActiveArtifactModal(null);
             vscode.postMessage({ type: 'submitProceed' });
           }}
+        />
+      )}
+      {/* Interactive Ask-User Modal */}
+      {askUserPrompt && (
+        <AskUserModal
+          {...askUserPrompt}
+          onClose={() => setAskUserPrompt(null)}
         />
       )}
     </div>

@@ -42,6 +42,10 @@ export interface ChatMessage {
     readonly deleted: number;
     readonly modified: number;
   } | undefined;
+  readonly thought?: string | undefined;
+  readonly thoughtDurationMs?: number | undefined;
+  readonly isThinking?: boolean | undefined;
+  readonly planState?: any | undefined;
 }
 
 export interface Conversation {
@@ -106,7 +110,9 @@ export type FromWebviewMessage =
   | { type: 'submitProceed' }
   | { type: 'openSourceControl' }
   | { type: 'getGraphifyData'; payload?: { refresh?: boolean } }
-  | { type: 'openFileInEditor'; payload: { filePath: string } };
+  | { type: 'openFileInEditor'; payload: { filePath: string } }
+  | { type: 'answerUserPrompt'; payload: { id: string; answer: string } }
+  | { type: 'setTaskStatus'; payload: { taskId: string; status: 'pending' | 'in_progress' | 'completed' | 'failed' } };
 
 /**
  * Messages sent FROM Extension Host TO React Webview
@@ -136,4 +142,8 @@ export type ToWebviewMessage =
   | { type: 'artifactUpdated'; payload: { name: string; content: string } }
   | { type: 'fileChanged'; payload: { path: string; changeType: 'create' | 'modify' | 'delete' } }
   | { type: 'graphifyDataResult'; payload: { data: GraphifyData } }
-  | { type: 'openGraphifyView' };
+  | { type: 'openGraphifyView' }
+  | { type: 'streamThoughtChunk'; payload: { messageId: string; chunk: string } }
+  | { type: 'thoughtComplete'; payload: { messageId: string; thought: string; durationMs: number } }
+  | { type: 'planUpdated'; payload: { plan: any | null } }
+  | { type: 'askUserPrompt'; payload: { id: string; question: string; options?: string[]; defaultOption?: string; isMultiSelect?: boolean } };

@@ -11,6 +11,7 @@ import { WorkspaceIndexer } from '../services/workspaceIndexer';
 import { DocumentParserService } from '../services/documentParserService';
 import { ContextProvider } from '../services/contextProvider';
 import { GraphifyService } from '../services/graphifyService';
+import { PlanTracker } from '../services/planTracker';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'chanakya-ai-launcher';
@@ -58,6 +59,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           });
         }
       });
+    });
+
+    PlanTracker.getInstance().events.on('planChanged', (plan) => {
+      if (this._view) {
+        this.postMessage({
+          type: 'planUpdated',
+          payload: { plan }
+        });
+      }
     });
   }
 
@@ -515,6 +525,18 @@ ${diff}`;
               this.postMessage({
                 type: 'streamChunk',
                 payload: { messageId: assistantMsgId, chunk }
+              });
+            },
+            onThoughtChunk: (chunk) => {
+              this.postMessage({
+                type: 'streamThoughtChunk',
+                payload: { messageId: assistantMsgId, chunk }
+              });
+            },
+            onThoughtComplete: (thought, durationMs) => {
+              this.postMessage({
+                type: 'thoughtComplete',
+                payload: { messageId: assistantMsgId, thought, durationMs }
               });
             },
             onComplete: (fullText, newMessages) => {
@@ -983,6 +1005,18 @@ ${diff}`;
           this._logger.error('Failed to generate graphify data', err);
           vscode.window.showErrorMessage(`Failed to generate graph: ${err.message}`);
         }
+        break;
+      }
+
+      case 'answerUserPrompt': {
+        import('../services/agentOrchestrator').then((m) => {
+          m.AgentOrchestrator.getInstance().resolveUserOption(message.payload.answer);
+        });
+        break;
+      }
+
+      case 'setTaskStatus': {
+        PlanTracker.getInstance().updateTaskStatus(message.payload.taskId, message.payload.status);
         break;
       }
 

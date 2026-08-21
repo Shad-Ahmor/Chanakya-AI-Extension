@@ -12,6 +12,8 @@ export interface StreamCallbacks {
   onChunk: (chunk: string) => void;
   onComplete: (fullText: string, newMessages?: any[]) => void;
   onError: (error: Error) => void;
+  onThoughtChunk?: (chunk: string) => void;
+  onThoughtComplete?: (thought: string, durationMs: number) => void;
   onTokensUsed?: (modelId: string, promptTokens: number, completionTokens: number, durationMs?: number, ttftMs?: number, isError?: boolean, originalTokens?: number, optimizedTokens?: number) => void;
   onOptimizationStats?: (originalTokens: number, optimizedTokens: number) => void;
 }
@@ -73,14 +75,58 @@ export class LLMEngine {
     let isError = false;
     let originalTokens = 0;
     let optimizedTokens = 0;
+    let isInsideThink = false;
+    let thoughtBuffer = '';
+    let thoughtStartTime: number | null = null;
+    let thoughtDurationMs = 0;
 
     const wrappedCallbacks: StreamCallbacks = {
       onChunk: (chunk) => {
         if (!firstChunkTime) firstChunkTime = Date.now();
+
+        if (!isInsideThink && chunk.includes('<think>')) {
+          isInsideThink = true;
+          thoughtStartTime = Date.now();
+          const parts = chunk.split('<think>');
+          if (parts[0]) callbacks.onChunk(parts[0]);
+          const remainder = parts.slice(1).join('<think>');
+          if (remainder.includes('</think>')) {
+            const tParts = remainder.split('</think>');
+            thoughtBuffer += tParts[0];
+            thoughtDurationMs = Date.now() - (thoughtStartTime || startTime);
+            if (callbacks.onThoughtChunk) callbacks.onThoughtChunk(tParts[0]);
+            if (callbacks.onThoughtComplete) callbacks.onThoughtComplete(thoughtBuffer, thoughtDurationMs);
+            isInsideThink = false;
+            if (tParts[1]) callbacks.onChunk(tParts[1]);
+          } else {
+            thoughtBuffer += remainder;
+            if (callbacks.onThoughtChunk) callbacks.onThoughtChunk(remainder);
+          }
+          return;
+        }
+
+        if (isInsideThink) {
+          if (chunk.includes('</think>')) {
+            const parts = chunk.split('</think>');
+            thoughtBuffer += parts[0];
+            thoughtDurationMs = Date.now() - (thoughtStartTime || startTime);
+            if (callbacks.onThoughtChunk) callbacks.onThoughtChunk(parts[0]);
+            if (callbacks.onThoughtComplete) callbacks.onThoughtComplete(thoughtBuffer, thoughtDurationMs);
+            isInsideThink = false;
+            if (parts[1]) callbacks.onChunk(parts[1]);
+          } else {
+            thoughtBuffer += chunk;
+            if (callbacks.onThoughtChunk) callbacks.onThoughtChunk(chunk);
+          }
+          return;
+        }
+
         callbacks.onChunk(chunk);
       },
       onComplete: (fullText) => {
-        callbacks.onComplete(fullText);
+        // Clean out any raw <think> tags from final text if lingering
+        const cleanText = fullText.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+        callbacks.onComplete(cleanText || fullText);
       },
       onError: (error) => {
         isError = true;

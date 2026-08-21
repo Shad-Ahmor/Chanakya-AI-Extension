@@ -5,6 +5,10 @@ import * as fs from 'fs/promises';
 import { EventEmitter } from 'events';
 import { Logger } from '../utils/logger';
 import { McpService } from './mcpService';
+import { LspService } from './lspService';
+import { PlanTracker } from './planTracker';
+import { ExecutionGuardService } from './executionGuard';
+import { ToolSpillService } from './toolSpillService';
 export interface ToolDefinition {
   type: 'function';
   function: {
@@ -186,6 +190,95 @@ export class AgentOrchestrator {
             required: ['question', 'options']
           }
         }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'lsp_goto_definition',
+          description: 'Uses VS Code Language Server Protocol (LSP) to find the exact definition location of any function, class, or symbol across the workspace without guessing.',
+          parameters: {
+            type: 'object',
+            properties: {
+              filePath: { type: 'string', description: 'Relative or absolute path to the source file containing the symbol reference.' },
+              line: { type: 'number', description: '0-based line number where the symbol occurs.' },
+              character: { type: 'number', description: '0-based character column offset.' }
+            },
+            required: ['filePath', 'line', 'character']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'lsp_find_references',
+          description: 'Uses VS Code LSP to find all usages and references of a symbol across the entire workspace. Use before refactoring to prevent breaking callers.',
+          parameters: {
+            type: 'object',
+            properties: {
+              filePath: { type: 'string', description: 'Source file path.' },
+              line: { type: 'number', description: '0-based line number.' },
+              character: { type: 'number', description: '0-based character column.' }
+            },
+            required: ['filePath', 'line', 'character']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'lsp_hover',
+          description: 'Extracts exact type signature, hover tooltip, and docstrings from the Language Server for a symbol.',
+          parameters: {
+            type: 'object',
+            properties: {
+              filePath: { type: 'string', description: 'Source file path.' },
+              line: { type: 'number', description: '0-based line number.' },
+              character: { type: 'number', description: '0-based character column.' }
+            },
+            required: ['filePath', 'line', 'character']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'todo_write',
+          description: 'Initializes or updates the agent multi-step plan checklist (DeepSeek Harness style). Keeps the user aligned on task execution status.',
+          parameters: {
+            type: 'object',
+            properties: {
+              title: { type: 'string', description: 'High-level title for this plan.' },
+              tasks: {
+                type: 'array',
+                description: 'Array of sequential tasks to execute.',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string', description: 'Unique task id (e.g. task_1, task_2).' },
+                    title: { type: 'string', description: 'Brief description of the step.' }
+                  },
+                  required: ['title']
+                }
+              }
+            },
+            required: ['title', 'tasks']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'plan_step',
+          description: 'Updates the progress of an individual task in the plan (e.g. task_1 -> completed).',
+          parameters: {
+            type: 'object',
+            properties: {
+              taskId: { type: 'string', description: 'The task id to update.' },
+              status: { type: 'string', enum: ['pending', 'in_progress', 'completed', 'failed'], description: 'The new status of the task.' }
+            },
+            required: ['taskId', 'status']
+          }
+        }
       }
     ];
 
@@ -239,46 +332,92 @@ Only one tool call per response is supported. Do not output anything else if you
 
   public async executeTool(name: string, args: any): Promise<string> {
     this.logger.log(`[Agent] Executing tool: ${name}`);
+
+    // 1. Guard check for loop hygiene
+    const guardIntervention = ExecutionGuardService.getInstance().evaluatePreExecution(name, args);
+    if (guardIntervention.warningPrompt) {
+      this.logger.warn(`[Agent] Loop warning: ${guardIntervention.warningPrompt}`);
+    }
+
     try {
+      let rawResult = '';
       const targetPath = args.path || args.filePath || args.dirPath;
+
       switch (name) {
         case 'run_terminal_command':
-          return await this.runTerminalCommand(args.command, args.cwd);
+          rawResult = await this.runTerminalCommand(args.command, args.cwd);
+          break;
         case 'view_file':
-          return await this.viewFile(targetPath);
+          rawResult = await this.viewFile(targetPath);
+          break;
         case 'search_code':
-          return await this.searchCode(args.query);
+          rawResult = await this.searchCode(args.query);
+          break;
         case 'list_directory':
-          return await this.listDirectory(targetPath);
+          rawResult = await this.listDirectory(targetPath);
+          break;
         case 'edit_file':
-          return await this.editFile(targetPath, args.content);
+          rawResult = await this.editFile(targetPath, args.content);
+          break;
         case 'replace_in_file':
-          return await this.replaceInFile(targetPath, args.targetContent, args.replacementContent);
+          rawResult = await this.replaceInFile(targetPath, args.targetContent, args.replacementContent);
+          break;
         case 'create_file':
-          return await this.createFile(targetPath, args.content);
-
+          rawResult = await this.createFile(targetPath, args.content);
+          break;
         case 'delete_file':
-          return await this.deleteFile(targetPath);
+          rawResult = await this.deleteFile(targetPath);
+          break;
         case 'delete_directory':
-          return await this.deleteDirectory(targetPath);
+          rawResult = await this.deleteDirectory(targetPath);
+          break;
+        case 'lsp_goto_definition': {
+          const results = await LspService.getInstance().goToDefinition(args.filePath, Number(args.line || 0), Number(args.character || 0));
+          rawResult = results.length === 0 ? 'No definitions found.' : JSON.stringify(results, null, 2);
+          break;
+        }
+        case 'lsp_find_references': {
+          const results = await LspService.getInstance().findReferences(args.filePath, Number(args.line || 0), Number(args.character || 0));
+          rawResult = results.length === 0 ? 'No references found.' : JSON.stringify(results, null, 2);
+          break;
+        }
+        case 'lsp_hover': {
+          const hover = await LspService.getInstance().hover(args.filePath, Number(args.line || 0), Number(args.character || 0));
+          rawResult = hover ? hover.contents.join('\n\n') : 'No hover information available.';
+          break;
+        }
+        case 'todo_write': {
+          const plan = PlanTracker.getInstance().setPlan(args.title, args.tasks || []);
+          rawResult = `Plan initialized with ${plan.tasks.length} tasks. Current active step: "${plan.tasks[0]?.title || 'none'}".`;
+          break;
+        }
+        case 'plan_step': {
+          const updated = PlanTracker.getInstance().updateTaskStatus(args.taskId, args.status);
+          rawResult = updated ? `Task '${args.taskId}' updated to '${args.status}'. Overall progress: ${updated.overallProgress}%.` : `Task '${args.taskId}' not found.`;
+          break;
+        }
         case 'ask_user_options':
           return new Promise<string>((resolve) => {
             this.pendingUserOptionResolver = resolve;
-            // The frontend will intercept the stream and show the UI, so we just wait here.
           });
         default:
           if (name.startsWith('mcp_')) {
-            // Format: mcp_serverName_toolName
             const parts = name.split('_');
-            if (parts.length >= 3) {
-              const serverName = parts[1];
-              const toolName = parts.slice(2).join('_');
-              return await McpService.getInstance().callTool(serverName, toolName, args);
-            }
+            const serverName = parts[1];
+            const originalToolName = parts.slice(2).join('_');
+            rawResult = await McpService.getInstance().callTool(serverName, originalToolName, args);
+          } else {
+            throw new Error(`Unknown tool: ${name}`);
           }
-          throw new Error(`Unknown tool: ${name}`);
       }
+
+      ExecutionGuardService.getInstance().recordToolResult(name, true);
+
+      // 2. Tool output spill check
+      const spillResult = await ToolSpillService.getInstance().handleOutputSpill(name, rawResult);
+      return spillResult.content;
     } catch (err: any) {
+      ExecutionGuardService.getInstance().recordToolResult(name, false, err.message);
       this.logger.error(`[Agent] Tool ${name} failed`, err);
       return `Error executing ${name}: ${err.message}`;
     }
