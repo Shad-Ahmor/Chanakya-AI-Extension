@@ -95,6 +95,11 @@ export type FromWebviewMessage =
   | { type: 'clearChat' }
   | { type: 'getConfig' }
   | { type: 'getVscodeSettings' }
+  | { type: 'setPxpipeSetting'; payload: { key: string; value: any } }
+  | { type: 'skillOps:getSkills' }
+  | { type: 'skillOps:getSkillHistory'; payload: { skillName: string } }
+  | { type: 'skillOps:runOptimization'; payload: { skillName: string } }
+  | { type: 'skillOps:rollbackSkill'; payload: { skillName: string; version: number } }
   | { type: 'updateVscodeSetting'; payload: { key: string; value: any } }
   | { type: 'saveConfig'; payload: { config: AppConfig; rawYaml?: string | undefined } }
   | { type: 'testModelConnection'; payload: { modelConfig: ModelConfig } }
@@ -146,6 +151,11 @@ export type ToWebviewMessage =
   | { type: 'setError'; payload: { error: string } }
   | { type: 'clearChat' }
   | { type: 'configResult'; payload: { config: AppConfig; rawYaml: string } }
+  | { type: 'pxpipeSettingsUpdated'; payload: { settings: any } }
+  | { type: 'skillOps:skillsResult'; payload: { skills: any[] } }
+  | { type: 'skillOps:historyResult'; payload: { skillName: string; history: any[] } }
+  | { type: 'skillOps:optimizationResult'; payload: { result: any; error?: string } }
+  | { type: 'skillOps:rollbackResult'; payload: { success: boolean; error?: string } }
   | { type: 'vscodeSettingsResult'; payload: { settings: Record<string, any> } }
   | { type: 'testModelResult'; payload: { modelId: string; success: boolean; latencyMs?: number | undefined; error?: string | undefined } }
   | { type: 'updateTaskStatus'; payload: { messageId: string; task: TaskStatus } }

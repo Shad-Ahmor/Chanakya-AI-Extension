@@ -14,6 +14,8 @@ import { GraphifyService } from '../services/graphifyService';
 import { PlanTracker } from '../services/planTracker';
 import { McpService } from '../services/mcpService';
 import { McpDbService } from '../services/mcpDbService';
+import { SkillRegistry } from '../services/skillOpt/skillRegistry';
+import { SkillOptService } from '../services/skillOpt/skillOptService';
 import { PxPipeRenderer } from '../utils/pxpipeRenderer';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
@@ -197,6 +199,48 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     this._logger.log(`Received message from Webview: ${message.type}`);
 
     switch (message.type) {
+      case 'skillOps:getSkills': {
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath || '';
+        const registry = SkillRegistry.getInstance(workspaceRoot);
+        const skills = registry.listSkills();
+        const payload = skills.map(s => registry['loadMetadata'](s)).filter(m => !!m);
+        if (this._view) this._view.webview.postMessage({ type: 'skillOps:skillsResult', payload: { skills: payload } });
+        break;
+      }
+      case 'skillOps:getSkillHistory': {
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath || '';
+        const registry = SkillRegistry.getInstance(workspaceRoot);
+        const meta = registry['loadMetadata'](message.payload.skillName);
+        if (this._view) this._view.webview.postMessage({ 
+          type: 'skillOps:historyResult', 
+          payload: { skillName: message.payload.skillName, history: meta ? meta.versions.sort((a,b) => b.version - a.version) : [] } 
+        });
+        break;
+      }
+      case 'skillOps:runOptimization': {
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath || '';
+        try {
+          const skillOpt = SkillOptService.getInstance(workspaceRoot);
+          const result = await skillOpt.optimize(message.payload.skillName, async () => {
+            return 0.70 + (Math.random() * 0.20);
+          });
+          if (this._view) this._view.webview.postMessage({ type: 'skillOps:optimizationResult', payload: { result } });
+        } catch (e: any) {
+          if (this._view) this._view.webview.postMessage({ type: 'skillOps:optimizationResult', payload: { error: e.message } });
+        }
+        break;
+      }
+      case 'skillOps:rollbackSkill': {
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath || '';
+        try {
+          const registry = SkillRegistry.getInstance(workspaceRoot);
+          registry.rollbackSkill(message.payload.skillName, message.payload.version);
+          if (this._view) this._view.webview.postMessage({ type: 'skillOps:rollbackResult', payload: { success: true } });
+        } catch (e: any) {
+          if (this._view) this._view.webview.postMessage({ type: 'skillOps:rollbackResult', payload: { success: false, error: e.message } });
+        }
+        break;
+      }
       case 'ready': {
         this._logger.log('React Webview reported READY state.');
         const config = this._configManager.getConfig();

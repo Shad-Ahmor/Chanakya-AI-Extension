@@ -47,7 +47,7 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'chat' | 'modelhub' | 'dashboard' | 'graphify'>(initialViewMode);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [rawYaml, setRawYaml] = useState<string>('');
-  const [initialDashboardTab, setInitialDashboardTab] = useState<'visual' | 'yaml' | 'settings' | 'token_optimizer' | 'analytics' | 'graphify'>('visual');
+  const [initialDashboardTab, setInitialDashboardTab] = useState<'visual' | 'yaml' | 'settings' | 'token_optimizer' | 'skill_ops' | 'analytics' | 'graphify'>('visual');
   const [activePlan, setActivePlan] = useState<PlanState | null>(null);
   const [askUserPrompt, setAskUserPrompt] = useState<{ id: string; question: string; options?: string[]; defaultOption?: string; isMultiSelect?: boolean } | null>(null);
   

@@ -4,6 +4,9 @@ import { ContextItem } from '../types/ipc';
 import { ConfigManager } from './configManager';
 import { Logger } from '../utils/logger';
 import { AgentOrchestrator } from './agentOrchestrator';
+import { TrajectoryRecorder } from './skillOpt/trajectoryRecorder';
+import { SkillRegistry } from './skillOpt/skillRegistry';
+import { EvaluatorFactory } from './skillOpt/evaluator';
 import { MemoryRetriever } from './memory/MemoryRetriever';
 import { TokenOptimizer } from '../utils/tokenOptimizer';
 import { ReflectionEngine } from './memory/ReflectionEngine';
@@ -60,12 +63,42 @@ export class LLMEngine {
       return;
     }
 
-    this.logger.log(`Starting stream completion with model "${activeModel.name}" (${activeModel.model})`);
+    const taskId = 'task-' + Date.now().toString() + '-' + Math.floor(Math.random() * 1000).toString();
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    const workspaceRoot = workspaceFolders ? workspaceFolders[0].uri.fsPath : '';
+
+    let activeSkill = 'general';
+    let bestVersion = 1;
+    let skillContent = '';
+    try {
+      const registry = SkillRegistry.getInstance(workspaceRoot);
+      const best = registry.getBestSkill(activeSkill);
+      if (best) {
+         skillContent = best.content;
+         bestVersion = best.metadata.version;
+      }
+    } catch (e) {
+      this.logger.warn('Failed to load active skill for SkillOps: ' + e);
+    }
+
+    if (skillContent) {
+      contextItems.unshift({
+        type: 'text',
+        title: 'Behavioral Skill Instruction',
+        content: `[ACTIVE SKILL v${bestVersion}]\n${skillContent}\n[/ACTIVE SKILL]`
+      } as any);
+    }
+
+    const recorder = TrajectoryRecorder.getInstance(workspaceRoot);
+    recorder.startTask(taskId, prompt, activeSkill, bestVersion);
+
+    this.logger.log(`Starting stream completion with model "${activeModel.name}" (${activeModel.model}) [Task: ${taskId}]`);
 
     const abortController = new AbortController();
     if (cancellationToken) {
       cancellationToken.onCancellationRequested(() => {
         this.logger.log('Streaming aborted by user request.');
+        recorder.endTask(taskId, false);
         abortController.abort();
       });
     }
@@ -126,10 +159,31 @@ export class LLMEngine {
       onComplete: (fullText) => {
         // Clean out any raw <think> tags from final text if lingering
         const cleanText = fullText.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+        try {
+          recorder.endTask(taskId, true);
+          const trajectory = recorder.getTrajectory(taskId);
+          if (trajectory) {
+             const evaluator = EvaluatorFactory.getEvaluator();
+             const result = evaluator.evaluate(trajectory);
+             this.logger.log(`SkillOps [Task ${taskId}] evaluated: Score ${result.score}, Success: ${result.success}. Reason: ${result.reason}`);
+          }
+        } catch (e) {
+          this.logger.warn('SkillOps evaluation failed, ignoring: ' + e);
+        }
         callbacks.onComplete(cleanText || fullText);
       },
       onError: (error) => {
-        isError = true;
+        try {
+          recorder.endTask(taskId, false);
+          const trajectory = recorder.getTrajectory(taskId);
+          if (trajectory) {
+             const evaluator = EvaluatorFactory.getEvaluator();
+             const result = evaluator.evaluate(trajectory);
+             this.logger.log(`SkillOps [Task ${taskId}] evaluated on error: Score ${result.score}, Success: ${result.success}`);
+          }
+        } catch (e) {
+          this.logger.warn('SkillOps error evaluation failed, ignoring: ' + e);
+        }
         callbacks.onError(error);
       },
       onTokensUsed: (modelId, promptTokens, completionTokens) => {
@@ -206,7 +260,7 @@ export class LLMEngine {
         await this.streamGemini(activeModel, prompt, optimizedContextItems, optimizerConfig, wrappedCallbacks, abortController.signal, finalMessages);
       } else {
         // OpenAI-compatible / Ollama / LM Studio / Enterprise AI Foundry
-        await this.streamOpenAICompatible(activeModel, prompt, optimizedContextItems, optimizerConfig, wrappedCallbacks, abortController.signal, finalMessages);
+        await this.streamOpenAICompatible(activeModel, prompt, optimizedContextItems, optimizerConfig, wrappedCallbacks, abortController.signal, finalMessages, taskId, recorder);
       }
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') {
@@ -216,6 +270,7 @@ export class LLMEngine {
       isError = true;
       const error = err instanceof Error ? err : new Error(String(err));
       this.logger.error('Error during LLM streaming completion', error);
+      recorder.endTask(taskId, false);
       wrappedCallbacks.onError(error);
       
       // If error happens before tokens are counted, we might still want to log an error request.
@@ -235,10 +290,13 @@ export class LLMEngine {
     callbacks: StreamCallbacks,
     signal: AbortSignal,
     existingMessages?: any[],
+    taskId?: string,
+    recorder?: TrajectoryRecorder,
     accumulatedNewMessages: any[] = []
   ): Promise<void> {
     if (signal?.aborted) {
       this.logger.warn('Generation aborted before starting streamOpenAICompatible.');
+      if (taskId && recorder) recorder.endTask(taskId, false);
       return;
     }
 
@@ -530,6 +588,10 @@ export class LLMEngine {
           const args = JSON.parse(cleanArgs);
           const result = await orchestrator.executeTool(toolCall.function.name, args);
           
+          if (taskId && recorder) {
+            recorder.recordToolCall(taskId, toolCall.function.name, args, result);
+          }
+          
           if (!useXmlTools) {
             const toolMsg = {
               role: 'tool',
@@ -547,9 +609,11 @@ export class LLMEngine {
             messages.push(toolMsg);
             accumulatedNewMessages.push(toolMsg);
           }
-          
-          callbacks.onChunk(`> ✅ **Tool Result:** \`${result.substring(0, 100).replace(/\n/g, ' ')}...\`\n\n`);
         } catch (err: any) {
+          this.logger.error(`Error executing tool ${toolCall.function.name}:`, err);
+          if (taskId && recorder) {
+            recorder.recordToolCall(taskId, toolCall.function.name, toolCall.function.arguments, undefined, err.message);
+          }
           if (!useXmlTools) {
             const errorMsg = {
               role: 'tool',
@@ -576,7 +640,7 @@ export class LLMEngine {
         return;
       }
       // Recursive call for the model to process the tool results
-      return this.streamOpenAICompatible(model, prompt, contextItems, optimizerConfig, callbacks, signal, messages, accumulatedNewMessages);
+      return this.streamOpenAICompatible(model, prompt, contextItems, optimizerConfig, callbacks, signal, messages, taskId, recorder, accumulatedNewMessages);
     } else {
       // Finished
       accumulatedNewMessages.push({

@@ -5,6 +5,7 @@ import ModelEditModal from './ModelEditModal';
 import YAML from 'yaml';
 import SettingsView from '../Settings/SettingsView';
 import TokenOptimizerView from '../TokenOptimizer/TokenOptimizerView';
+import SkillOpsView from '../SkillOps/SkillOpsView';
 import AnalyticsDashboard from '../Analytics/AnalyticsDashboard';
 import GraphifyView from '../Graphify/GraphifyView';
 import McpHubView from '../McpHub/McpHubView';
@@ -34,11 +35,11 @@ interface Props {
   onUpdateConfig: (newConfig: AppConfig, rawYaml?: string) => void;
   onClose: () => void;
   isDashboard?: boolean;
-  initialDashboardTab?: 'visual' | 'yaml' | 'settings' | 'token_optimizer' | 'analytics' | 'graphify' | 'mcp';
+  initialDashboardTab?: 'visual' | 'yaml' | 'settings' | 'token_optimizer' | 'skill_ops' | 'analytics' | 'graphify' | 'mcp';
 }
 
 export default function ModelHubView({ config, rawYaml, onUpdateConfig, onClose, isDashboard, initialDashboardTab }: Props) {
-  const [activeTab, setActiveTab] = useState<'visual' | 'yaml' | 'settings' | 'token_optimizer' | 'analytics' | 'graphify' | 'mcp'>(initialDashboardTab || 'visual');
+  const [activeTab, setActiveTab] = useState<'visual' | 'yaml' | 'settings' | 'token_optimizer' | 'skill_ops' | 'analytics' | 'graphify' | 'mcp'>(initialDashboardTab || 'visual');
   const [filter, setFilter] = useState<'all' | 'local' | 'online' | 'chat' | 'autocomplete'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [editingModel, setEditingModel] = useState<ModelConfig | null>(null);
@@ -249,6 +250,9 @@ export default function ModelHubView({ config, rawYaml, onUpdateConfig, onClose,
               <button onClick={() => setActiveTab('token_optimizer')} className={`pb-3 font-bold text-sm tracking-wide transition-colors ${activeTab === 'token_optimizer' ? 'text-[var(--vscode-textLink-foreground)] border-b-2 border-[var(--vscode-textLink-foreground)]' : 'text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)]'}`}>
                 <div className="flex items-center gap-2"><TrendingDown className="w-4 h-4" /> Token Optimizer</div>
               </button>
+              <button onClick={() => setActiveTab('skill_ops')} className={`pb-3 font-bold text-sm tracking-wide transition-colors ${activeTab === 'skill_ops' ? 'text-[var(--vscode-textLink-foreground)] border-b-2 border-[var(--vscode-textLink-foreground)]' : 'text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)]'}`}>
+                <div className="flex items-center gap-2"><TrendingDown className="w-4 h-4" /> SkillOps</div>
+              </button>
               <button onClick={() => { setYamlContent(YAML.stringify(config)); setActiveTab('yaml'); }} className={`pb-3 font-bold text-sm tracking-wide transition-colors ${activeTab === 'yaml' ? 'text-[var(--vscode-textLink-foreground)] border-b-2 border-[var(--vscode-textLink-foreground)]' : 'text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)]'}`}>
                 <div className="flex items-center gap-2"><FileCode className="w-4 h-4" /> config.yaml</div>
               </button>
@@ -285,6 +289,8 @@ export default function ModelHubView({ config, rawYaml, onUpdateConfig, onClose,
           <SettingsView />
         ) : activeTab === 'token_optimizer' ? (
           <TokenOptimizerView config={config} />
+        ) : activeTab === 'skill_ops' ? (
+          <SkillOpsView />
         ) : activeTab === 'analytics' ? (
           <AnalyticsDashboard
             config={config}
