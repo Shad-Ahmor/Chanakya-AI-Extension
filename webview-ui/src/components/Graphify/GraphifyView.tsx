@@ -13,7 +13,9 @@ import {
   Info,
   Sliders,
   ZoomIn,
-  ZoomOut
+  ZoomOut,
+  FolderTree,
+  X
 } from 'lucide-react';
 
 interface GraphifyViewProps {
@@ -33,30 +35,40 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
   const [selectedCommunities, setSelectedCommunities] = useState<Set<number>>(new Set());
   const [activeNeighbors, setActiveNeighbors] = useState<GraphNode[]>([]);
   const [isPhysicsEnabled, setIsPhysicsEnabled] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Request initial data from VS Code extension host
   useEffect(() => {
     setLoading(true);
     vscode.postMessage({ type: 'getGraphifyData' });
 
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 6000);
+
     const handleMessage = (event: MessageEvent) => {
       const msg = event.data;
       if (msg.type === 'graphifyDataResult') {
+        clearTimeout(timer);
         const graphData: GraphifyData = msg.payload.data;
         setData(graphData);
-        // Default: all communities selected
-        setSelectedCommunities(new Set(graphData.communities.map((c) => c.id)));
+        if (graphData && graphData.communities) {
+          setSelectedCommunities(new Set(graphData.communities.map((c) => c.id)));
+        }
         setLoading(false);
       }
     };
 
     window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('message', handleMessage);
+    };
   }, []);
 
   // Initialize and update Vis Network
   useEffect(() => {
-    if (!containerRef.current || !data) return;
+    if (!containerRef.current || !data || data.nodes.length === 0) return;
 
     // Filter nodes by selected communities
     const visibleNodes = data.nodes.filter((n) => selectedCommunities.has(n.community));
@@ -71,7 +83,7 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
     const visNodes = visibleNodes.map((node) => ({
       id: node.id,
       label: node.label,
-      title: `${node.label} (${node.file_type})\nFile: ${node.source_file}\nConnections: ${node.degree}`,
+      title: `${node.label} (${node.file_type})\nFile: ${node.source_file}\nDegree: ${node.degree}`,
       value: node.size,
       color: {
         background: node.color.background,
@@ -101,7 +113,7 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
       to: edge.to,
       arrows: edge.arrows ? { to: { enabled: true, scaleFactor: 0.5 } } : undefined,
       color: {
-        color: 'rgba(255, 255, 255, 0.12)',
+        color: 'rgba(255, 255, 255, 0.15)',
         highlight: '#38bdf8',
         hover: '#38bdf8',
         opacity: 0.25
@@ -110,6 +122,7 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
       hoverWidth: 2,
       selectionWidth: 2.5,
       smooth: {
+        enabled: true,
         type: 'continuous',
         roundness: 0.1
       }
@@ -122,7 +135,7 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
       nodes: {
         scaling: {
           min: 8,
-          max: 28
+          max: 26
         },
         shadow: {
           enabled: true,
@@ -143,15 +156,15 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
         enabled: isPhysicsEnabled,
         solver: 'forceAtlas2Based',
         forceAtlas2Based: {
-          gravitationalConstant: -50,
+          gravitationalConstant: -40,
           centralGravity: 0.01,
-          springLength: 90,
+          springLength: 80,
           springConstant: 0.08,
           damping: 0.4,
           avoidOverlap: 0.8
         },
         stabilization: {
-          iterations: 150,
+          iterations: 120,
           updateInterval: 25
         }
       },
@@ -184,10 +197,10 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
         const found = data.nodes.find((n) => n.id === nodeId);
         if (found) {
           setSelectedNode(found);
-          // Find 1st-degree neighbors
           const connectedIds = network.getConnectedNodes(nodeId) as string[];
           const neighbors = data.nodes.filter((n) => connectedIds.includes(n.id));
           setActiveNeighbors(neighbors);
+          setIsSidebarOpen(true); // Open inspector when clicking node
         }
       } else {
         setSelectedNode(null);
@@ -217,7 +230,7 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
     };
   }, [data, selectedCommunities, isPhysicsEnabled]);
 
-  // Handle Search filtering and node focusing
+  // Search filtering
   const filteredSearchResults = useMemo(() => {
     if (!data || !searchQuery.trim()) return [];
     const q = searchQuery.toLowerCase();
@@ -284,51 +297,48 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
     vscode.postMessage({ type: 'getGraphifyData', payload: { refresh: true } });
   };
 
+  const hasNoNodes = !loading && (!data || data.nodes.length === 0);
+
   return (
-    <div className="flex flex-col h-full w-full bg-[#0a0a12] text-slate-200 overflow-hidden select-none font-sans">
+    <div className="flex flex-col h-full w-full bg-[#0a0a12] text-slate-200 overflow-hidden select-none font-sans relative">
       {/* Top Header Bar */}
-      <div className="flex items-center justify-between px-4 py-2.5 bg-[#12121f] border-b border-white/10 z-20 shadow-md">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between px-3 py-2 bg-[#12121f] border-b border-white/10 z-20 shrink-0 gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           {onBack && (
             <button
               onClick={onBack}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-white/5 hover:bg-white/10 text-slate-300 transition"
-              title="Back to Dashboard"
+              className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-white/5 hover:bg-white/10 text-slate-300 transition shrink-0"
+              title="Back"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back</span>
+              <span className="hidden sm:inline">Back</span>
             </button>
           )}
-          <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
-            <h1 className="text-sm font-semibold text-white tracking-wide flex items-center gap-1.5">
-              <span>Graphify Architecture</span>
+          <div className="flex items-center gap-1.5 min-w-0 truncate">
+            <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shrink-0" />
+            <h1 className="text-xs sm:text-sm font-semibold text-white tracking-wide truncate">
+              Graphify Architecture
             </h1>
           </div>
-          {data && (
-            <span className="text-[11px] px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-slate-400">
-              {data.stats.nodeCount} nodes · {data.stats.edgeCount} edges · {data.stats.communityCount} communities
-            </span>
-          )}
         </div>
 
         {/* Toolbar Controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
           {/* Search bar */}
           <div className="relative">
-            <div className="flex items-center bg-[#0a0a12] border border-white/10 rounded-lg px-2.5 py-1 text-xs w-56 focus-within:border-cyan-500/50 transition">
-              <Search className="w-3.5 h-3.5 text-slate-400 mr-2 flex-shrink-0" />
+            <div className="flex items-center bg-[#0a0a12] border border-white/10 rounded-md px-2 py-1 text-xs w-28 sm:w-44 focus-within:w-48 sm:focus-within:w-56 focus-within:border-cyan-500/50 transition-all">
+              <Search className="w-3 h-3 text-slate-400 mr-1.5 shrink-0" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search nodes or symbols..."
+                placeholder="Search..."
                 className="bg-transparent border-none outline-none text-slate-200 w-full placeholder-slate-500 text-xs"
               />
             </div>
             {/* Search Dropdown */}
             {filteredSearchResults.length > 0 && (
-              <div className="absolute left-0 right-0 top-full mt-1 bg-[#1a1a2e] border border-white/15 rounded-lg shadow-2xl max-h-60 overflow-y-auto z-50 p-1">
+              <div className="absolute right-0 top-full mt-1 bg-[#1a1a2e] border border-white/15 rounded-lg shadow-2xl max-h-60 overflow-y-auto z-50 p-1 w-64">
                 {filteredSearchResults.map((n) => (
                   <div
                     key={n.id}
@@ -345,178 +355,231 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
 
           <button
             onClick={handleZoomIn}
-            className="p-1.5 rounded-md bg-white/5 hover:bg-white/10 text-slate-300 transition"
+            className="p-1 rounded bg-white/5 hover:bg-white/10 text-slate-300 transition"
             title="Zoom In"
           >
-            <ZoomIn className="w-4 h-4" />
+            <ZoomIn className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={handleZoomOut}
-            className="p-1.5 rounded-md bg-white/5 hover:bg-white/10 text-slate-300 transition"
+            className="p-1 rounded bg-white/5 hover:bg-white/10 text-slate-300 transition"
             title="Zoom Out"
           >
-            <ZoomOut className="w-4 h-4" />
+            <ZoomOut className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={handleFit}
-            className="p-1.5 rounded-md bg-white/5 hover:bg-white/10 text-slate-300 transition"
+            className="p-1 rounded bg-white/5 hover:bg-white/10 text-slate-300 transition"
             title="Fit to Screen"
           >
-            <Maximize2 className="w-4 h-4" />
+            <Maximize2 className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => setIsPhysicsEnabled((prev) => !prev)}
-            className={`p-1.5 rounded-md transition ${
+            className={`p-1 rounded transition ${
               isPhysicsEnabled ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-white/5 text-slate-400'
             }`}
-            title="Toggle Physics Simulation"
+            title="Toggle Physics"
           >
-            <Sliders className="w-4 h-4" />
+            <Sliders className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={handleRefresh}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-cyan-600/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-600/30 transition"
-            title="Re-scan and refresh workspace"
+            className="p-1 rounded bg-cyan-600/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-600/30 transition"
+            title="Re-scan Workspace"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
+          </button>
+
+          {/* Communities Toggle Button */}
+          <button
+            onClick={() => setIsSidebarOpen((prev) => !prev)}
+            className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition ${
+              isSidebarOpen
+                ? 'bg-cyan-500 text-black font-semibold'
+                : 'bg-white/10 text-slate-200 hover:bg-white/15'
+            }`}
+            title="Toggle Communities & Inspector"
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Layers</span>
+            {data && data.communities && (
+              <span className="text-[10px] bg-black/30 px-1 py-0.2 rounded font-mono">
+                {data.communities.length}
+              </span>
+            )}
           </button>
         </div>
       </div>
 
-      {/* Main Body: Graph Canvas + Communities Right Sidebar */}
-      <div className="flex flex-1 w-full h-full relative overflow-hidden">
-        {/* Graph Canvas Container */}
-        <div className="flex-1 h-full w-full relative bg-[#0d0d18]">
-          <div ref={containerRef} className="w-full h-full cursor-grab active:cursor-grabbing" />
+      {/* Main Body: Graph Canvas */}
+      <div className="flex-1 w-full h-full relative overflow-hidden bg-[#0d0d18]">
+        <div ref={containerRef} className="w-full h-full cursor-grab active:cursor-grabbing" />
 
-          {loading && (
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center gap-3 z-30">
-              <div className="w-10 h-10 border-3 border-cyan-400/20 border-t-cyan-400 rounded-full animate-spin" />
-              <div className="text-sm font-medium text-slate-300">Analyzing Project & Constructing Graphify...</div>
-            </div>
-          )}
-
-          {/* Quick Tip Pill */}
-          <div className="absolute bottom-3 left-3 px-3 py-1.5 rounded-lg bg-black/70 backdrop-blur-md border border-white/10 text-[11px] text-slate-400 pointer-events-none z-10 flex items-center gap-2">
-            <span className="text-cyan-400 font-semibold">Tip:</span> Double-click any node to jump directly to its file in the editor!
+        {/* Loading Overlay */}
+        {loading && (
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex flex-col items-center justify-center gap-3 z-30">
+            <div className="w-8 h-8 border-3 border-cyan-400/20 border-t-cyan-400 rounded-full animate-spin" />
+            <div className="text-xs font-medium text-slate-300">Analyzing Project & Constructing Graphify...</div>
           </div>
-        </div>
+        )}
 
-        {/* Right Sidebar: Communities & Node Inspector */}
-        <div className="w-72 h-full bg-[#121222] border-l border-white/10 flex flex-col z-20 select-none shadow-xl">
-          {/* Node Inspector Card */}
-          {selectedNode ? (
-            <div className="p-3.5 border-b border-white/10 bg-[#16162a] flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold tracking-wider uppercase text-cyan-400 flex items-center gap-1">
-                  <Info className="w-3 h-3" /> Node Inspector
-                </span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-slate-300 font-mono">
-                  {selectedNode.file_type}
-                </span>
-              </div>
-              <div className="text-sm font-semibold text-white truncate" title={selectedNode.label}>
-                {selectedNode.label}
-              </div>
-              <div className="text-[11px] text-slate-400 flex items-center justify-between">
-                <span className="truncate max-w-[180px]" title={selectedNode.source_file}>
-                  {selectedNode.source_file}
-                </span>
-                <button
-                  onClick={() =>
-                    vscode.postMessage({
-                      type: 'openFileInEditor',
-                      payload: { filePath: selectedNode.source_file }
-                    })
-                  }
-                  className="text-cyan-400 hover:text-cyan-300 p-1 hover:bg-white/5 rounded"
-                  title="Open in VS Code Editor"
-                >
-                  <ExternalLink className="w-3 h-3" />
-                </button>
-              </div>
-              <div className="flex items-center gap-2 text-[11px] text-slate-400">
-                <span>Degree: <b className="text-slate-200">{selectedNode.degree}</b></span>
-                <span>·</span>
-                <span>Community: <b className="text-slate-200">{selectedNode.community_name}</b></span>
-              </div>
-
-              {/* Neighbors / Connections List */}
-              {activeNeighbors.length > 0 && (
-                <div className="mt-1">
-                  <div className="text-[10px] text-slate-400 uppercase font-semibold mb-1">
-                    Connected Nodes ({activeNeighbors.length})
-                  </div>
-                  <div className="max-h-28 overflow-y-auto flex flex-col gap-1 pr-1">
-                    {activeNeighbors.map((neighbor) => (
-                      <div
-                        key={neighbor.id}
-                        onClick={() => handleSelectSearchResult(neighbor)}
-                        className="flex items-center justify-between px-2 py-1 rounded text-[11px] bg-black/30 hover:bg-cyan-500/20 cursor-pointer transition border border-white/5"
-                      >
-                        <span className="truncate max-w-[160px] text-slate-300">{neighbor.label}</span>
-                        <div
-                          className="w-2 h-2 rounded-full flex-shrink-0"
-                          style={{ backgroundColor: neighbor.color.background }}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+        {/* Empty State Overlay */}
+        {hasNoNodes && (
+          <div className="absolute inset-0 bg-[#0d0d18] flex flex-col items-center justify-center p-6 text-center z-20">
+            <div className="w-14 h-14 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 mb-4 shadow-lg shadow-cyan-500/5">
+              <FolderTree className="w-7 h-7" />
             </div>
-          ) : (
-            <div className="p-3 border-b border-white/10 text-xs text-slate-400 italic text-center">
-              Click a node to inspect details & connections
-            </div>
-          )}
-
-          {/* Communities Header & Controls */}
-          <div className="px-3.5 py-2.5 border-b border-white/10 flex items-center justify-between bg-[#141426]">
-            <div className="flex items-center gap-1.5">
-              <Layers className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="text-xs font-bold tracking-wider uppercase text-slate-300">Communities</span>
-            </div>
+            <h2 className="text-base font-bold text-white mb-1.5">No Open Workspace Found</h2>
+            <p className="text-xs text-slate-400 max-w-sm mb-5 leading-relaxed">
+              Open a project folder in VS Code to generate an interactive architectural graph of all your files, classes, and dependencies.
+            </p>
             <button
-              onClick={handleToggleAllCommunities}
-              className="text-[11px] text-cyan-400 hover:text-cyan-300 font-medium transition"
+              onClick={handleRefresh}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-black font-semibold text-xs transition shadow-md shadow-cyan-500/20"
             >
-              {data && selectedCommunities.size === data.communities.length ? 'Deselect All' : 'Select All'}
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Scan Active Project</span>
             </button>
           </div>
+        )}
 
-          {/* Communities List */}
-          <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {data?.communities.map((comm) => {
-              const isSelected = selectedCommunities.has(comm.id);
-              return (
-                <div
-                  key={comm.id}
-                  onClick={() => handleToggleCommunity(comm.id)}
-                  className={`flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs cursor-pointer transition select-none ${
-                    isSelected ? 'bg-white/5 text-slate-200 hover:bg-white/10' : 'text-slate-500 hover:bg-white/5 opacity-60'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 truncate">
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => {}} // Handled by parent div
-                      className="w-3.5 h-3.5 rounded border-slate-700 text-cyan-500 focus:ring-0 cursor-pointer pointer-events-none"
-                    />
-                    <div
-                      className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: comm.color }}
-                    />
-                    <span className="truncate font-medium">{comm.name}</span>
-                  </div>
-                  <span className="text-[11px] font-mono text-slate-400 ml-2">{comm.count}</span>
-                </div>
-              );
-            })}
+        {/* Stats Pill Overlay */}
+        {data && data.stats.nodeCount > 0 && (
+          <div className="absolute bottom-2.5 left-2.5 px-2.5 py-1 rounded-md bg-black/80 backdrop-blur-md border border-white/10 text-[11px] text-slate-400 pointer-events-none z-10 flex items-center gap-2">
+            <span>
+              <b className="text-white">{data.stats.nodeCount}</b> nodes · <b className="text-white">{data.stats.edgeCount}</b> edges · <b className="text-cyan-400">{data.stats.communityCount}</b> communities
+            </span>
           </div>
-        </div>
+        )}
+
+        {/* Slide-in / Collapsible Right Drawer for Communities & Inspector */}
+        {isSidebarOpen && (
+          <div className="absolute right-0 top-0 bottom-0 w-72 max-w-[85vw] bg-[#121222]/95 backdrop-blur-md border-l border-white/10 flex flex-col z-30 shadow-2xl animate-in slide-in-from-right duration-200">
+            {/* Drawer Header */}
+            <div className="px-3 py-2 border-b border-white/10 flex items-center justify-between bg-[#16162a]">
+              <div className="flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-cyan-400" />
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                  Communities & Details
+                </span>
+              </div>
+              <button
+                onClick={() => setIsSidebarOpen(false)}
+                className="p-1 hover:bg-white/10 rounded text-slate-400 hover:text-white transition"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Node Inspector Card */}
+            {selectedNode && (
+              <div className="p-3 border-b border-white/10 bg-[#141426] flex flex-col gap-1.5 shrink-0">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold tracking-wider uppercase text-cyan-400 flex items-center gap-1">
+                    <Info className="w-3 h-3" /> Selected Node
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-slate-300 font-mono">
+                    {selectedNode.file_type}
+                  </span>
+                </div>
+                <div className="text-xs font-bold text-white truncate" title={selectedNode.label}>
+                  {selectedNode.label}
+                </div>
+                <div className="text-[11px] text-slate-400 flex items-center justify-between">
+                  <span className="truncate max-w-[170px]" title={selectedNode.source_file}>
+                    {selectedNode.source_file}
+                  </span>
+                  <button
+                    onClick={() =>
+                      vscode.postMessage({
+                        type: 'openFileInEditor',
+                        payload: { filePath: selectedNode.source_file }
+                      })
+                    }
+                    className="text-cyan-400 hover:text-cyan-300 p-1 hover:bg-white/5 rounded"
+                    title="Open in VS Code"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                  </button>
+                </div>
+                <div className="text-[10px] text-slate-400 flex items-center gap-2">
+                  <span>Degree: <b className="text-slate-200">{selectedNode.degree}</b></span>
+                  <span>·</span>
+                  <span>Community: <b className="text-slate-200">{selectedNode.community_name}</b></span>
+                </div>
+
+                {/* Neighbors List */}
+                {activeNeighbors.length > 0 && (
+                  <div className="mt-1">
+                    <div className="text-[10px] text-slate-400 uppercase font-semibold mb-1">
+                      Connected ({activeNeighbors.length})
+                    </div>
+                    <div className="max-h-24 overflow-y-auto flex flex-col gap-1 pr-1">
+                      {activeNeighbors.map((neighbor) => (
+                        <div
+                          key={neighbor.id}
+                          onClick={() => handleSelectSearchResult(neighbor)}
+                          className="flex items-center justify-between px-2 py-0.5 rounded text-[11px] bg-black/40 hover:bg-cyan-500/20 cursor-pointer transition border border-white/5"
+                        >
+                          <span className="truncate max-w-[150px] text-slate-300">{neighbor.label}</span>
+                          <div
+                            className="w-2 h-2 rounded-full shrink-0"
+                            style={{ backgroundColor: neighbor.color.background }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Communities Header Controls */}
+            <div className="px-3 py-2 border-b border-white/10 flex items-center justify-between bg-[#141426] shrink-0">
+              <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                Layers ({data?.communities.length || 0})
+              </span>
+              <button
+                onClick={handleToggleAllCommunities}
+                className="text-[11px] text-cyan-400 hover:text-cyan-300 font-medium transition"
+              >
+                {data && selectedCommunities.size === data.communities.length ? 'Deselect All' : 'Select All'}
+              </button>
+            </div>
+
+            {/* Communities Scrollable List */}
+            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+              {data?.communities.map((comm) => {
+                const isSelected = selectedCommunities.has(comm.id);
+                return (
+                  <div
+                    key={comm.id}
+                    onClick={() => handleToggleCommunity(comm.id)}
+                    className={`flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs cursor-pointer transition select-none ${
+                      isSelected ? 'bg-white/5 text-slate-200 hover:bg-white/10' : 'text-slate-500 hover:bg-white/5 opacity-60'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {}}
+                        className="w-3.5 h-3.5 rounded border-slate-700 text-cyan-500 focus:ring-0 cursor-pointer pointer-events-none"
+                      />
+                      <div
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: comm.color }}
+                      />
+                      <span className="truncate font-medium">{comm.name}</span>
+                    </div>
+                    <span className="text-[11px] font-mono text-slate-400 ml-2">{comm.count}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

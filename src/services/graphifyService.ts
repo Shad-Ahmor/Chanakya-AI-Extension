@@ -45,12 +45,24 @@ export class GraphifyService {
     }
 
     const wsFolders = vscode.workspace.workspaceFolders;
-    if (!wsFolders || wsFolders.length === 0) {
-      throw new Error('No workspace folder open');
+    let rootPath: string | null = null;
+
+    if (wsFolders && wsFolders.length > 0) {
+      rootPath = wsFolders[0].uri.fsPath;
+    } else if (vscode.window.activeTextEditor) {
+      rootPath = path.dirname(vscode.window.activeTextEditor.document.fileName);
     }
 
-    const rootUri = wsFolders[0].uri;
-    const rootPath = rootUri.fsPath;
+    if (!rootPath) {
+      this.logger.log('[GraphifyService] No workspace folder or active file open');
+      return {
+        nodes: [],
+        edges: [],
+        communities: [],
+        stats: { nodeCount: 0, edgeCount: 0, communityCount: 0 }
+      };
+    }
+
     this.logger.log(`[GraphifyService] Scanning workspace for graph: ${rootPath}`);
 
     const excludePattern = '{**/node_modules/**,**/dist/**,**/.git/**,**/.vscode/**,**/build/**,**/out/**,**/.next/**,**/venv/**,**/__pycache__/**}';
