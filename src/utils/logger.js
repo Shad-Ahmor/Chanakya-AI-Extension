@@ -34,49 +34,43 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Logger = void 0;
-var vscode = __importStar(require("vscode"));
+const vscode = __importStar(require("vscode"));
 /**
  * Singleton Logger using VS Code OutputChannel for clean and non-intrusive logging.
  */
-var Logger = /** @class */ (function () {
-    function Logger() {
+class Logger {
+    static instance;
+    channel;
+    constructor() {
         this.channel = vscode.window.createOutputChannel('Chanakya AI Enhancer');
     }
-    Logger.getInstance = function () {
+    static getInstance() {
         if (!Logger.instance) {
             Logger.instance = new Logger();
         }
         return Logger.instance;
-    };
-    Logger.prototype.log = function (message) {
-        var args = [];
-        for (var _i = 1; _i < arguments.length; _i++) {
-            args[_i - 1] = arguments[_i];
-        }
-        var timestamp = new Date().toISOString();
-        var formattedArgs = args.length > 0 ? " | ".concat(JSON.stringify(args)) : '';
-        this.channel.appendLine("[INFO  ".concat(timestamp, "] ").concat(message).concat(formattedArgs));
-    };
-    Logger.prototype.warn = function (message) {
-        var args = [];
-        for (var _i = 1; _i < arguments.length; _i++) {
-            args[_i - 1] = arguments[_i];
-        }
-        var timestamp = new Date().toISOString();
-        var formattedArgs = args.length > 0 ? " | ".concat(JSON.stringify(args)) : '';
-        this.channel.appendLine("[WARN  ".concat(timestamp, "] ").concat(message).concat(formattedArgs));
-    };
-    Logger.prototype.error = function (message, error) {
-        var timestamp = new Date().toISOString();
-        var errDetails = error instanceof Error ? "\nStack: ".concat(error.stack) : JSON.stringify(error);
-        this.channel.appendLine("[ERROR ".concat(timestamp, "] ").concat(message, " ").concat(errDetails !== null && errDetails !== void 0 ? errDetails : ''));
-    };
-    Logger.prototype.show = function () {
+    }
+    log(message, ...args) {
+        const timestamp = new Date().toISOString();
+        const formattedArgs = args.length > 0 ? ` | ${JSON.stringify(args)}` : '';
+        this.channel.appendLine(`[INFO  ${timestamp}] ${message}${formattedArgs}`);
+    }
+    warn(message, ...args) {
+        const timestamp = new Date().toISOString();
+        const formattedArgs = args.length > 0 ? ` | ${JSON.stringify(args)}` : '';
+        this.channel.appendLine(`[WARN  ${timestamp}] ${message}${formattedArgs}`);
+    }
+    error(message, error) {
+        const timestamp = new Date().toISOString();
+        const errDetails = error instanceof Error ? `\nStack: ${error.stack}` : JSON.stringify(error);
+        this.channel.appendLine(`[ERROR ${timestamp}] ${message} ${errDetails ?? ''}`);
+    }
+    show() {
         this.channel.show(true);
-    };
-    Logger.prototype.dispose = function () {
+    }
+    dispose() {
         this.channel.dispose();
-    };
-    return Logger;
-}());
+    }
+}
 exports.Logger = Logger;
+//# sourceMappingURL=logger.js.map

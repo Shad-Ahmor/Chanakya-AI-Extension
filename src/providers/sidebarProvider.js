@@ -1,0 +1,1256 @@
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.SidebarProvider = void 0;
+const vscode = __importStar(require("vscode"));
+const path = __importStar(require("path"));
+const configManager_1 = require("../services/configManager");
+const llmEngine_1 = require("../services/llmEngine");
+const llmGateway_1 = require("../services/llmGateway");
+const logger_1 = require("../utils/logger");
+const security_1 = require("../utils/security");
+const ConversationManager_1 = require("../services/ConversationManager");
+const workspaceIndexer_1 = require("../services/workspaceIndexer");
+const documentParserService_1 = require("../services/documentParserService");
+const contextProvider_1 = require("../services/contextProvider");
+const graphifyService_1 = require("../services/graphifyService");
+const planTracker_1 = require("../services/planTracker");
+const mcpService_1 = require("../services/mcpService");
+const mcpDbService_1 = require("../services/mcpDbService");
+const skillRegistry_1 = require("../services/skillOpt/skillRegistry");
+const skillOptService_1 = require("../services/skillOpt/skillOptService");
+const pxpipeRenderer_1 = require("../utils/pxpipeRenderer");
+class SidebarProvider {
+    static viewType = 'chanakya-ai-launcher';
+    _view;
+    _extensionUri;
+    _context;
+    _logger = logger_1.Logger.getInstance();
+    _configManager = configManager_1.ConfigManager.getInstance();
+    _conversationManager = ConversationManager_1.ConversationManager.getInstance();
+    _activeTasks = new Map();
+    constructor(extensionUri, context) {
+        this._extensionUri = extensionUri;
+        this._context = context;
+        // Listen for external changes to config.yaml (Two-way sync)
+        this._context.subscriptions.push(this._configManager.onDidChangeConfig((newConfig) => {
+            if (this._view) {
+                const rawYaml = this._configManager.getRawYaml();
+                this.postMessage({
+                    type: 'configResult',
+                    payload: { config: newConfig, rawYaml }
+                });
+            }
+        }));
+        // Listen for backend artifact updates and pass them to the UI
+        Promise.resolve().then(() => __importStar(require('../services/agentOrchestrator'))).then((m) => {
+            m.AgentOrchestrator.getInstance().events.on('artifactUpdated', (payload) => {
+                if (this._view) {
+                    this.postMessage({
+                        type: 'artifactUpdated',
+                        payload
+                    });
+                }
+            });
+            m.AgentOrchestrator.getInstance().events.on('fileChanged', (payload) => {
+                if (this._view) {
+                    this.postMessage({
+                        type: 'fileChanged',
+                        payload
+                    });
+                }
+            });
+        });
+        planTracker_1.PlanTracker.getInstance().events.on('planChanged', (plan) => {
+            if (this._view) {
+                this.postMessage({
+                    type: 'planUpdated',
+                    payload: { plan }
+                });
+            }
+        });
+    }
+    /** Persist token usage per model to globalState */
+    async _saveTokenUsage(modelId, promptTokens, completionTokens, durationMs = 0, ttftMs = 0, isError = false, originalTokens = 0, optimizedTokens = 0) {
+        const key = 'chanakya.tokenStats';
+        const existing = this._context.globalState.get(key) || {};
+        const prev = existing[modelId] || { promptTokens: 0, completionTokens: 0, requests: 0 };
+        existing[modelId] = {
+            promptTokens: prev.promptTokens + promptTokens,
+            completionTokens: prev.completionTokens + completionTokens,
+            requests: prev.requests + 1,
+        };
+        await this._context.globalState.update(key, existing);
+        // Save time-series history
+        const historyKey = 'chanakya.tokenHistory';
+        const history = this._context.globalState.get(historyKey) || [];
+        history.push({
+            timestamp: Date.now(),
+            modelId,
+            promptTokens,
+            completionTokens,
+            durationMs,
+            ttftMs,
+            isError,
+            originalTokens,
+            optimizedTokens
+        });
+        // Cap at 2000 items
+        if (history.length > 2000) {
+            history.splice(0, history.length - 2000);
+        }
+        await this._context.globalState.update(historyKey, history);
+    }
+    _createGitSnapshot(promptText) {
+        try {
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            if (!workspaceFolders)
+                return;
+            const cwd = workspaceFolders[0].uri.fsPath;
+            const config = vscode.workspace.getConfiguration('aiEnhancer');
+            if (config.get('enableGitSnapshots') === false) {
+                return; // Disabled by user
+            }
+            const fs = require('fs');
+            const path = require('path');
+            if (!fs.existsSync(path.join(cwd, '.git'))) {
+                return; // Not a git repository
+            }
+            const cp = require('child_process');
+            // Stage everything
+            cp.execSync('git add .', { cwd, stdio: 'ignore' });
+            // Check if there are changes to commit
+            const status = cp.execSync('git status --porcelain', { cwd }).toString();
+            if (status.trim() !== '') {
+                const snippet = promptText.substring(0, 30).replace(/"/g, "'").replace(/\n/g, ' ');
+                const commitMsg = `🤖 Chanakya AI Snapshot: ${snippet}...`;
+                cp.execSync(`git commit -m "${commitMsg}" --no-verify`, { cwd, stdio: 'ignore' });
+                this._logger.log(`Created Git Snapshot: ${commitMsg}`);
+            }
+        }
+        catch (e) {
+            this._logger.error('Failed to create Git snapshot', e);
+        }
+    }
+    resolveWebviewView(webviewView, _context, _token) {
+        this._view = webviewView;
+        webviewView.webview.options = {
+            enableScripts: true,
+            localResourceRoots: [vscode.Uri.joinPath(this._extensionUri, 'dist')]
+        };
+        webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
+        webviewView.webview.onDidReceiveMessage(async (message) => {
+            await this._handleWebviewMessage(message);
+        });
+    }
+    postMessage(message) {
+        if (this._view) {
+            this._view.webview.postMessage(message);
+        }
+    }
+    addContextItem(item) {
+        if (this._view) {
+            this._view.show?.(true);
+            this.postMessage({
+                type: 'addContextItem',
+                payload: item
+            });
+        }
+        else {
+            vscode.window.showInformationMessage('Please open the Chanakya AI sidebar first.');
+        }
+    }
+    clearChat() {
+        this.postMessage({ type: 'clearChat' });
+    }
+    async _handleWebviewMessage(message) {
+        this._logger.log(`Received message from Webview: ${message.type}`);
+        switch (message.type) {
+            case 'skillOps:getSkills': {
+                const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath || '';
+                const registry = skillRegistry_1.SkillRegistry.getInstance(workspaceRoot);
+                const skills = registry.listSkills();
+                const payload = skills.map(s => registry['loadMetadata'](s)).filter(m => !!m);
+                if (this._view)
+                    this._view.webview.postMessage({ type: 'skillOps:skillsResult', payload: { skills: payload } });
+                break;
+            }
+            case 'skillOps:getSkillHistory': {
+                const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath || '';
+                const registry = skillRegistry_1.SkillRegistry.getInstance(workspaceRoot);
+                const meta = registry['loadMetadata'](message.payload.skillName);
+                if (this._view)
+                    this._view.webview.postMessage({
+                        type: 'skillOps:historyResult',
+                        payload: { skillName: message.payload.skillName, history: meta ? meta.versions.sort((a, b) => b.version - a.version) : [] }
+                    });
+                break;
+            }
+            case 'skillOps:runOptimization': {
+                const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath || '';
+                try {
+                    const skillOpt = skillOptService_1.SkillOptService.getInstance(workspaceRoot);
+                    const result = await skillOpt.optimize(message.payload.skillName, async () => {
+                        return 0.70 + (Math.random() * 0.20);
+                    });
+                    if (this._view)
+                        this._view.webview.postMessage({ type: 'skillOps:optimizationResult', payload: { result } });
+                }
+                catch (e) {
+                    if (this._view)
+                        this._view.webview.postMessage({ type: 'skillOps:optimizationResult', payload: { error: e.message } });
+                }
+                break;
+            }
+            case 'skillOps:rollbackSkill': {
+                const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath || '';
+                try {
+                    const registry = skillRegistry_1.SkillRegistry.getInstance(workspaceRoot);
+                    registry.rollbackSkill(message.payload.skillName, message.payload.version);
+                    if (this._view)
+                        this._view.webview.postMessage({ type: 'skillOps:rollbackResult', payload: { success: true } });
+                }
+                catch (e) {
+                    if (this._view)
+                        this._view.webview.postMessage({ type: 'skillOps:rollbackResult', payload: { success: false, error: e.message } });
+                }
+                break;
+            }
+            case 'ready': {
+                this._logger.log('React Webview reported READY state.');
+                const config = this._configManager.getConfig();
+                const rawYaml = this._configManager.getRawYaml();
+                this.postMessage({
+                    type: 'configResult',
+                    payload: { config, rawYaml }
+                });
+                // Also send conversations on ready
+                this.postMessage({
+                    type: 'conversationsLoaded',
+                    payload: {
+                        conversations: this._conversationManager.getAllConversations(),
+                        activeId: this._conversationManager.getActiveConversationId()
+                    }
+                });
+                break;
+            }
+            case 'getConfig': {
+                const config = this._configManager.getConfig();
+                const rawYaml = this._configManager.getRawYaml();
+                this.postMessage({
+                    type: 'configResult',
+                    payload: { config, rawYaml }
+                });
+                break;
+            }
+            case 'saveConfig': {
+                try {
+                    if (message.payload.rawYaml) {
+                        const updatedConfig = this._configManager.saveRawYaml(message.payload.rawYaml);
+                        this.postMessage({
+                            type: 'configResult',
+                            payload: { config: updatedConfig, rawYaml: message.payload.rawYaml }
+                        });
+                    }
+                    else {
+                        this._configManager.saveConfig(message.payload.config);
+                        const rawYaml = this._configManager.getRawYaml();
+                        this.postMessage({
+                            type: 'configResult',
+                            payload: { config: message.payload.config, rawYaml }
+                        });
+                    }
+                    vscode.window.showInformationMessage('Chanakya AI Enhancer: Model configuration saved successfully!');
+                }
+                catch (err) {
+                    const errMsg = err instanceof Error ? err.message : String(err);
+                    this.postMessage({ type: 'setError', payload: { error: errMsg } });
+                    vscode.window.showErrorMessage(`Failed to save config: ${errMsg}`);
+                }
+                break;
+            }
+            case 'testModelConnection': {
+                const result = await this._configManager.testModelConnection(message.payload.modelConfig);
+                this.postMessage({
+                    type: 'testModelResult',
+                    payload: {
+                        modelId: message.payload.modelConfig.id || message.payload.modelConfig.name,
+                        success: result.success,
+                        latencyMs: result.latencyMs,
+                        error: result.error
+                    }
+                });
+                break;
+            }
+            case 'detectLocalModels': {
+                const detected = await this._configManager.detectLocalModels();
+                this.postMessage({
+                    type: 'localModelsDetected',
+                    payload: { models: detected }
+                });
+                break;
+            }
+            case 'openConfigFile': {
+                const filePath = this._configManager.getConfigFilePath();
+                const doc = await vscode.workspace.openTextDocument(filePath);
+                await vscode.window.showTextDocument(doc);
+                break;
+            }
+            case 'submitProceed': {
+                // Find active conversation
+                const activeId = this._conversationManager.getActiveConversationId();
+                if (activeId) {
+                    // Send "Proceed" as user message internally
+                    this._handleWebviewMessage({ type: 'sendMessage', payload: { text: 'Proceed', contextItems: [] } });
+                }
+                else {
+                    vscode.window.showErrorMessage('No active conversation to proceed.');
+                }
+                break;
+            }
+            case 'openSourceControl': {
+                vscode.commands.executeCommand('workbench.view.scm');
+                break;
+            }
+            case 'searchWorkspaceFiles': {
+                const query = message.payload.query;
+                const files = await vscode.workspace.findFiles(`**/*${query}*`, '**/node_modules/**', 20);
+                const results = files.map((file) => ({
+                    label: vscode.workspace.asRelativePath(file),
+                    path: file.fsPath
+                }));
+                this.postMessage({
+                    type: 'workspaceFilesResult',
+                    payload: { query, files: results }
+                });
+                break;
+            }
+            case 'generateCommitMessage': {
+                const cp = require('child_process');
+                const workspaceFolders = vscode.workspace.workspaceFolders;
+                if (!workspaceFolders) {
+                    vscode.window.showErrorMessage('No workspace folder open for git.');
+                    break;
+                }
+                const cwd = workspaceFolders[0].uri.fsPath;
+                cp.exec('git diff --cached', { cwd, maxBuffer: 1024 * 1024 * 10 }, async (_err, stdout) => {
+                    let diff = stdout;
+                    if (!diff || diff.trim() === '') {
+                        try {
+                            diff = cp.execSync('git diff', { cwd, maxBuffer: 1024 * 1024 * 10 }).toString();
+                        }
+                        catch (e) { }
+                    }
+                    if (!diff || diff.trim() === '') {
+                        vscode.window.showInformationMessage('Chanakya AI: No git diff found to generate commit message.');
+                        return;
+                    }
+                    if (diff.length > 50000) {
+                        diff = diff.substring(0, 50000) + '\n\n... [Diff Truncated]';
+                    }
+                    const prompt = `You are an expert developer. Generate a concise, conventional git commit message for the following diff. 
+Reply ONLY with the commit message text. Do not include markdown blocks, greetings, or explanations.
+Format: <type>(<scope>): <subject>
+
+Diff:
+${diff}`;
+                    try {
+                        vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Chanakya AI generating commit message...' }, async () => {
+                            const llm = llmEngine_1.LLMEngine.getInstance();
+                            let commitMsg = '';
+                            await llm.streamChat({
+                                prompt,
+                                contextItems: [],
+                                callbacks: {
+                                    onChunk: (chunk) => commitMsg += chunk,
+                                    onComplete: async (fullText) => { commitMsg = fullText; },
+                                    onError: (err) => { throw err; }
+                                }
+                            });
+                            const gitExtension = vscode.extensions.getExtension('vscode.git');
+                            if (gitExtension) {
+                                const api = gitExtension.isActive ? gitExtension.exports : await gitExtension.activate();
+                                const gitApi = api.getAPI(1);
+                                const repository = gitApi.repositories[0];
+                                if (repository) {
+                                    repository.inputBox.value = commitMsg.trim();
+                                    vscode.window.showInformationMessage('Commit message generated!');
+                                    vscode.commands.executeCommand('workbench.view.scm');
+                                }
+                            }
+                        });
+                    }
+                    catch (e) {
+                        vscode.window.showErrorMessage(`Failed to generate commit message: ${e.message}`);
+                    }
+                });
+                break;
+            }
+            case 'sendMessage': {
+                const { text, contextItems } = message.payload;
+                const assistantMsgId = `asst-${Date.now()}`;
+                // Create snapshot before AI runs
+                this._createGitSnapshot(text);
+                // 1. Immediately render the assistant message so we can attach tasks to it
+                this.postMessage({
+                    type: 'addMessage',
+                    payload: {
+                        id: assistantMsgId,
+                        role: 'assistant',
+                        content: '',
+                        isStreaming: true,
+                        timestamp: Date.now()
+                    }
+                });
+                this.postMessage({ type: 'setLoading', payload: { isLoading: true } });
+                let enrichedContextItems = [...(contextItems || [])];
+                // Auto-inject active editor context if no other files were manually attached
+                const hasManualFiles = enrichedContextItems.some(i => i.type === 'file');
+                if (!hasManualFiles) {
+                    const activeContextItem = contextProvider_1.ContextProvider.getInstance().getActiveEditorContext();
+                    if (activeContextItem) {
+                        enrichedContextItems.push(activeContextItem);
+                        this._logger.log(`Auto-injected active editor context: ${activeContextItem.name}`);
+                    }
+                }
+                const hasCodebase = enrichedContextItems.find(i => i.type === 'codebase');
+                if (hasCodebase) {
+                    const ragTaskId = `task-${Date.now()}`;
+                    this.postMessage({
+                        type: 'updateTaskStatus',
+                        payload: { messageId: assistantMsgId, task: { id: ragTaskId, status: 'running', label: 'Indexing Workspace...' } }
+                    });
+                    const startTime = Date.now();
+                    try {
+                        const words = text.toLowerCase().replace(/[^a-z0-9]/g, ' ').split(/\s+/).filter((w) => w.length > 4);
+                        const keywords = words.slice(0, 3);
+                        if (keywords.length > 0) {
+                            const globQuery = `**/*{${keywords.join(',')}}*`;
+                            const files = await vscode.workspace.findFiles(globQuery, '**/node_modules/**', 3);
+                            for (const file of files) {
+                                const bytes = await vscode.workspace.fs.readFile(file);
+                                enrichedContextItems.push({
+                                    id: `rag-${file.fsPath}`,
+                                    type: 'file',
+                                    name: vscode.workspace.asRelativePath(file),
+                                    content: Buffer.from(bytes).toString('utf-8'),
+                                    path: file.fsPath
+                                });
+                            }
+                        }
+                        this.postMessage({
+                            type: 'updateTaskStatus',
+                            payload: { messageId: assistantMsgId, task: { id: ragTaskId, status: 'done', label: `Workspace Indexed`, durationMs: Date.now() - startTime } }
+                        });
+                    }
+                    catch (e) {
+                        this._logger.error('Codebase RAG failed', e);
+                        this.postMessage({
+                            type: 'updateTaskStatus',
+                            payload: { messageId: assistantMsgId, task: { id: ragTaskId, status: 'error', label: `Workspace Indexing Failed`, durationMs: Date.now() - startTime } }
+                        });
+                    }
+                }
+                // Smart @mentions Integration
+                const mentionRegex = /@([a-zA-Z0-9_\-\.]+)/g;
+                let match;
+                while ((match = mentionRegex.exec(text)) !== null) {
+                    const mention = match[1];
+                    const mentionTaskId = `task-${mention}-${Date.now()}`;
+                    this.postMessage({
+                        type: 'updateTaskStatus',
+                        payload: { messageId: assistantMsgId, task: { id: mentionTaskId, status: 'running', label: `Extracting ${mention}...` } }
+                    });
+                    const startTime = Date.now();
+                    try {
+                        const contextData = await workspaceIndexer_1.WorkspaceIndexer.getInstance().getFileContext(mention);
+                        if (contextData) {
+                            enrichedContextItems.push({
+                                id: `mention-${contextData.fileName}`,
+                                type: 'file',
+                                name: contextData.fileName,
+                                content: contextData.content
+                            });
+                            this._logger.log(`Added @mention context for ${mention}`);
+                            this.postMessage({
+                                type: 'updateTaskStatus',
+                                payload: { messageId: assistantMsgId, task: { id: mentionTaskId, status: 'done', label: `Read ${contextData.fileName}`, durationMs: Date.now() - startTime } }
+                            });
+                        }
+                        else {
+                            this.postMessage({
+                                type: 'updateTaskStatus',
+                                payload: { messageId: assistantMsgId, task: { id: mentionTaskId, status: 'error', label: `File not found: ${mention}`, durationMs: Date.now() - startTime } }
+                            });
+                        }
+                    }
+                    catch (err) {
+                        this._logger.error(`Failed to process @mention for ${mention}`, err);
+                        this.postMessage({
+                            type: 'updateTaskStatus',
+                            payload: { messageId: assistantMsgId, task: { id: mentionTaskId, status: 'error', label: `Error reading ${mention}`, durationMs: Date.now() - startTime } }
+                        });
+                    }
+                }
+                const cts = new vscode.CancellationTokenSource();
+                this._activeTasks.set(assistantMsgId, cts);
+                const tokenOptimizerRaw = this._context.globalState.get('chanakya.tokenOptimizerConfig') || {};
+                const activeModelId = this._configManager.getConfig().activeChatModelId || 'default';
+                const activeModelConfig = tokenOptimizerRaw[activeModelId] || tokenOptimizerRaw['default'] || {};
+                const activeId = this._conversationManager.getActiveConversationId();
+                let existingMessages = activeId ? this._conversationManager.loadConversation(activeId)?.messages || [] : [];
+                const userMessage = {
+                    id: `usr-${Date.now()}`,
+                    role: 'user',
+                    content: text,
+                    timestamp: Date.now()
+                };
+                let currentOptStats = undefined;
+                let currentTelemetry = undefined;
+                await llmGateway_1.LLMGateway.getInstance().streamChat({
+                    prompt: text,
+                    contextItems: enrichedContextItems,
+                    optimizerConfig: activeModelConfig,
+                    cancellationToken: cts.token,
+                    existingMessages: existingMessages,
+                    callbacks: {
+                        onChunk: (chunk) => {
+                            this.postMessage({
+                                type: 'streamChunk',
+                                payload: { messageId: assistantMsgId, chunk }
+                            });
+                        },
+                        onThoughtChunk: (chunk) => {
+                            this.postMessage({
+                                type: 'streamThoughtChunk',
+                                payload: { messageId: assistantMsgId, chunk }
+                            });
+                        },
+                        onThoughtComplete: (thought, durationMs) => {
+                            this.postMessage({
+                                type: 'thoughtComplete',
+                                payload: { messageId: assistantMsgId, thought, durationMs }
+                            });
+                        },
+                        onComplete: (fullText, newMessages) => {
+                            this.postMessage({
+                                type: 'streamEnd',
+                                payload: { messageId: assistantMsgId }
+                            });
+                            let appendedMessages = [];
+                            if (newMessages && newMessages.length > 0) {
+                                // First message is userMessage
+                                appendedMessages.push(userMessage);
+                                // Map the accumulated messages
+                                newMessages.forEach((msg, idx) => {
+                                    appendedMessages.push({
+                                        id: `${assistantMsgId}-${idx}`,
+                                        role: msg.role,
+                                        content: msg.content || '',
+                                        timestamp: Date.now() + idx,
+                                        optimizationStats: idx === newMessages.length - 1 ? currentOptStats : undefined,
+                                        tool_calls: msg.tool_calls,
+                                        tool_call_id: msg.tool_call_id,
+                                        name: msg.name
+                                    });
+                                });
+                            }
+                            else {
+                                appendedMessages = [
+                                    userMessage,
+                                    {
+                                        id: assistantMsgId,
+                                        role: 'assistant',
+                                        content: fullText,
+                                        timestamp: Date.now(),
+                                        optimizationStats: currentOptStats,
+                                        telemetry: currentTelemetry
+                                    }
+                                ];
+                            }
+                            const updatedConv = this._conversationManager.appendMessages(activeId, appendedMessages);
+                            this.postMessage({
+                                type: 'activeConversationChanged',
+                                payload: { conversation: updatedConv }
+                            });
+                            this._activeTasks.delete(assistantMsgId);
+                            if (this._activeTasks.size === 0) {
+                                this.postMessage({ type: 'setLoading', payload: { isLoading: false } });
+                            }
+                        },
+                        onError: (error) => {
+                            this.postMessage({
+                                type: 'streamChunk',
+                                payload: { messageId: assistantMsgId, chunk: `\n\n⚠️ **Error:** ${error.message}` }
+                            });
+                            this.postMessage({
+                                type: 'streamEnd',
+                                payload: { messageId: assistantMsgId }
+                            });
+                            const appendedMessages = [
+                                userMessage,
+                                {
+                                    id: assistantMsgId,
+                                    role: 'assistant',
+                                    content: `⚠️ **Error:** ${error.message}`,
+                                    timestamp: Date.now(),
+                                    optimizationStats: currentOptStats
+                                }
+                            ];
+                            const updatedConv = this._conversationManager.appendMessages(activeId, appendedMessages);
+                            this.postMessage({
+                                type: 'activeConversationChanged',
+                                payload: { conversation: updatedConv }
+                            });
+                            this._activeTasks.delete(assistantMsgId);
+                            if (this._activeTasks.size === 0) {
+                                this.postMessage({ type: 'setLoading', payload: { isLoading: false } });
+                            }
+                        },
+                        onTokensUsed: (modelId, promptTokens, completionTokens, durationMs, ttftMs, isError, originalTokens, optimizedTokens) => {
+                            const durationSec = durationMs ? Math.round(durationMs * 10) / 10 : undefined;
+                            const ttftSec = ttftMs ? Math.round(ttftMs * 100) / 100 : undefined;
+                            const tokensPerSec = durationMs && durationMs > 0 ? Math.round((completionTokens / durationMs) * 10) / 10 : undefined;
+                            currentTelemetry = {
+                                durationSec,
+                                ttftSec,
+                                tokensPerSec,
+                                promptTokens,
+                                completionTokens
+                            };
+                            this._saveTokenUsage(modelId, promptTokens, completionTokens, durationMs, ttftMs, isError, originalTokens, optimizedTokens).catch(() => { });
+                        },
+                        onOptimizationStats: (originalTokens, optimizedTokens) => {
+                            currentOptStats = { originalTokens, optimizedTokens };
+                            this.postMessage({
+                                type: 'optimizationStats',
+                                payload: { messageId: assistantMsgId, originalTokens, optimizedTokens }
+                            });
+                        }
+                    }
+                });
+                break;
+            }
+            case 'abortGeneration': {
+                if (message.payload?.messageId) {
+                    const cts = this._activeTasks.get(message.payload.messageId);
+                    if (cts) {
+                        cts.cancel();
+                        cts.dispose();
+                        this._activeTasks.delete(message.payload.messageId);
+                    }
+                }
+                else {
+                    // Cancel all if no specific ID is given
+                    for (const cts of this._activeTasks.values()) {
+                        cts.cancel();
+                        cts.dispose();
+                    }
+                    this._activeTasks.clear();
+                }
+                if (this._activeTasks.size === 0) {
+                    this.postMessage({ type: 'setLoading', payload: { isLoading: false } });
+                }
+                break;
+            }
+            case 'readFileContent': {
+                try {
+                    const fileUri = vscode.Uri.file(message.payload.path);
+                    const bytes = await vscode.workspace.fs.readFile(fileUri);
+                    const content = Buffer.from(bytes).toString('utf-8');
+                    const fileName = message.payload.path.split('/').pop() || message.payload.path;
+                    this.postMessage({
+                        type: 'fileContentResult',
+                        payload: {
+                            contextItem: {
+                                id: `file-${Date.now()}`,
+                                type: 'file',
+                                name: fileName,
+                                path: message.payload.path,
+                                content: content
+                            }
+                        }
+                    });
+                }
+                catch (err) {
+                    this._logger.error('Failed to read file for context', err);
+                }
+                break;
+            }
+            case 'readTerminalContent': {
+                try {
+                    if (!vscode.window.activeTerminal) {
+                        vscode.window.showWarningMessage('Chanakya AI: No active terminal found to read.');
+                        return;
+                    }
+                    const currentClipboard = await vscode.env.clipboard.readText();
+                    await vscode.commands.executeCommand('workbench.action.terminal.selectAll');
+                    await vscode.commands.executeCommand('workbench.action.terminal.copySelection');
+                    await vscode.commands.executeCommand('workbench.action.terminal.clearSelection');
+                    await new Promise(r => setTimeout(r, 200));
+                    const terminalText = await vscode.env.clipboard.readText();
+                    await vscode.env.clipboard.writeText(currentClipboard);
+                    this.postMessage({
+                        type: 'fileContentResult',
+                        payload: {
+                            contextItem: {
+                                id: `terminal-${Date.now()}`,
+                                type: 'terminal',
+                                name: 'Terminal Output',
+                                path: 'Terminal',
+                                content: terminalText || 'Terminal is empty.'
+                            }
+                        }
+                    });
+                }
+                catch (err) {
+                    this._logger.error('Failed to read terminal content', err);
+                }
+                break;
+            }
+            case 'insertCode': {
+                const editor = vscode.window.activeTextEditor;
+                if (editor) {
+                    await editor.edit((builder) => {
+                        if (!editor.selection.isEmpty) {
+                            builder.replace(editor.selection, message.payload.code);
+                        }
+                        else {
+                            builder.insert(editor.selection.active, message.payload.code);
+                        }
+                    });
+                }
+                break;
+            }
+            case 'submitUserOption': {
+                const { AgentOrchestrator } = require('../services/agentOrchestrator');
+                AgentOrchestrator.getInstance().resolveUserOption(message.payload.choice);
+                break;
+            }
+            case 'executeToolManual': {
+                const { toolName, argsString } = message.payload;
+                try {
+                    const args = JSON.parse(argsString);
+                    // Execute via Orchestrator
+                    const { AgentOrchestrator } = require('../services/agentOrchestrator');
+                    const orchestrator = AgentOrchestrator.getInstance();
+                    vscode.window.withProgress({
+                        location: vscode.ProgressLocation.Notification,
+                        title: `Chanakya AI: Executing ${toolName}...`,
+                        cancellable: false
+                    }, async () => {
+                        try {
+                            const result = await orchestrator.executeTool(toolName, args);
+                            vscode.window.showInformationMessage(`Chanakya AI: Tool executed successfully.`);
+                            this._logger.log(`Manual tool ${toolName} execution result: ${result}`);
+                        }
+                        catch (e) {
+                            vscode.window.showErrorMessage(`Chanakya AI: Failed to execute tool: ${e.message}`);
+                        }
+                    });
+                }
+                catch (e) {
+                    vscode.window.showErrorMessage(`Chanakya AI: Invalid arguments for tool ${toolName}`);
+                }
+                break;
+            }
+            case 'applyCodeMerge': {
+                try {
+                    const editor = vscode.window.activeTextEditor;
+                    if (!editor) {
+                        vscode.window.showWarningMessage('Chanakya AI: Open a file first to apply code.');
+                        break;
+                    }
+                    const fs = require('fs');
+                    const os = require('os');
+                    const path = require('path');
+                    // Original file URI
+                    const originalUri = editor.document.uri;
+                    const originalContent = editor.document.getText();
+                    // Check if it's a snippet or full file. Simple heuristic: if it's much shorter, we replace selection if it exists.
+                    let proposedContent = message.payload.code;
+                    if (!editor.selection.isEmpty) {
+                        // Replace selection with proposed content
+                        const before = originalContent.substring(0, editor.document.offsetAt(editor.selection.start));
+                        const after = originalContent.substring(editor.document.offsetAt(editor.selection.end));
+                        proposedContent = before + proposedContent + after;
+                    }
+                    // Create temp file for the right side of the diff
+                    const tempFilePath = path.join(os.tmpdir(), `chanakya_apply_${Date.now()}_${path.basename(originalUri.fsPath)}`);
+                    fs.writeFileSync(tempFilePath, proposedContent, 'utf8');
+                    const tempUri = vscode.Uri.file(tempFilePath);
+                    // Open Diff View
+                    const title = `Chanakya AI Merge: ${path.basename(originalUri.fsPath)}`;
+                    await vscode.commands.executeCommand('vscode.diff', originalUri, tempUri, title);
+                }
+                catch (err) {
+                    this._logger.error('Failed to apply code merge', err);
+                    vscode.window.showErrorMessage(`Chanakya AI Merge Error: ${err.message}`);
+                }
+                break;
+            }
+            case 'streamFileEdit': {
+                try {
+                    const fs = require('fs');
+                    const path = require('path');
+                    let workspaceRoot = '';
+                    if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+                        workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
+                    }
+                    else {
+                        // Cannot auto-create without a workspace
+                        break;
+                    }
+                    const targetPath = path.isAbsolute(message.payload.path)
+                        ? message.payload.path
+                        : path.join(workspaceRoot, message.payload.path);
+                    const targetDir = path.dirname(targetPath);
+                    if (!fs.existsSync(targetDir)) {
+                        fs.mkdirSync(targetDir, { recursive: true });
+                    }
+                    fs.writeFileSync(targetPath, message.payload.code, 'utf8');
+                    // If it's the final write (not streaming), we can open it in the editor
+                    if (!message.payload.isStreaming) {
+                        const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(targetPath));
+                        await vscode.window.showTextDocument(doc, { preview: false, preserveFocus: true });
+                    }
+                }
+                catch (err) {
+                    this._logger.error('Failed to auto-create/stream file edit', err);
+                }
+                break;
+            }
+            case 'copyToClipboard': {
+                vscode.env.clipboard.writeText(message.payload.text);
+                vscode.window.showInformationMessage('Copied to clipboard');
+                break;
+            }
+            case 'openFilePicker': {
+                const uris = await vscode.window.showOpenDialog({
+                    canSelectMany: true,
+                    openLabel: 'Attach to Chat',
+                });
+                if (uris && uris.length > 0) {
+                    for (const uri of uris) {
+                        try {
+                            const contentStr = await documentParserService_1.DocumentParserService.getInstance().parseDocument(uri.fsPath);
+                            this._view?.webview.postMessage({
+                                type: 'fileAttached',
+                                payload: {
+                                    name: vscode.workspace.asRelativePath(uri),
+                                    path: uri.fsPath,
+                                    content: contentStr
+                                }
+                            });
+                        }
+                        catch (err) {
+                            vscode.window.showErrorMessage(`Failed to attach file: ${uri.fsPath}`);
+                        }
+                    }
+                }
+                break;
+            }
+            case 'showInformationMessage': {
+                vscode.window.showInformationMessage(message.payload.message);
+                break;
+            }
+            case 'openSettings': {
+                vscode.commands.executeCommand('aiEnhancer.openModelsHub', { tab: 'settings' });
+                break;
+            }
+            case 'openModelsHub': {
+                vscode.commands.executeCommand('aiEnhancer.openModelsHub');
+                break;
+            }
+            case 'clearChat': {
+                this.clearChat();
+                break;
+            }
+            case 'getTokenStats': {
+                const stats = this._context.globalState.get('chanakya.tokenStats') || {};
+                const history = this._context.globalState.get('chanakya.tokenHistory') || [];
+                this.postMessage({
+                    type: 'tokenStatsResult',
+                    payload: { stats, history }
+                });
+                break;
+            }
+            case 'clearTokenStats': {
+                this._context.globalState.update('chanakya.tokenStats', undefined);
+                this._context.globalState.update('chanakya.tokenHistory', undefined);
+                this.postMessage({
+                    type: 'tokenStatsResult',
+                    payload: { stats: {}, history: [] }
+                });
+                break;
+            }
+            case 'newConversation': {
+                const newConv = this._conversationManager.createNewConversation();
+                this.postMessage({
+                    type: 'activeConversationChanged',
+                    payload: { conversation: newConv }
+                });
+                this.postMessage({
+                    type: 'conversationsLoaded',
+                    payload: {
+                        conversations: this._conversationManager.getAllConversations(),
+                        activeId: newConv.id
+                    }
+                });
+                break;
+            }
+            case 'loadConversation': {
+                const conv = this._conversationManager.loadConversation(message.payload.id);
+                if (conv) {
+                    this.postMessage({
+                        type: 'activeConversationChanged',
+                        payload: { conversation: conv }
+                    });
+                }
+                break;
+            }
+            case 'deleteConversation': {
+                this._conversationManager.deleteConversation(message.payload.id);
+                const conversations = this._conversationManager.getAllConversations();
+                const activeId = this._conversationManager.getActiveConversationId();
+                this.postMessage({
+                    type: 'conversationsLoaded',
+                    payload: { conversations, activeId }
+                });
+                const activeConv = activeId ? this._conversationManager.loadConversation(activeId) : null;
+                if (activeConv) {
+                    this.postMessage({
+                        type: 'activeConversationChanged',
+                        payload: { conversation: activeConv }
+                    });
+                }
+                else {
+                    this.postMessage({ type: 'clearChat' });
+                }
+                break;
+            }
+            case 'revertSnapshot': {
+                try {
+                    const workspaceFolders = vscode.workspace.workspaceFolders;
+                    if (!workspaceFolders) {
+                        vscode.window.showErrorMessage('No workspace folder open to revert.');
+                        break;
+                    }
+                    const cwd = workspaceFolders[0].uri.fsPath;
+                    const config = vscode.workspace.getConfiguration('aiEnhancer');
+                    if (config.get('enableGitSnapshots') === false) {
+                        vscode.window.showErrorMessage('Auto Git-Snapshots are disabled in settings.');
+                        break;
+                    }
+                    const fs = require('fs');
+                    const path = require('path');
+                    if (!fs.existsSync(path.join(cwd, '.git'))) {
+                        vscode.window.showErrorMessage('Current workspace is not a Git repository.');
+                        break;
+                    }
+                    const cp = require('child_process');
+                    // Revert to the last commit
+                    cp.execSync('git reset --hard HEAD~1', { cwd });
+                    vscode.window.showInformationMessage('Chanakya AI: Reverted successfully to previous snapshot.');
+                }
+                catch (e) {
+                    vscode.window.showErrorMessage(`Failed to revert: ${e.message}`);
+                }
+                break;
+            }
+            case 'getGraphifyData': {
+                try {
+                    const forceRefresh = !!message.payload?.refresh;
+                    const graphData = await graphifyService_1.GraphifyService.getInstance().generateGraphData(forceRefresh);
+                    this.postMessage({
+                        type: 'graphifyDataResult',
+                        payload: { data: graphData }
+                    });
+                }
+                catch (err) {
+                    this._logger.error('Failed to generate graphify data', err);
+                    vscode.window.showErrorMessage(`Failed to generate graph: ${err.message}`);
+                }
+                break;
+            }
+            case 'calculateBlastRadius': {
+                try {
+                    const nodeId = message.payload?.nodeId;
+                    if (nodeId) {
+                        const result = await graphifyService_1.GraphifyService.getInstance().calculateBlastRadius(nodeId);
+                        this.postMessage({
+                            type: 'blastRadiusResult',
+                            payload: { result }
+                        });
+                    }
+                }
+                catch (err) {
+                    this._logger.error('Failed to calculate blast radius', err);
+                }
+                break;
+            }
+            case 'exportArchitectureMd': {
+                try {
+                    const relativePath = await graphifyService_1.GraphifyService.getInstance().exportArchitectureToFile();
+                    vscode.window.showInformationMessage(`Chanakya AI Enhancer: ${relativePath} generated and opened successfully!`);
+                }
+                catch (err) {
+                    this._logger.error('Failed to export architecture.md', err);
+                    vscode.window.showErrorMessage(`Failed to export architecture.md: ${err.message}`);
+                }
+                break;
+            }
+            case 'answerUserPrompt': {
+                Promise.resolve().then(() => __importStar(require('../services/agentOrchestrator'))).then((m) => {
+                    m.AgentOrchestrator.getInstance().resolveUserOption(message.payload.answer);
+                });
+                break;
+            }
+            case 'setTaskStatus': {
+                planTracker_1.PlanTracker.getInstance().updateTaskStatus(message.payload.taskId, message.payload.status);
+                break;
+            }
+            case 'getMcpHubData': {
+                try {
+                    const mcpService = mcpService_1.McpService.getInstance();
+                    const db = mcpDbService_1.McpDbService.getInstance();
+                    const servers = await mcpService.getServersStatus();
+                    const logs = db.getExecutionLogs({ limit: 40 });
+                    this.postMessage({
+                        type: 'mcpHubDataResult',
+                        payload: { servers, logs }
+                    });
+                }
+                catch (err) {
+                    this._logger.error('Failed to get MCP hub data:', err);
+                }
+                break;
+            }
+            case 'addMcpServer': {
+                try {
+                    const mcpService = mcpService_1.McpService.getInstance();
+                    await mcpService.addServer(message.payload.name, message.payload.config);
+                    const servers = await mcpService.getServersStatus();
+                    const logs = mcpDbService_1.McpDbService.getInstance().getExecutionLogs({ limit: 40 });
+                    this.postMessage({
+                        type: 'mcpHubDataResult',
+                        payload: { servers, logs }
+                    });
+                    vscode.window.showInformationMessage(`Added MCP server: ${message.payload.name}`);
+                }
+                catch (err) {
+                    vscode.window.showErrorMessage(`Failed to add MCP server: ${err.message}`);
+                }
+                break;
+            }
+            case 'removeMcpServer': {
+                try {
+                    const mcpService = mcpService_1.McpService.getInstance();
+                    await mcpService.removeServer(message.payload.name);
+                    const servers = await mcpService.getServersStatus();
+                    const logs = mcpDbService_1.McpDbService.getInstance().getExecutionLogs({ limit: 40 });
+                    this.postMessage({
+                        type: 'mcpHubDataResult',
+                        payload: { servers, logs }
+                    });
+                    vscode.window.showInformationMessage(`Removed MCP server: ${message.payload.name}`);
+                }
+                catch (err) {
+                    vscode.window.showErrorMessage(`Failed to remove MCP server: ${err.message}`);
+                }
+                break;
+            }
+            case 'toggleMcpServer': {
+                try {
+                    const mcpService = mcpService_1.McpService.getInstance();
+                    await mcpService.toggleServer(message.payload.name, message.payload.enabled);
+                    const servers = await mcpService.getServersStatus();
+                    const logs = mcpDbService_1.McpDbService.getInstance().getExecutionLogs({ limit: 40 });
+                    this.postMessage({
+                        type: 'mcpHubDataResult',
+                        payload: { servers, logs }
+                    });
+                }
+                catch (err) {
+                    vscode.window.showErrorMessage(`Failed to toggle MCP server: ${err.message}`);
+                }
+                break;
+            }
+            case 'pingMcpServer': {
+                try {
+                    const mcpService = mcpService_1.McpService.getInstance();
+                    await mcpService.pingServer(message.payload.name);
+                    const servers = await mcpService.getServersStatus();
+                    const logs = mcpDbService_1.McpDbService.getInstance().getExecutionLogs({ limit: 40 });
+                    this.postMessage({
+                        type: 'mcpHubDataResult',
+                        payload: { servers, logs }
+                    });
+                }
+                catch (err) {
+                    vscode.window.showErrorMessage(`Ping failed for ${message.payload.name}: ${err.message}`);
+                }
+                break;
+            }
+            case 'testMcpTool': {
+                const startTime = Date.now();
+                try {
+                    const mcpService = mcpService_1.McpService.getInstance();
+                    const result = await mcpService.callTool(message.payload.serverName, message.payload.toolName, message.payload.args);
+                    const latencyMs = Date.now() - startTime;
+                    this.postMessage({
+                        type: 'mcpToolTestResult',
+                        payload: {
+                            toolName: message.payload.toolName,
+                            result: typeof result === 'string' ? result : JSON.stringify(result, null, 2),
+                            latencyMs
+                        }
+                    });
+                }
+                catch (err) {
+                    const latencyMs = Date.now() - startTime;
+                    this.postMessage({
+                        type: 'mcpToolTestResult',
+                        payload: {
+                            toolName: message.payload.toolName,
+                            error: err.message || 'Tool execution failed',
+                            latencyMs
+                        }
+                    });
+                }
+                break;
+            }
+            case 'renderPxPipePreview': {
+                try {
+                    const result = pxpipeRenderer_1.PxPipeRenderer.renderTextToPng(message.payload.text, {
+                        title: message.payload.title || 'CHANAKYA PXPIPE COMPRESSED CONTEXT',
+                        columns: message.payload.text.length > 5000 ? 2 : 1,
+                        showLineNumbers: true
+                    });
+                    this.postMessage({
+                        type: 'pxpipePreviewResult',
+                        payload: {
+                            dataUri: result.dataUri,
+                            width: result.width,
+                            height: result.height,
+                            charCount: result.charCount,
+                            textTokens: result.estimatedTextTokens,
+                            imageTokens: result.estimatedImageTokens,
+                            savingsPercentage: result.savingsPercentage,
+                            factsheet: result.factsheet
+                        }
+                    });
+                }
+                catch (err) {
+                    this._logger.error('Failed to render PxPipe preview:', err);
+                }
+                break;
+            }
+            case 'getPxPipeTelemetry': {
+                try {
+                    const pxpipeService = (await Promise.resolve().then(() => __importStar(require('../services/pxpipeService')))).PxPipeService.getInstance();
+                    const telemetry = pxpipeService.getTelemetry();
+                    const recentLogs = pxpipeService.getRecentLogs();
+                    this.postMessage({
+                        type: 'pxpipeTelemetryResult',
+                        payload: { telemetry, recentLogs }
+                    });
+                }
+                catch (err) {
+                    this._logger.error('Failed to get PxPipe telemetry:', err);
+                }
+                break;
+            }
+            case 'openFileInEditor':
+            case 'openFile': {
+                try {
+                    const filePath = message.payload.filePath;
+                    if (!filePath)
+                        break;
+                    const wsFolders = vscode.workspace.workspaceFolders;
+                    const fullPath = path.isAbsolute(filePath)
+                        ? filePath
+                        : wsFolders && wsFolders.length > 0
+                            ? path.join(wsFolders[0].uri.fsPath, filePath)
+                            : filePath;
+                    const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(fullPath));
+                    await vscode.window.showTextDocument(doc, { preview: false });
+                }
+                catch (err) {
+                    vscode.window.showErrorMessage(`Could not open file: ${err.message}`);
+                }
+                break;
+            }
+        }
+    }
+    _getHtmlForWebview(webview) {
+        const nonce = security_1.SecurityUtils.generateNonce();
+        const csp = security_1.SecurityUtils.getWebviewCsp(webview, nonce);
+        const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview', 'index.js'));
+        const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview', 'index.css'));
+        return `<!DOCTYPE html>
+<html lang="en" class="h-full w-full">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="${csp}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chanakya AI Assistant</title>
+    <link href="${styleUri}" rel="stylesheet">
+    <script nonce="${nonce}">
+      window.onerror = function(msg, src, line, col, err) {
+        document.body.innerHTML = '<div style="color:#f48771;padding:16px;font-family:monospace;background:#1e1e1e">'
+          + '<h3 style="color:#f48771">⚠️ Chanakya AI — Runtime Error</h3>'
+          + '<b>' + msg + '</b><br/><small>' + src + ':' + line + '</small>'
+          + '<pre style="white-space:pre-wrap;margin-top:8px">' + (err ? err.stack : '') + '</pre>'
+          + '</div>';
+        return true;
+      };
+      window.addEventListener('unhandledrejection', function(e) {
+        document.body.innerHTML = '<div style="color:#f48771;padding:16px;font-family:monospace;background:#1e1e1e">'
+          + '<h3 style="color:#f48771">⚠️ Chanakya AI — Unhandled Promise Error</h3>'
+          + '<pre>' + (e.reason ? e.reason.toString() : 'Unknown') + '</pre>'
+          + '</div>';
+      });
+    </script>
+  </head>
+  <body class="bg-vscode-bg text-vscode-fg select-none overflow-hidden m-0 p-0 relative h-full w-full">
+    <div id="root" class="absolute inset-0 h-full w-full"></div>
+    <script nonce="${nonce}" type="module" src="${scriptUri}"></script>
+  </body>
+</html>`;
+    }
+}
+exports.SidebarProvider = SidebarProvider;
+//# sourceMappingURL=sidebarProvider.js.map

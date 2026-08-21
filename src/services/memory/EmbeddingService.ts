@@ -88,13 +88,11 @@ export class EmbeddingService {
         }
       }
       
-      this.logger.error(`Embeddings not supported natively for provider: ${activeModel.provider}. Fallback to mock vector.`);
-      return new Array(1536).fill(0.1); // Fallback mock vector so system doesn't crash
+      throw new Error(`Embeddings not supported natively for provider: ${activeModel.provider}.`);
       
     } catch (err: any) {
       this.logger.error('Failed to generate embedding', err);
-      // Return a safe 1536d mock vector on error to prevent cascading failures
-      return new Array(1536).fill(0.0); 
+      throw err;
     }
   }
 }

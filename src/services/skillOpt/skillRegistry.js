@@ -34,97 +34,100 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SkillRegistry = void 0;
-var fs = __importStar(require("fs"));
-var path = __importStar(require("path"));
-var SkillRegistry = /** @class */ (function () {
-    function SkillRegistry(workspaceRoot) {
+const fs = __importStar(require("fs"));
+const path = __importStar(require("path"));
+class SkillRegistry {
+    static instance;
+    skillsDir;
+    constructor(workspaceRoot) {
         this.skillsDir = path.join(workspaceRoot, '.agents', 'skills');
         if (!fs.existsSync(this.skillsDir)) {
             fs.mkdirSync(this.skillsDir, { recursive: true });
         }
     }
-    SkillRegistry.getInstance = function (workspaceRoot) {
+    static getInstance(workspaceRoot) {
         if (!SkillRegistry.instance) {
             SkillRegistry.instance = new SkillRegistry(workspaceRoot);
         }
         return SkillRegistry.instance;
-    };
-    SkillRegistry.resetInstance = function () {
+    }
+    static resetInstance() {
         SkillRegistry.instance = undefined;
-    };
-    SkillRegistry.prototype.listSkills = function () {
-        var _this = this;
+    }
+    listSkills() {
         if (!fs.existsSync(this.skillsDir))
             return [];
-        return fs.readdirSync(this.skillsDir).filter(function (f) { return fs.statSync(path.join(_this.skillsDir, f)).isDirectory(); });
-    };
-    SkillRegistry.prototype.loadMetadata = function (category) {
-        var metadataPath = path.join(this.skillsDir, category, 'metadata.json');
+        return fs.readdirSync(this.skillsDir).filter(f => fs.statSync(path.join(this.skillsDir, f)).isDirectory());
+    }
+    loadMetadata(category) {
+        const metadataPath = path.join(this.skillsDir, category, 'metadata.json');
         if (fs.existsSync(metadataPath)) {
             return JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
         }
         return null;
-    };
-    SkillRegistry.prototype.saveMetadata = function (category, metadata) {
-        var categoryDir = path.join(this.skillsDir, category);
+    }
+    saveMetadata(category, metadata) {
+        const categoryDir = path.join(this.skillsDir, category);
         if (!fs.existsSync(categoryDir)) {
             fs.mkdirSync(categoryDir, { recursive: true });
         }
-        var metadataPath = path.join(categoryDir, 'metadata.json');
+        const metadataPath = path.join(categoryDir, 'metadata.json');
         fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2), 'utf8');
-    };
-    SkillRegistry.prototype.loadSkill = function (category, version) {
-        var metadata = this.loadMetadata(category);
+    }
+    loadSkill(category, version) {
+        const metadata = this.loadMetadata(category);
         if (!metadata)
             return null;
-        var versionInfo = metadata.versions.find(function (v) { return v.version === version; });
+        const versionInfo = metadata.versions.find(v => v.version === version);
         if (!versionInfo)
             return null;
-        var skillPath = path.join(this.skillsDir, category, "skill_v".concat(version, ".md"));
+        const skillPath = path.join(this.skillsDir, category, `skill_v${version}.md`);
         if (fs.existsSync(skillPath)) {
-            var content = fs.readFileSync(skillPath, 'utf8');
-            return { metadata: versionInfo, content: content };
+            const content = fs.readFileSync(skillPath, 'utf8');
+            return { metadata: versionInfo, content };
         }
         return null;
-    };
-    SkillRegistry.prototype.getBestSkill = function (category) {
-        var metadata = this.loadMetadata(category);
+    }
+    getBestSkill(category) {
+        const metadata = this.loadMetadata(category);
         if (!metadata || !metadata.bestVersion)
             return null;
         return this.loadSkill(category, metadata.bestVersion);
-    };
-    SkillRegistry.prototype.createSkillVersion = function (category, content, parentVersion, changeDescription) {
-        var metadata = this.loadMetadata(category) || {
+    }
+    createSkillVersion(category, content, parentVersion, changeDescription) {
+        const metadata = this.loadMetadata(category) || {
             skillName: category,
             bestVersion: 0,
             versions: []
         };
-        var nextVersion = metadata.versions.length > 0
-            ? Math.max.apply(Math, metadata.versions.map(function (v) { return v.version; })) + 1
+        const nextVersion = metadata.versions.length > 0
+            ? Math.max(...metadata.versions.map(v => v.version)) + 1
             : 1;
-        var versionInfo = {
+        const versionInfo = {
             version: nextVersion,
-            parentVersion: parentVersion,
             status: 'draft',
-            createdAt: Date.now(),
-            changeDescription: changeDescription
+            createdAt: Date.now()
         };
+        if (parentVersion !== undefined)
+            versionInfo.parentVersion = parentVersion;
+        if (changeDescription !== undefined)
+            versionInfo.changeDescription = changeDescription;
         return {
             metadata: versionInfo,
-            content: content
+            content
         };
-    };
-    SkillRegistry.prototype.saveSkillVersion = function (category, skill) {
-        var categoryDir = path.join(this.skillsDir, category);
+    }
+    saveSkillVersion(category, skill) {
+        const categoryDir = path.join(this.skillsDir, category);
         if (!fs.existsSync(categoryDir)) {
             fs.mkdirSync(categoryDir, { recursive: true });
         }
-        var metadata = this.loadMetadata(category) || {
+        const metadata = this.loadMetadata(category) || {
             skillName: category,
             bestVersion: 0,
             versions: []
         };
-        var existingIdx = metadata.versions.findIndex(function (v) { return v.version === skill.metadata.version; });
+        const existingIdx = metadata.versions.findIndex(v => v.version === skill.metadata.version);
         if (existingIdx >= 0) {
             // We never overwrite historical versions if they are already saved (except updating status)
             // But if we are creating a new one, we save it.
@@ -133,22 +136,22 @@ var SkillRegistry = /** @class */ (function () {
         else {
             metadata.versions.push(skill.metadata);
         }
-        var skillPath = path.join(categoryDir, "skill_v".concat(skill.metadata.version, ".md"));
+        const skillPath = path.join(categoryDir, `skill_v${skill.metadata.version}.md`);
         // Only write file if it doesn't exist to protect history, or if it's draft being updated
         if (!fs.existsSync(skillPath) || skill.metadata.status === 'draft') {
             fs.writeFileSync(skillPath, skill.content, 'utf8');
         }
         this.saveMetadata(category, metadata);
-    };
-    SkillRegistry.prototype.promoteSkill = function (category, version) {
-        var metadata = this.loadMetadata(category);
+    }
+    promoteSkill(category, version) {
+        const metadata = this.loadMetadata(category);
         if (!metadata)
             return;
-        var versionInfo = metadata.versions.find(function (v) { return v.version === version; });
+        const versionInfo = metadata.versions.find(v => v.version === version);
         if (versionInfo) {
             // Demote previous best
             if (metadata.bestVersion) {
-                var prevBest = metadata.versions.find(function (v) { return v.version === metadata.bestVersion; });
+                const prevBest = metadata.versions.find(v => v.version === metadata.bestVersion);
                 if (prevBest)
                     prevBest.status = 'archived';
             }
@@ -156,15 +159,15 @@ var SkillRegistry = /** @class */ (function () {
             metadata.bestVersion = version;
             this.saveMetadata(category, metadata);
         }
-    };
-    SkillRegistry.prototype.rollbackSkill = function (category, versionToRollbackTo) {
-        var metadata = this.loadMetadata(category);
+    }
+    rollbackSkill(category, versionToRollbackTo) {
+        const metadata = this.loadMetadata(category);
         if (!metadata)
             return;
-        var versionInfo = metadata.versions.find(function (v) { return v.version === versionToRollbackTo; });
+        const versionInfo = metadata.versions.find(v => v.version === versionToRollbackTo);
         if (versionInfo) {
             if (metadata.bestVersion) {
-                var prevBest = metadata.versions.find(function (v) { return v.version === metadata.bestVersion; });
+                const prevBest = metadata.versions.find(v => v.version === metadata.bestVersion);
                 if (prevBest)
                     prevBest.status = 'archived';
             }
@@ -172,7 +175,7 @@ var SkillRegistry = /** @class */ (function () {
             metadata.bestVersion = versionToRollbackTo;
             this.saveMetadata(category, metadata);
         }
-    };
-    return SkillRegistry;
-}());
+    }
+}
 exports.SkillRegistry = SkillRegistry;
+//# sourceMappingURL=skillRegistry.js.map

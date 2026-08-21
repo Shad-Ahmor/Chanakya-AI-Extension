@@ -6,10 +6,14 @@ import { Logger } from '../utils/logger';
 import { AgentOrchestrator } from './agentOrchestrator';
 import { TrajectoryRecorder } from './skillOpt/trajectoryRecorder';
 import { SkillRegistry } from './skillOpt/skillRegistry';
+import { RulesRegistry } from './rulesEngine/rulesRegistry';
+import { ConversationManager } from './ConversationManager';
 import { EvaluatorFactory } from './skillOpt/evaluator';
 import { MemoryRetriever } from './memory/MemoryRetriever';
+import { RagRetriever } from './ragRetriever';
 import { TokenOptimizer } from '../utils/tokenOptimizer';
 import { ReflectionEngine } from './memory/ReflectionEngine';
+import { UnifiedContextBuilder } from './unifiedContextBuilder';
 
 export interface StreamCallbacks {
   onChunk: (chunk: string) => void;
@@ -67,27 +71,10 @@ export class LLMEngine {
     const workspaceFolders = vscode.workspace.workspaceFolders;
     const workspaceRoot = workspaceFolders ? workspaceFolders[0].uri.fsPath : '';
 
-    let activeSkill = 'general';
+    let activeSkill = 'multi';
     let bestVersion = 1;
-    let skillContent = '';
-    try {
-      const registry = SkillRegistry.getInstance(workspaceRoot);
-      const best = registry.getBestSkill(activeSkill);
-      if (best) {
-         skillContent = best.content;
-         bestVersion = best.metadata.version;
-      }
-    } catch (e) {
-      this.logger.warn('Failed to load active skill for SkillOps: ' + e);
-    }
 
-    if (skillContent) {
-      contextItems.unshift({
-        type: 'text',
-        title: 'Behavioral Skill Instruction',
-        content: `[ACTIVE SKILL v${bestVersion}]\n${skillContent}\n[/ACTIVE SKILL]`
-      } as any);
-    }
+    // Rules and SkillOps are now handled by UnifiedContextBuilder
 
     const recorder = TrajectoryRecorder.getInstance(workspaceRoot);
     recorder.startTask(taskId, prompt, activeSkill, bestVersion);
@@ -325,7 +312,9 @@ export class LLMEngine {
       '  Phase 4: Continue this loop until all tasks are marked `[x]`.';
 
     if (useXmlTools) {
-      systemContent += '\n\n' + await orchestrator.getXMLToolInstructions();
+      if (!optimizerConfig || optimizerConfig.needsMCP !== false) {
+        systemContent += '\n\n' + await orchestrator.getXMLToolInstructions();
+      }
     }
 
     if (optimizerConfig) {
@@ -356,19 +345,19 @@ export class LLMEngine {
       }
     }
 
-    let formattedUserPrompt = '';
-    if (contextItems.length > 0) {
-      formattedUserPrompt += '--- Context Items Attached ---\n\n';
-      for (const item of contextItems) {
-        if (item.type === 'selection') {
-          formattedUserPrompt += `[Code Selection: ${item.name}]\n\`\`\`\n${item.content}\n\`\`\`\n\n`;
-        } else if (item.type === 'file') {
-          formattedUserPrompt += `[File Reference: ${item.name} (${item.path || ''})]\n\`\`\`\n${item.content}\n\`\`\`\n\n`;
-        }
-      }
-      formattedUserPrompt += '--- End of Context ---\n\n';
-    }
-    formattedUserPrompt += prompt;
+    const contextResult = await UnifiedContextBuilder.getInstance().buildContext({
+      prompt: prompt,
+      workspaceRoot: vscode.workspace.workspaceFolders?.[0].uri.fsPath || '',
+      baseSystemPrompt: systemContent,
+      optimizerConfig: optimizerConfig,
+      contextItems: contextItems,
+      existingMessages: existingMessages
+    });
+
+    systemContent = contextResult.systemPrompt;
+    let formattedUserPrompt = contextResult.userPrompt;
+    
+    callbacks.onChunk(`> 🧠 **Context Diagnostics:** [Rules: ${contextResult.diagnostics.rulesCount} | Skills: ${contextResult.diagnostics.skillsCount} | RAG Chunks: ${contextResult.diagnostics.ragChunksCount} | MCP Results: ${contextResult.diagnostics.mcpResultsCount}] (Est ${contextResult.diagnostics.estimatedTokens} context tokens)\n\n`);
 
     // Retrieve and Inject RAG Memories
     try {
@@ -450,7 +439,9 @@ export class LLMEngine {
         
         // Inject XML instructions into the system prompt for the retry
         if (messages && messages.length > 0 && messages[0].role === 'system') {
+        if (!optimizerConfig || optimizerConfig.needsMCP !== false) {
           messages[0].content += '\n\n' + await orchestrator.getXMLToolInstructions();
+        }
         }
         
         res = await fetch(endpoint, {
@@ -681,13 +672,64 @@ export class LLMEngine {
     const apiKey = model.apiKey || '';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model.model}:streamGenerateContent?alt=sse&key=${apiKey}`;
 
-    let fullPrompt = '';
-    if (contextItems.length > 0) {
-      for (const item of contextItems) {
-        fullPrompt += `[Context: ${item.name}]\n${item.content}\n\n`;
+    let systemInstruction = 'You are Chanakya AI, an elite Staff-Level Software Engineer (SDE 4/5) and technical partner. ' +
+      'Communicate conversationally, like a highly experienced peer pair-programming with the user.\n' +
+      (vscode.workspace.workspaceFolders?.length ? `[WORKSPACE ROOT]: ${vscode.workspace.workspaceFolders[0].uri.fsPath}\nUse this path as the base for all file operations.\n` : '') +
+      'CRITICAL RULES:\n' +
+      '1. NEVER hallucinate imports or function names. ALWAYS use the `search_code` tool to verify exact names before importing or calling them.\n' +
+      '2. If you need to install dependencies (e.g. Django, pip, npm), write a `requirements.txt` or `package.json` first, then run the terminal command.\n' +
+      '3. `run_terminal_command` executes in the VS Code Integrated Terminal visually for the user. Do not wait for long processes like dev servers to finish; just start them.\n' +
+      '4. Provide clean, efficient, and well-documented code.\n' +
+      '5. When scaffolding full projects or creating multiple files, use the `create_file` tool one by one. The system will automatically execute it and return the result to you so you can iteratively call the next tool until the project is complete.\n' +
+      '6. PROACTIVE RECOMMENDATIONS: When faced with design choices or implementations, propose 2-3 high-level recommendations with pros/cons and ask the user to select one (just like Antigravity does). Do not just blindly code sub-optimal solutions.\n' +
+      '7. PLANNING MODE (For Complex Tasks or Very Long Prompts):\n' +
+      'When asked to build a project, do a complex task, OR if the user provides a very long requirements document (e.g., 25-30+ pages), YOU MUST follow this strict workflow:\n' +
+      '  Phase 1: DO NOT start coding immediately. Take time to think, optimize, and deeply understand the text. Write an `implementation_plan.md` using `create_file` detailing your approach and architecture. Then STOP and ask the user to type "Proceed" to approve it.\n' +
+      '  Phase 2: Once approved, write a `task.md` file (or `plan.md`) using `create_file` containing a checklist of all files to be created/edited/deleted, their paths, and specific actions (e.g. `- [ ] create src/App.tsx - Add main component`).\n' +
+      '  Phase 3: Execute the tasks one by one autonomously from the work plan. After completing each file, you MUST use `replace_in_file` to update `task.md` by checking off the completed task (`- [x]`).\n' +
+      '  Phase 4: Continue this loop until all tasks are marked `[x]`. If disconnected, you can read `task.md` to resume exactly where you left off.';
+      
+    if (!optimizerConfig || optimizerConfig.needsMCP !== false) {
+      systemInstruction += '\n\n' + await AgentOrchestrator.getInstance().getXMLToolInstructions();
+    }
+
+    if (optimizerConfig) {
+      if (optimizerConfig.responseConciseness === 'ultra_concise') {
+        systemInstruction += ' Provide ONLY code, absolutely no explanations or conversational fluff. If you are outputting code to the chat, ALWAYS wrap it in markdown code blocks (```language). Do NOT wrap JSON tool arguments in markdown backticks.';
+      } else if (optimizerConfig.responseConciseness === 'concise') {
+        systemInstruction += ' Keep explanations extremely short and to the point.';
+      }
+      if (optimizerConfig.rules && optimizerConfig.rules.length > 0) {
+        systemInstruction += '\n\nCoding Rules to Strictly Follow:\n' + optimizerConfig.rules.map((r: string) => '- ' + r).join('\n');
+      }
+      if (optimizerConfig.negativePrompts && optimizerConfig.negativePrompts.length > 0) {
+        systemInstruction += '\n\nNegative Constraints (DO NOT DO THESE):\n' + optimizerConfig.negativePrompts.map((r: string) => '- ' + r).join('\n');
+      }
+      if (optimizerConfig.programmingLanguages && optimizerConfig.programmingLanguages.length > 0) {
+        systemInstruction += `\n\nTarget Languages/Ecosystems: ${optimizerConfig.programmingLanguages.join(', ')}. Do not provide solutions outside these.`;
+      }
+      if (optimizerConfig.taskType) {
+        systemInstruction += `\n\n[Task Context] Type: ${optimizerConfig.taskType.toUpperCase()}`;
+        if (optimizerConfig.taskType === 'coding' && optimizerConfig.platformTarget && optimizerConfig.platformTarget.length > 0) {
+          systemInstruction += ` | Target Platform(s): ${optimizerConfig.platformTarget.join(', ')}`;
+        }
+        systemInstruction += '\nStrictly adapt your reasoning and output format for this specific task type and target context.';
       }
     }
-    fullPrompt += prompt;
+
+    const contextResult = await UnifiedContextBuilder.getInstance().buildContext({
+      prompt: prompt,
+      workspaceRoot: vscode.workspace.workspaceFolders?.[0].uri.fsPath || '',
+      baseSystemPrompt: systemInstruction,
+      optimizerConfig: optimizerConfig,
+      contextItems: contextItems,
+      existingMessages: existingMessages
+    });
+
+    systemInstruction = contextResult.systemPrompt;
+    let fullPrompt = contextResult.userPrompt;
+    
+    callbacks.onChunk(`> 🧠 **Context Diagnostics:** [Rules: ${contextResult.diagnostics.rulesCount} | Skills: ${contextResult.diagnostics.skillsCount} | RAG Chunks: ${contextResult.diagnostics.ragChunksCount} | MCP Results: ${contextResult.diagnostics.mcpResultsCount}] (Est ${contextResult.diagnostics.estimatedTokens} context tokens)\n\n`);
 
     // Retrieve and Inject RAG Memories
     try {
@@ -714,49 +756,6 @@ export class LLMEngine {
     }
     
     contents.push({ role: 'user', parts: [{ text: fullPrompt }] });
-
-    let systemInstruction = 'You are Chanakya AI, an elite Staff-Level Software Engineer (SDE 4/5) and technical partner. ' +
-      'Communicate conversationally, like a highly experienced peer pair-programming with the user.\n' +
-      (vscode.workspace.workspaceFolders?.length ? `[WORKSPACE ROOT]: ${vscode.workspace.workspaceFolders[0].uri.fsPath}\nUse this path as the base for all file operations.\n` : '') +
-      'CRITICAL RULES:\n' +
-      '1. NEVER hallucinate imports or function names. ALWAYS use the `search_code` tool to verify exact names before importing or calling them.\n' +
-      '2. If you need to install dependencies (e.g. Django, pip, npm), write a `requirements.txt` or `package.json` first, then run the terminal command.\n' +
-      '3. `run_terminal_command` executes in the VS Code Integrated Terminal visually for the user. Do not wait for long processes like dev servers to finish; just start them.\n' +
-      '4. Provide clean, efficient, and well-documented code.\n' +
-      '5. When scaffolding full projects or creating multiple files, use the `create_file` tool one by one. The system will automatically execute it and return the result to you so you can iteratively call the next tool until the project is complete.\n' +
-      '6. PROACTIVE RECOMMENDATIONS: When faced with design choices or implementations, propose 2-3 high-level recommendations with pros/cons and ask the user to select one (just like Antigravity does). Do not just blindly code sub-optimal solutions.\n' +
-      '7. PLANNING MODE (For Complex Tasks or Very Long Prompts):\n' +
-      'When asked to build a project, do a complex task, OR if the user provides a very long requirements document (e.g., 25-30+ pages), YOU MUST follow this strict workflow:\n' +
-      '  Phase 1: DO NOT start coding immediately. Take time to think, optimize, and deeply understand the text. Write an `implementation_plan.md` using `create_file` detailing your approach and architecture. Then STOP and ask the user to type "Proceed" to approve it.\n' +
-      '  Phase 2: Once approved, write a `task.md` file (or `plan.md`) using `create_file` containing a checklist of all files to be created/edited/deleted, their paths, and specific actions (e.g. `- [ ] create src/App.tsx - Add main component`).\n' +
-      '  Phase 3: Execute the tasks one by one autonomously from the work plan. After completing each file, you MUST use `replace_in_file` to update `task.md` by checking off the completed task (`- [x]`).\n' +
-      '  Phase 4: Continue this loop until all tasks are marked `[x]`. If disconnected, you can read `task.md` to resume exactly where you left off.';
-      
-    systemInstruction += '\n\n' + await AgentOrchestrator.getInstance().getXMLToolInstructions();
-
-    if (optimizerConfig) {
-      if (optimizerConfig.responseConciseness === 'ultra_concise') {
-        systemInstruction += ' Provide ONLY code, absolutely no explanations or conversational fluff. If you are outputting code to the chat, ALWAYS wrap it in markdown code blocks (```language). Do NOT wrap JSON tool arguments in markdown backticks.';
-      } else if (optimizerConfig.responseConciseness === 'concise') {
-        systemInstruction += ' Keep explanations extremely short and to the point.';
-      }
-      if (optimizerConfig.rules && optimizerConfig.rules.length > 0) {
-        systemInstruction += '\n\nCoding Rules to Strictly Follow:\n' + optimizerConfig.rules.map((r: string) => '- ' + r).join('\n');
-      }
-      if (optimizerConfig.negativePrompts && optimizerConfig.negativePrompts.length > 0) {
-        systemInstruction += '\n\nNegative Constraints (DO NOT DO THESE):\n' + optimizerConfig.negativePrompts.map((r: string) => '- ' + r).join('\n');
-      }
-      if (optimizerConfig.programmingLanguages && optimizerConfig.programmingLanguages.length > 0) {
-        systemInstruction += `\n\nTarget Languages/Ecosystems: ${optimizerConfig.programmingLanguages.join(', ')}. Do not provide solutions outside these.`;
-      }
-      if (optimizerConfig.taskType) {
-        systemInstruction += `\n\n[Task Context] Type: ${optimizerConfig.taskType.toUpperCase()}`;
-        if (optimizerConfig.taskType === 'coding' && optimizerConfig.platformTarget && optimizerConfig.platformTarget.length > 0) {
-          systemInstruction += ` | Target Platform(s): ${optimizerConfig.platformTarget.join(', ')}`;
-        }
-        systemInstruction += '\nStrictly adapt your reasoning and output format for this specific task type and target context.';
-      }
-    }
 
     const generationConfig: Record<string, unknown> = {
       temperature: model.defaultCompletionOptions?.temperature ?? 0.2,

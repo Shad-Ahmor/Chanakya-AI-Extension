@@ -49,3 +49,14 @@ export interface ReflectionResult {
   should_remember: boolean;
   importance?: number;
 }
+
+export interface DocumentChunk {
+  chunk_id: string;
+  document_id: string;
+  source: string;
+  filename: string;
+  chunk_index: number;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}

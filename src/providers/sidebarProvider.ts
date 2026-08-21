@@ -16,6 +16,7 @@ import { McpService } from '../services/mcpService';
 import { McpDbService } from '../services/mcpDbService';
 import { SkillRegistry } from '../services/skillOpt/skillRegistry';
 import { SkillOptService } from '../services/skillOpt/skillOptService';
+import { SkillValidator } from '../services/skillOpt/skillValidator';
 import { PxPipeRenderer } from '../utils/pxpipeRenderer';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
@@ -217,12 +218,104 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         });
         break;
       }
+      case 'skillOps:createSkill': {
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath || '';
+        const registry = SkillRegistry.getInstance(workspaceRoot);
+        registry.createSkillVersion(message.payload.category, message.payload.content, undefined, 'Initial creation via UI');
+        registry.updateSkillCategoryMetadata(message.payload.category, { description: message.payload.description, enabled: true });
+        
+        // Return updated list
+        const skills = registry.listSkills();
+        const payload = skills.map(s => registry.getSkillCategoryMetadata(s)).filter(m => !!m);
+        if (this._view) this._view.webview.postMessage({ type: 'skillOps:skillsResult', payload: { skills: payload } });
+        break;
+      }
+      case 'skillOps:updateSkill': {
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath || '';
+        const registry = SkillRegistry.getInstance(workspaceRoot);
+        const meta = registry.getSkillCategoryMetadata(message.payload.category);
+        registry.createSkillVersion(message.payload.category, message.payload.content, meta?.bestVersion, 'Manual edit via UI');
+        if (message.payload.description !== undefined) {
+          registry.updateSkillCategoryMetadata(message.payload.category, { description: message.payload.description });
+        }
+        
+        // Return updated list
+        const skills = registry.listSkills();
+        const payload = skills.map(s => registry.getSkillCategoryMetadata(s)).filter(m => !!m);
+        if (this._view) this._view.webview.postMessage({ type: 'skillOps:skillsResult', payload: { skills: payload } });
+        break;
+      }
+      case 'skillOps:toggleEnabled': {
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath || '';
+        const registry = SkillRegistry.getInstance(workspaceRoot);
+        registry.updateSkillCategoryMetadata(message.payload.category, { enabled: message.payload.enabled });
+        
+        // Return updated list
+        const skills = registry.listSkills();
+        const payload = skills.map(s => registry.getSkillCategoryMetadata(s)).filter(m => !!m);
+        if (this._view) this._view.webview.postMessage({ type: 'skillOps:skillsResult', payload: { skills: payload } });
+        break;
+      }
+      case 'skillOps:deleteSkill': {
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath || '';
+        const registry = SkillRegistry.getInstance(workspaceRoot);
+        registry.deleteSkillCategory(message.payload.category);
+        
+        // Return updated list
+        const skills = registry.listSkills();
+        const payload = skills.map(s => registry.getSkillCategoryMetadata(s)).filter(m => !!m);
+        if (this._view) this._view.webview.postMessage({ type: 'skillOps:skillsResult', payload: { skills: payload } });
+        break;
+      }
+      case 'skillOps:importSkill': {
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath || '';
+        const uri = await vscode.window.showOpenDialog({
+          canSelectMany: false,
+          openLabel: 'Import Skill',
+          filters: { 'Markdown Files': ['md'] }
+        });
+        if (uri && uri[0]) {
+          const fs = require('fs');
+          const path = require('path');
+          const content = fs.readFileSync(uri[0].fsPath, 'utf8');
+          const name = path.basename(uri[0].fsPath, '.md');
+          
+          const registry = SkillRegistry.getInstance(workspaceRoot);
+          registry.createSkillVersion(name, content, undefined, 'Imported from file');
+          registry.updateSkillCategoryMetadata(name, { description: 'Imported skill', enabled: true });
+          
+          const skills = registry.listSkills();
+          const payload = skills.map(s => registry.getSkillCategoryMetadata(s)).filter(m => !!m);
+          if (this._view) this._view.webview.postMessage({ type: 'skillOps:skillsResult', payload: { skills: payload } });
+          vscode.window.showInformationMessage(`Skill '${name}' imported successfully.`);
+        }
+        break;
+      }
+      case 'skillOps:exportSkill': {
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath || '';
+        const registry = SkillRegistry.getInstance(workspaceRoot);
+        const skill = registry.getBestSkill(message.payload.category);
+        if (skill) {
+          const uri = await vscode.window.showSaveDialog({
+            defaultUri: vscode.Uri.file(`${message.payload.category}.md`),
+            filters: { 'Markdown Files': ['md'] }
+          });
+          if (uri) {
+            const fs = require('fs');
+            fs.writeFileSync(uri.fsPath, skill.content, 'utf8');
+            vscode.window.showInformationMessage(`Skill exported to ${uri.fsPath}`);
+          }
+        }
+        break;
+      }
       case 'skillOps:runOptimization': {
         const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath || '';
         try {
           const skillOpt = SkillOptService.getInstance(workspaceRoot);
-          const result = await skillOpt.optimize(message.payload.skillName, async () => {
-            return 0.70 + (Math.random() * 0.20);
+          const result = await skillOpt.optimize(message.payload.skillName, async (candidateContent, reflectionResult, trajectories, baselineScore) => {
+            const validator = SkillValidator.getInstance();
+            const validationResult = await validator.validateCandidate(candidateContent, reflectionResult, trajectories, baselineScore);
+            return validationResult.score;
           });
           if (this._view) this._view.webview.postMessage({ type: 'skillOps:optimizationResult', payload: { result } });
         } catch (e: any) {

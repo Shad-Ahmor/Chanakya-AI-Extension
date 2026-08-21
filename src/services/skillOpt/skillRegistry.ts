@@ -12,6 +12,8 @@ export interface SkillVersionInfo {
 
 export interface SkillCategoryMetadata {
     skillName: string;
+    description?: string;
+    enabled?: boolean;
     bestVersion: number;
     versions: SkillVersionInfo[];
 }
@@ -82,8 +84,42 @@ export class SkillRegistry {
 
     public getBestSkill(category: string): Skill | null {
         const metadata = this.loadMetadata(category);
-        if (!metadata || !metadata.bestVersion) return null;
+        if (!metadata || !metadata.bestVersion || metadata.enabled === false) return null;
         return this.loadSkill(category, metadata.bestVersion);
+    }
+    
+    public getSkillCategoryMetadata(category: string): SkillCategoryMetadata | null {
+        return this.loadMetadata(category);
+    }
+
+    public updateSkillCategoryMetadata(category: string, patch: Partial<SkillCategoryMetadata>): void {
+        const metadata = this.loadMetadata(category);
+        if (metadata) {
+            Object.assign(metadata, patch);
+            this.saveMetadata(category, metadata);
+        }
+    }
+
+    public deleteSkillCategory(category: string): boolean {
+        const categoryDir = path.join(this.skillsDir, category);
+        if (fs.existsSync(categoryDir)) {
+            fs.rmSync(categoryDir, { recursive: true, force: true });
+            return true;
+        }
+        return false;
+    }
+
+    public rollbackSkill(category: string, targetVersion: number): boolean {
+        const metadata = this.loadMetadata(category);
+        if (metadata) {
+            const versionInfo = metadata.versions.find(v => v.version === targetVersion);
+            if (versionInfo) {
+                metadata.bestVersion = targetVersion;
+                this.saveMetadata(category, metadata);
+                return true;
+            }
+        }
+        return false;
     }
 
     public createSkillVersion(category: string, content: string, parentVersion?: number, changeDescription?: string): Skill {

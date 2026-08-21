@@ -98,6 +98,12 @@ export type FromWebviewMessage =
   | { type: 'setPxpipeSetting'; payload: { key: string; value: any } }
   | { type: 'skillOps:getSkills' }
   | { type: 'skillOps:getSkillHistory'; payload: { skillName: string } }
+  | { type: 'skillOps:createSkill'; payload: { category: string; description: string; content: string } }
+  | { type: 'skillOps:updateSkill'; payload: { category: string; content: string; description?: string } }
+  | { type: 'skillOps:toggleEnabled'; payload: { category: string; enabled: boolean } }
+  | { type: 'skillOps:deleteSkill'; payload: { category: string } }
+  | { type: 'skillOps:importSkill' }
+  | { type: 'skillOps:exportSkill'; payload: { category: string } }
   | { type: 'skillOps:runOptimization'; payload: { skillName: string } }
   | { type: 'skillOps:rollbackSkill'; payload: { skillName: string; version: number } }
   | { type: 'updateVscodeSetting'; payload: { key: string; value: any } }

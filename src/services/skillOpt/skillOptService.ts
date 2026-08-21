@@ -53,7 +53,7 @@ export class SkillOptService {
      */
     public async optimize(
         skillName: string, 
-        validationRunner: (candidateContent: string) => Promise<number>
+        validationRunner: (candidateContent: string, reflectionResult: any, trajectories: any[], baselineScore: number) => Promise<number>
     ): Promise<OptimizationResult> {
         // 1. Load current best skill
         const bestSkill = this.registry.getBestSkill(skillName);
@@ -101,7 +101,7 @@ export class SkillOptService {
 
         // 6. Validate candidate
         this.logger.log(`Validating candidate v${candidateSkill.metadata.version} for ${skillName}...`);
-        const scoreAfter = await validationRunner(candidateResult.candidateContent);
+        const scoreAfter = await validationRunner(candidateResult.candidateContent, reflectionResult, skillTrajectories, scoreBefore);
 
         // 7 & 8. Validation Gate (Accept or Reject)
         const decision = this.validationGate.evaluateDecision(scoreBefore, scoreAfter, 0.02);

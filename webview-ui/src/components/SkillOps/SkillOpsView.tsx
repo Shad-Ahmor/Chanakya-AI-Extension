@@ -1,13 +1,22 @@
 import { useState, useEffect } from 'react';
 import { vscode } from '../../vscode';
-import { Play, RotateCcw, Activity, Check, GitCommit } from 'lucide-react';
+import { Play, RotateCcw, Activity, Check, GitCommit, Plus, Edit, Trash2, Download, Upload, ToggleLeft, ToggleRight, X } from 'lucide-react';
 
 export default function SkillOpsView() {
   const [skills, setSkills] = useState<any[]>([]);
-  const [activeSkillName, setActiveSkillName] = useState<string>('general');
+  const [activeSkillName, setActiveSkillName] = useState<string>('');
   const [history, setHistory] = useState<any[]>([]);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [optResult, setOptResult] = useState<any>(null);
+
+  // Modal States
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  
+  // Form States
+  const [formName, setFormName] = useState('');
+  const [formDescription, setFormDescription] = useState('');
+  const [formContent, setFormContent] = useState('');
 
   useEffect(() => {
     vscode.postMessage({ type: 'skillOps:getSkills' });
@@ -19,6 +28,8 @@ export default function SkillOpsView() {
           setSkills(message.payload.skills);
           if (message.payload.skills.length > 0 && !activeSkillName) {
             setActiveSkillName(message.payload.skills[0].skillName);
+          } else if (message.payload.skills.length === 0) {
+            setActiveSkillName('');
           }
           break;
         case 'skillOps:historyResult':
@@ -61,112 +72,348 @@ export default function SkillOpsView() {
 
   const activeSkill = skills.find(s => s.skillName === activeSkillName);
 
-  return (
-    <div className="flex flex-col h-full overflow-hidden text-[var(--vscode-foreground)] p-4 space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold tracking-tight">SkillOps Dashboard</h2>
-        <div className="flex space-x-2">
-          <select 
-            value={activeSkillName} 
-            onChange={(e) => setActiveSkillName(e.target.value)}
-            className="bg-[var(--vscode-dropdown-background)] border border-[var(--vscode-dropdown-border)] text-[var(--vscode-dropdown-foreground)] px-2 py-1 rounded outline-none focus:ring-1 focus:ring-[var(--vscode-focusBorder)]"
-          >
-            {skills.map(s => (
-              <option key={s.skillName} value={s.skillName}>{s.skillName}</option>
-            ))}
-            {skills.length === 0 && <option value="general">general</option>}
-          </select>
+  const handleCreateSubmit = () => {
+    if (!formName.trim() || !formContent.trim()) return;
+    vscode.postMessage({
+      type: 'skillOps:createSkill',
+      payload: { category: formName, description: formDescription, content: formContent }
+    });
+    setShowCreateModal(false);
+    setActiveSkillName(formName);
+    setFormName('');
+    setFormDescription('');
+    setFormContent('');
+  };
+
+  const handleEditSubmit = () => {
+    if (!activeSkillName || !formContent.trim()) return;
+    vscode.postMessage({
+      type: 'skillOps:updateSkill',
+      payload: { category: activeSkillName, description: formDescription, content: formContent }
+    });
+    setShowEditModal(false);
+    setFormDescription('');
+    setFormContent('');
+  };
+
+  const handleDelete = (name: string) => {
+    vscode.postMessage({ type: 'skillOps:deleteSkill', payload: { category: name } });
+    if (activeSkillName === name) setActiveSkillName('');
+  };
+
+  const handleToggle = (name: string, currentEnabled: boolean) => {
+    vscode.postMessage({ type: 'skillOps:toggleEnabled', payload: { category: name, enabled: !currentEnabled } });
+  };
+
+  const handleImport = () => {
+    vscode.postMessage({ type: 'skillOps:importSkill' });
+  };
+
+  const handleExport = (name: string) => {
+    vscode.postMessage({ type: 'skillOps:exportSkill', payload: { category: name } });
+  };
+
+  if (skills.length === 0 && !showCreateModal) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-[var(--vscode-foreground)] p-4 space-y-4">
+        <Activity className="w-12 h-12 text-[var(--vscode-descriptionForeground)] opacity-50 mb-2" />
+        <h2 className="text-xl font-bold">No skills created yet.</h2>
+        <p className="text-[var(--vscode-descriptionForeground)] text-center max-w-sm">
+          Skills define the specific behaviors and standard operating procedures for your AI agent.
+        </p>
+        <div className="flex gap-3 mt-4">
           <button 
-            onClick={runOptimization}
-            disabled={isOptimizing}
-            className="flex items-center space-x-1 px-3 py-1.5 bg-[var(--vscode-button-background)] hover:bg-[var(--vscode-button-hoverBackground)] text-[var(--vscode-button-foreground)] rounded font-medium disabled:opacity-50 transition-colors"
+            onClick={() => {
+              setFormName('');
+              setFormDescription('');
+              setFormContent('');
+              setShowCreateModal(true);
+            }}
+            className="px-4 py-2 bg-[var(--vscode-button-background)] hover:bg-[var(--vscode-button-hoverBackground)] text-[var(--vscode-button-foreground)] rounded font-medium flex items-center shadow-sm"
           >
-            <Play className="w-4 h-4" />
-            <span>{isOptimizing ? 'Optimizing...' : 'Run Optimization'}</span>
+            <Plus className="w-4 h-4 mr-2" />
+            Create Skill
+          </button>
+          <button 
+            onClick={handleImport}
+            className="px-4 py-2 border border-[var(--vscode-button-secondaryBackground)] hover:bg-[var(--vscode-button-secondaryHoverBackground)] text-[var(--vscode-foreground)] rounded font-medium flex items-center shadow-sm transition"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Import Skill
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden text-[var(--vscode-foreground)] p-4 space-y-6 relative">
+      
+      {/* Header */}
+      <div className="flex items-center justify-between shrink-0">
+        <h2 className="text-xl font-bold tracking-tight">SkillOps Dashboard</h2>
+        <div className="flex gap-2">
+          <button 
+            onClick={handleImport}
+            className="p-1.5 border border-transparent hover:border-[var(--vscode-widget-border)] hover:bg-[var(--vscode-toolbar-hoverBackground)] rounded text-[var(--vscode-foreground)] transition"
+            title="Import Skill from Markdown"
+          >
+            <Download className="w-4 h-4" />
+          </button>
+          <button 
+            onClick={() => {
+              setFormName('');
+              setFormDescription('');
+              setFormContent('');
+              setShowCreateModal(true);
+            }}
+            className="flex items-center space-x-1 px-3 py-1.5 bg-[var(--vscode-button-background)] hover:bg-[var(--vscode-button-hoverBackground)] text-[var(--vscode-button-foreground)] rounded font-medium shadow-sm transition"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Create Skill</span>
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-[var(--vscode-editor-background)] border border-[var(--vscode-widget-border)] rounded-lg p-4 shadow-sm">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--vscode-descriptionForeground)] mb-2 flex items-center">
-            <Activity className="w-4 h-4 mr-2" /> Current State
-          </h3>
-          {activeSkill ? (
-            <div className="space-y-1">
-              <p><span className="text-[var(--vscode-descriptionForeground)]">Skill:</span> {activeSkill.skillName}</p>
-              <p><span className="text-[var(--vscode-descriptionForeground)]">Best Version:</span> v{activeSkill.bestVersion}</p>
-            </div>
-          ) : (
-            <p className="text-[var(--vscode-descriptionForeground)] italic">No skill data loaded.</p>
-          )}
-        </div>
-
-        <div className="bg-[var(--vscode-editor-background)] border border-[var(--vscode-widget-border)] rounded-lg p-4 shadow-sm">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--vscode-descriptionForeground)] mb-2 flex items-center">
-            <Check className="w-4 h-4 mr-2" /> Last Optimization
-          </h3>
-          {optResult ? (
-            optResult.error ? (
-              <p className="text-[var(--vscode-errorForeground)]">{optResult.error}</p>
-            ) : (
-              <div className="space-y-1">
-                <p>
-                  <span className="text-[var(--vscode-descriptionForeground)]">Decision:</span>{' '}
-                  <span className={optResult.decision === 'accepted' ? 'text-green-500 font-bold' : 'text-red-500 font-bold'}>
-                    {optResult.decision.toUpperCase()}
-                  </span>
-                </p>
-                <p><span className="text-[var(--vscode-descriptionForeground)]">Score Delta:</span> {optResult.scoreBefore?.toFixed(2)} → {optResult.scoreAfter?.toFixed(2)}</p>
-                <p className="text-xs text-[var(--vscode-descriptionForeground)] truncate mt-1" title={optResult.reason}>{optResult.reason}</p>
-              </div>
-            )
-          ) : (
-            <p className="text-[var(--vscode-descriptionForeground)] italic">Run an optimization to see results.</p>
-          )}
-        </div>
-      </div>
-
-      <div className="flex-1 flex flex-col min-h-0 bg-[var(--vscode-editor-background)] border border-[var(--vscode-widget-border)] rounded-lg shadow-sm">
-        <div className="px-4 py-3 border-b border-[var(--vscode-widget-border)] bg-[var(--vscode-sideBar-background)] rounded-t-lg">
-          <h3 className="text-sm font-semibold uppercase tracking-wider flex items-center">
-            <GitCommit className="w-4 h-4 mr-2" /> Version History
-          </h3>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          {history.length > 0 ? history.map((item, idx) => (
-            <div key={idx} className="flex flex-col p-3 rounded border border-[var(--vscode-widget-border)] bg-[var(--vscode-sideBar-background)] relative group">
-              <div className="flex justify-between items-start mb-2">
-                <div className="flex items-center space-x-2">
-                  <span className="font-bold text-lg">v{item.version}</span>
-                  {item.status === 'best' && <span className="text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full uppercase tracking-widest border border-green-500/30">Active Best</span>}
-                  {item.status === 'archived' && <span className="text-[10px] bg-[var(--vscode-descriptionForeground)]/20 text-[var(--vscode-descriptionForeground)] px-2 py-0.5 rounded-full uppercase tracking-widest border border-[var(--vscode-descriptionForeground)]/30">Archived</span>}
-                  {item.status === 'draft' && <span className="text-[10px] bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded-full uppercase tracking-widest border border-yellow-500/30">Draft</span>}
+      {/* Main Content Split */}
+      <div className="flex gap-4 flex-1 overflow-hidden">
+        
+        {/* Left Col: Skills List */}
+        <div className="w-1/3 flex flex-col border border-[var(--vscode-widget-border)] rounded-lg bg-[var(--vscode-editor-background)] overflow-hidden shadow-sm shrink-0">
+          <div className="px-3 py-2 border-b border-[var(--vscode-widget-border)] bg-[var(--vscode-sideBar-background)] font-semibold text-xs tracking-wider uppercase text-[var(--vscode-descriptionForeground)]">
+            Active Skills
+          </div>
+          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+            {skills.map(s => (
+              <div 
+                key={s.skillName}
+                onClick={() => setActiveSkillName(s.skillName)}
+                className={`p-2 rounded cursor-pointer transition border ${activeSkillName === s.skillName ? 'bg-[var(--vscode-list-activeSelectionBackground)] text-[var(--vscode-list-activeSelectionForeground)] border-[var(--vscode-list-activeSelectionBackground)]' : 'hover:bg-[var(--vscode-list-hoverBackground)] border-transparent'}`}
+              >
+                <div className="flex justify-between items-center mb-1">
+                  <div className="font-bold text-sm truncate">{s.skillName}</div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] px-1.5 py-0.5 bg-black/20 rounded font-mono">v{s.bestVersion}</span>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleToggle(s.skillName, s.enabled !== false); }}
+                      className="opacity-70 hover:opacity-100"
+                    >
+                      {s.enabled !== false ? <ToggleRight className="w-4 h-4 text-emerald-400" /> : <ToggleLeft className="w-4 h-4 text-gray-500" />}
+                    </button>
+                  </div>
                 </div>
-                {item.status !== 'best' && item.status !== 'draft' && (
-                  <button
-                    onClick={() => rollbackSkill(item.version)}
-                    className="hidden group-hover:flex items-center space-x-1 text-xs px-2 py-1 bg-[var(--vscode-button-secondaryBackground)] hover:bg-[var(--vscode-button-secondaryHoverBackground)] text-[var(--vscode-button-secondaryForeground)] rounded"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    <span>Rollback</span>
-                  </button>
+                {s.description && (
+                  <div className="text-[10px] opacity-70 truncate" title={s.description}>{s.description}</div>
                 )}
               </div>
-              {item.changeDescription && (
-                <p className="text-sm text-[var(--vscode-descriptionForeground)] mb-1 whitespace-pre-wrap">{item.changeDescription}</p>
+            ))}
+          </div>
+        </div>
+
+        {/* Right Col: Active Skill Detail */}
+        {activeSkill ? (
+          <div className="w-2/3 flex flex-col gap-4 overflow-y-auto pb-4">
+            
+            <div className="bg-[var(--vscode-editor-background)] border border-[var(--vscode-widget-border)] rounded-lg p-4 shadow-sm flex flex-col relative">
+              <div className="flex justify-between items-start mb-3">
+                <div>
+                  <h3 className="text-xl font-extrabold flex items-center gap-2">
+                    {activeSkill.skillName}
+                    <span className="text-xs bg-sky-500/20 text-sky-400 px-2 py-0.5 rounded-full border border-sky-500/30">
+                      v{activeSkill.bestVersion}
+                    </span>
+                    {activeSkill.enabled === false && (
+                      <span className="text-xs bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full border border-red-500/30">
+                        Disabled
+                      </span>
+                    )}
+                  </h3>
+                  {activeSkill.description && <p className="text-[var(--vscode-descriptionForeground)] mt-1 text-sm">{activeSkill.description}</p>}
+                </div>
+                
+                <div className="flex items-center gap-1 bg-[var(--vscode-editor-background)] p-1 rounded-md border border-[var(--vscode-widget-border)]">
+                   <button 
+                    onClick={() => {
+                      setFormDescription(activeSkill.description || '');
+                      setFormContent('');
+                      setShowEditModal(true);
+                    }}
+                    className="p-1.5 hover:bg-sky-500/20 hover:text-sky-400 rounded transition" title="Edit New Version"
+                  >
+                    <Edit className="w-3.5 h-3.5" />
+                  </button>
+                  <button 
+                    onClick={() => handleExport(activeSkill.skillName)}
+                    className="p-1.5 hover:bg-emerald-500/20 hover:text-emerald-400 rounded transition" title="Export Markdown"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                  </button>
+                  <button 
+                    onClick={() => {
+                      if (confirm('Delete this skill entirely?')) {
+                        handleDelete(activeSkill.skillName);
+                      }
+                    }}
+                    className="p-1.5 hover:bg-red-500/20 hover:text-red-400 rounded transition" title="Delete Skill"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button 
+                  onClick={runOptimization}
+                  disabled={isOptimizing || activeSkill.enabled === false}
+                  className="flex items-center space-x-1 px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-400 hover:to-indigo-400 text-white rounded-md font-medium disabled:opacity-50 transition shadow-md"
+                >
+                  <Play className="w-4 h-4" />
+                  <span>{isOptimizing ? 'Optimizing...' : 'Optimize Skill'}</span>
+                </button>
+              </div>
+
+              {optResult && (
+                <div className="mt-4 p-3 bg-black/20 border border-white/5 rounded-md text-xs">
+                  {optResult.error ? (
+                    <p className="text-red-400">{optResult.error}</p>
+                  ) : (
+                    <div className="space-y-1">
+                      <p>
+                        <span className="text-[var(--vscode-descriptionForeground)]">Optimization Decision:</span>{' '}
+                        <span className={optResult.decision === 'accepted' ? 'text-green-400 font-bold' : 'text-red-400 font-bold'}>
+                          {optResult.decision.toUpperCase()}
+                        </span>
+                      </p>
+                      <p><span className="text-[var(--vscode-descriptionForeground)]">Score Change:</span> {optResult.scoreBefore?.toFixed(2)} → {optResult.scoreAfter?.toFixed(2)}</p>
+                      <p className="text-[var(--vscode-descriptionForeground)] truncate" title={optResult.reason}>Reason: {optResult.reason}</p>
+                    </div>
+                  )}
+                </div>
               )}
-              <div className="text-xs text-[var(--vscode-descriptionForeground)] opacity-70">
-                Created: {new Date(item.createdAt).toLocaleString()}
+            </div>
+
+            {/* Version History List */}
+            <div className="flex-1 flex flex-col min-h-0 bg-[var(--vscode-editor-background)] border border-[var(--vscode-widget-border)] rounded-lg shadow-sm">
+              <div className="px-4 py-2 border-b border-[var(--vscode-widget-border)] bg-[var(--vscode-sideBar-background)] rounded-t-lg">
+                <h3 className="text-xs font-semibold uppercase tracking-wider flex items-center text-[var(--vscode-descriptionForeground)]">
+                  <GitCommit className="w-3.5 h-3.5 mr-2" /> Version History
+                </h3>
+              </div>
+              <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                {history.length > 0 ? history.map((item, idx) => (
+                  <div key={idx} className="flex flex-col p-2.5 rounded border border-[var(--vscode-widget-border)] bg-[var(--vscode-sideBar-background)] relative group">
+                    <div className="flex justify-between items-start mb-1">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-bold text-sm">v{item.version}</span>
+                        {item.status === 'best' && <span className="text-[9px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-sm uppercase tracking-widest border border-green-500/30">Active</span>}
+                        {item.status === 'archived' && <span className="text-[9px] bg-[var(--vscode-descriptionForeground)]/20 text-[var(--vscode-descriptionForeground)] px-1.5 py-0.5 rounded-sm uppercase tracking-widest">Archived</span>}
+                      </div>
+                      {item.status !== 'best' && item.status !== 'draft' && (
+                        <button
+                          onClick={() => rollbackSkill(item.version)}
+                          className="hidden group-hover:flex items-center space-x-1 text-[10px] px-2 py-0.5 bg-[var(--vscode-button-secondaryBackground)] hover:bg-[var(--vscode-button-secondaryHoverBackground)] rounded"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          <span>Rollback</span>
+                        </button>
+                      )}
+                    </div>
+                    {item.changeDescription && (
+                      <p className="text-xs text-[var(--vscode-descriptionForeground)] mb-1">{item.changeDescription}</p>
+                    )}
+                    <div className="flex justify-between text-[10px] text-[var(--vscode-descriptionForeground)] opacity-70">
+                      <span>{new Date(item.createdAt).toLocaleString()}</span>
+                      {item.score !== undefined && <span>Score: {item.score.toFixed(2)}</span>}
+                    </div>
+                  </div>
+                )) : (
+                  <div className="text-center p-4 text-[var(--vscode-descriptionForeground)] italic text-xs">
+                    No version history available.
+                  </div>
+                )}
               </div>
             </div>
-          )) : (
-            <div className="flex items-center justify-center h-full text-[var(--vscode-descriptionForeground)] italic">
-              No version history available.
-            </div>
-          )}
-        </div>
+
+          </div>
+        ) : (
+          <div className="w-2/3 flex items-center justify-center border border-[var(--vscode-widget-border)] rounded-lg bg-[var(--vscode-editor-background)] text-[var(--vscode-descriptionForeground)] text-sm italic">
+            Select a skill to view details.
+          </div>
+        )}
+
       </div>
+
+      {/* Modals */}
+      {(showCreateModal || showEditModal) && (
+        <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[var(--vscode-editor-background)] border border-[var(--vscode-widget-border)] rounded-xl w-full max-w-lg shadow-2xl flex flex-col overflow-hidden max-h-full">
+            <div className="px-4 py-3 border-b border-[var(--vscode-widget-border)] bg-black/20 flex justify-between items-center">
+              <h3 className="font-bold text-base">{showCreateModal ? 'Create New Skill' : `Edit Skill: ${activeSkill?.skillName}`}</h3>
+              <button 
+                onClick={() => { setShowCreateModal(false); setShowEditModal(false); }}
+                className="hover:text-red-400 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="p-4 space-y-4 overflow-y-auto">
+              {showCreateModal && (
+                <div>
+                  <label className="block text-xs font-bold mb-1">Skill Name</label>
+                  <input 
+                    type="text"
+                    value={formName}
+                    onChange={e => setFormName(e.target.value)}
+                    placeholder="e.g., Coding, CodeReview"
+                    className="w-full bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] rounded px-3 py-1.5 text-sm outline-none focus:border-[var(--vscode-focusBorder)]"
+                  />
+                </div>
+              )}
+              
+              <div>
+                <label className="block text-xs font-bold mb-1">Description (Optional)</label>
+                <input 
+                  type="text"
+                  value={formDescription}
+                  onChange={e => setFormDescription(e.target.value)}
+                  placeholder="What does this skill do?"
+                  className="w-full bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] rounded px-3 py-1.5 text-sm outline-none focus:border-[var(--vscode-focusBorder)]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold mb-1">Markdown Content</label>
+                <p className="text-[10px] text-[var(--vscode-descriptionForeground)] mb-2">
+                  Define the skill rules, constraints, and instructions using Markdown. If you are editing an existing skill, you must rewrite the content for the new version.
+                </p>
+                <textarea 
+                  value={formContent}
+                  onChange={e => setFormContent(e.target.value)}
+                  placeholder="# Skill Instructions&#10;- Rule 1&#10;- Rule 2"
+                  className="w-full h-48 bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] rounded px-3 py-2 text-sm outline-none focus:border-[var(--vscode-focusBorder)] font-mono resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="px-4 py-3 border-t border-[var(--vscode-widget-border)] bg-black/20 flex justify-end gap-2">
+              <button 
+                onClick={() => { setShowCreateModal(false); setShowEditModal(false); }}
+                className="px-4 py-1.5 text-sm font-medium hover:bg-white/10 rounded transition"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={showCreateModal ? handleCreateSubmit : handleEditSubmit}
+                disabled={(showCreateModal && !formName.trim()) || !formContent.trim()}
+                className="px-4 py-1.5 text-sm font-medium bg-[var(--vscode-button-background)] hover:bg-[var(--vscode-button-hoverBackground)] text-[var(--vscode-button-foreground)] rounded transition disabled:opacity-50"
+              >
+                Save Skill
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

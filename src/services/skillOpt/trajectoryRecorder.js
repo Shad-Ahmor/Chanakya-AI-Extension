@@ -1,15 +1,4 @@
 "use strict";
-var __assign = (this && this.__assign) || function () {
-    __assign = Object.assign || function(t) {
-        for (var s, i = 1, n = arguments.length; i < n; i++) {
-            s = arguments[i];
-            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
-                t[p] = s[p];
-        }
-        return t;
-    };
-    return __assign.apply(this, arguments);
-};
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
@@ -45,90 +34,96 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TrajectoryRecorder = void 0;
-var fs = __importStar(require("fs"));
-var path = __importStar(require("path"));
-var TrajectoryRecorder = /** @class */ (function () {
-    function TrajectoryRecorder(workspaceRoot) {
-        this.currentTrajectories = new Map();
+const fs = __importStar(require("fs"));
+const path = __importStar(require("path"));
+class TrajectoryRecorder {
+    static instance;
+    trajectoriesDir;
+    currentTrajectories = new Map();
+    constructor(workspaceRoot) {
         this.trajectoriesDir = path.join(workspaceRoot, '.agents', 'trajectories');
         if (!fs.existsSync(this.trajectoriesDir)) {
             fs.mkdirSync(this.trajectoriesDir, { recursive: true });
         }
     }
-    TrajectoryRecorder.getInstance = function (workspaceRoot) {
+    static getInstance(workspaceRoot) {
         if (!TrajectoryRecorder.instance) {
             TrajectoryRecorder.instance = new TrajectoryRecorder(workspaceRoot);
         }
         return TrajectoryRecorder.instance;
-    };
-    TrajectoryRecorder.resetInstance = function () {
+    }
+    static resetInstance() {
         TrajectoryRecorder.instance = undefined;
-    };
-    TrajectoryRecorder.prototype.startTask = function (taskId, task, skill, skillVersion) {
-        if (skill === void 0) { skill = 'general'; }
-        if (skillVersion === void 0) { skillVersion = 1; }
+    }
+    startTask(taskId, task, skill = 'general', skillVersion = 1) {
         this.currentTrajectories.set(taskId, {
-            taskId: taskId,
-            task: task,
-            skill: skill,
-            skillVersion: skillVersion,
+            taskId,
+            task,
+            skill,
+            skillVersion,
             toolCalls: [],
             retries: 0,
             success: false,
             durationMs: 0,
             timestamp: Date.now()
         });
-    };
-    TrajectoryRecorder.prototype.recordToolCall = function (taskId, toolName, args, result, error) {
-        var trajectory = this.currentTrajectories.get(taskId);
+    }
+    recordToolCall(taskId, toolName, args, result, error) {
+        const trajectory = this.currentTrajectories.get(taskId);
         if (trajectory) {
             // Check for secrets here if needed, but for now we just record it.
             // DO NOT store API keys etc. We assume args and results don't contain them 
             // or we could sanitize them if a generic scrubber was available.
-            trajectory.toolCalls.push({
-                toolName: toolName,
+            const callInfo = {
+                toolName,
                 args: this.sanitizeArgs(args),
-                result: this.sanitizeResult(result),
-                error: error,
                 success: !error
-            });
+            };
+            if (result !== undefined) {
+                const sanitized = this.sanitizeResult(result);
+                if (sanitized !== undefined) {
+                    callInfo.result = sanitized;
+                }
+            }
+            if (error !== undefined)
+                callInfo.error = error;
+            trajectory.toolCalls.push(callInfo);
         }
-    };
-    TrajectoryRecorder.prototype.recordRetry = function (taskId) {
-        var trajectory = this.currentTrajectories.get(taskId);
+    }
+    recordRetry(taskId) {
+        const trajectory = this.currentTrajectories.get(taskId);
         if (trajectory) {
             trajectory.retries++;
         }
-    };
-    TrajectoryRecorder.prototype.endTask = function (taskId, success) {
-        var trajectory = this.currentTrajectories.get(taskId);
+    }
+    endTask(taskId, success) {
+        const trajectory = this.currentTrajectories.get(taskId);
         if (trajectory) {
             trajectory.success = success;
             trajectory.durationMs = Date.now() - trajectory.timestamp;
             this.persistTrajectory(trajectory);
             this.currentTrajectories.delete(taskId);
         }
-    };
-    TrajectoryRecorder.prototype.persistTrajectory = function (trajectory) {
-        var filePath = path.join(this.trajectoriesDir, "".concat(trajectory.taskId, ".json"));
+    }
+    persistTrajectory(trajectory) {
+        const filePath = path.join(this.trajectoriesDir, `${trajectory.taskId}.json`);
         fs.writeFileSync(filePath, JSON.stringify(trajectory, null, 2), 'utf8');
-    };
-    TrajectoryRecorder.prototype.getTrajectory = function (taskId) {
-        var filePath = path.join(this.trajectoriesDir, "".concat(taskId, ".json"));
+    }
+    getTrajectory(taskId) {
+        const filePath = path.join(this.trajectoriesDir, `${taskId}.json`);
         if (fs.existsSync(filePath)) {
             return JSON.parse(fs.readFileSync(filePath, 'utf8'));
         }
         return null;
-    };
-    TrajectoryRecorder.prototype.getTrajectories = function () {
-        var trajectories = [];
+    }
+    getTrajectories() {
+        const trajectories = [];
         if (!fs.existsSync(this.trajectoriesDir))
             return trajectories;
-        var files = fs.readdirSync(this.trajectoriesDir).filter(function (f) { return f.endsWith('.json'); });
-        for (var _i = 0, files_1 = files; _i < files_1.length; _i++) {
-            var file = files_1[_i];
+        const files = fs.readdirSync(this.trajectoriesDir).filter(f => f.endsWith('.json'));
+        for (const file of files) {
             try {
-                var data = fs.readFileSync(path.join(this.trajectoriesDir, file), 'utf8');
+                const data = fs.readFileSync(path.join(this.trajectoriesDir, file), 'utf8');
                 trajectories.push(JSON.parse(data));
             }
             catch (err) {
@@ -136,28 +131,24 @@ var TrajectoryRecorder = /** @class */ (function () {
             }
         }
         return trajectories;
-    };
-    TrajectoryRecorder.prototype.sanitizeArgs = function (args) {
+    }
+    sanitizeArgs(args) {
         if (typeof args !== 'object' || args === null)
             return args;
-        var sanitized = __assign({}, args);
-        var secretKeys = ['password', 'token', 'key', 'secret', 'authorization'];
-        var _loop_1 = function (key) {
-            if (secretKeys.some(function (sk) { return key.toLowerCase().includes(sk); })) {
+        const sanitized = { ...args };
+        const secretKeys = ['password', 'token', 'key', 'secret', 'authorization'];
+        for (const key of Object.keys(sanitized)) {
+            if (secretKeys.some(sk => key.toLowerCase().includes(sk))) {
                 sanitized[key] = '[REDACTED]';
             }
-        };
-        for (var _i = 0, _a = Object.keys(sanitized); _i < _a.length; _i++) {
-            var key = _a[_i];
-            _loop_1(key);
         }
         return sanitized;
-    };
-    TrajectoryRecorder.prototype.sanitizeResult = function (result) {
+    }
+    sanitizeResult(result) {
         if (!result)
             return result;
         return result.replace(/(bearer\s+|token=)[a-zA-Z0-9_\-\.]+/gi, '$1[REDACTED]');
-    };
-    return TrajectoryRecorder;
-}());
+    }
+}
 exports.TrajectoryRecorder = TrajectoryRecorder;
+//# sourceMappingURL=trajectoryRecorder.js.map
