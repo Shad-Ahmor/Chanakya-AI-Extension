@@ -46,6 +46,13 @@ export interface ChatMessage {
   readonly thoughtDurationMs?: number | undefined;
   readonly isThinking?: boolean | undefined;
   readonly planState?: any | undefined;
+  readonly telemetry?: {
+    readonly durationSec?: number | undefined;
+    readonly ttftSec?: number | undefined;
+    readonly tokensPerSec?: number | undefined;
+    readonly promptTokens?: number | undefined;
+    readonly completionTokens?: number | undefined;
+  } | undefined;
 }
 
 export interface Conversation {

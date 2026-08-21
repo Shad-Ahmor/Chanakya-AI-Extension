@@ -513,6 +513,13 @@ ${diff}`;
         };
 
         let currentOptStats: { originalTokens: number; optimizedTokens: number } | undefined = undefined;
+        let currentTelemetry: {
+          readonly durationSec?: number | undefined;
+          readonly ttftSec?: number | undefined;
+          readonly tokensPerSec?: number | undefined;
+          readonly promptTokens?: number | undefined;
+          readonly completionTokens?: number | undefined;
+        } | undefined = undefined;
 
         await LLMGateway.getInstance().streamChat({
           prompt: text,
@@ -570,7 +577,8 @@ ${diff}`;
                     role: 'assistant',
                     content: fullText,
                     timestamp: Date.now(),
-                    optimizationStats: currentOptStats
+                    optimizationStats: currentOptStats,
+                    telemetry: currentTelemetry
                   }
                 ];
               }
@@ -617,6 +625,16 @@ ${diff}`;
               }
             },
             onTokensUsed: (modelId, promptTokens, completionTokens, durationMs, ttftMs, isError, originalTokens, optimizedTokens) => {
+              const durationSec = durationMs ? Math.round(durationMs * 10) / 10 : undefined;
+              const ttftSec = ttftMs ? Math.round(ttftMs * 100) / 100 : undefined;
+              const tokensPerSec = durationMs && durationMs > 0 ? Math.round((completionTokens / durationMs) * 10) / 10 : undefined;
+              currentTelemetry = {
+                durationSec,
+                ttftSec,
+                tokensPerSec,
+                promptTokens,
+                completionTokens
+              };
               this._saveTokenUsage(modelId, promptTokens, completionTokens, durationMs, ttftMs, isError, originalTokens, optimizedTokens).catch(() => { /* non-fatal */ });
             },
             onOptimizationStats: (originalTokens, optimizedTokens) => {

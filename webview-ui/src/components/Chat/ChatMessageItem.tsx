@@ -426,22 +426,48 @@ export default function ChatMessageItem({ message, onOpenArtifact }: Props) {
         </div>
       )}
 
-      {/* Message Footer (Like, Dislike, Copy) */}
+      {/* Message Footer (Telemetry & Actions) */}
       {!message.isStreaming && (
-        <div className="mt-3 flex justify-end gap-1 border-t border-white/5 pt-2 select-none">
-          <button onClick={handleCopyMessage} className="p-1.5 text-white/40 hover:text-white hover:bg-white/10 rounded transition-colors cursor-pointer" title="Copy Message">
-            {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-          </button>
-          {!isUser && (
-            <>
-              <button className="p-1.5 text-white/40 hover:text-white hover:bg-white/10 rounded transition-colors cursor-pointer" title="Helpful">
-                <ThumbsUp className="w-3.5 h-3.5" />
-              </button>
-              <button className="p-1.5 text-white/40 hover:text-white hover:bg-white/10 rounded transition-colors cursor-pointer" title="Not Helpful">
-                <ThumbsDown className="w-3.5 h-3.5" />
-              </button>
-            </>
+        <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-2 select-none gap-2 flex-wrap">
+          {!isUser && message.telemetry ? (
+            <div className="flex items-center gap-2.5 text-[10px] font-mono text-white/50 overflow-x-auto py-0.5">
+              {message.telemetry.tokensPerSec !== undefined && (
+                <span className="flex items-center gap-1 text-sky-400 font-semibold">
+                  <span>⚡</span>
+                  <span>{message.telemetry.tokensPerSec} t/s</span>
+                </span>
+              )}
+              {message.thoughtDurationMs !== undefined && (
+                <span className="text-purple-300 font-medium">
+                  🧠 {(message.thoughtDurationMs / 1000).toFixed(1)}s think
+                </span>
+              )}
+              {message.telemetry.durationSec !== undefined && (
+                <span>⏱️ {message.telemetry.durationSec}s</span>
+              )}
+              {message.telemetry.completionTokens !== undefined && (
+                <span>📊 {message.telemetry.completionTokens} toks</span>
+              )}
+            </div>
+          ) : (
+            <div />
           )}
+
+          <div className="flex items-center gap-1">
+            <button onClick={handleCopyMessage} className="p-1.5 text-white/40 hover:text-white hover:bg-white/10 rounded transition-colors cursor-pointer" title="Copy Message">
+              {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+            </button>
+            {!isUser && (
+              <>
+                <button className="p-1.5 text-white/40 hover:text-white hover:bg-white/10 rounded transition-colors cursor-pointer" title="Helpful">
+                  <ThumbsUp className="w-3.5 h-3.5" />
+                </button>
+                <button className="p-1.5 text-white/40 hover:text-white hover:bg-white/10 rounded transition-colors cursor-pointer" title="Not Helpful">
+                  <ThumbsDown className="w-3.5 h-3.5" />
+                </button>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>
