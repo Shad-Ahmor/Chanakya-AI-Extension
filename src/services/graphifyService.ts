@@ -1029,9 +1029,14 @@ export class GraphifyService {
 
     // Pass 4: Calculate degrees & node sizing
     const degreeCount = new Map<string, number>();
+    const adjacency = new Map<string, string[]>();
+
     for (const edge of edges) {
       degreeCount.set(edge.from, (degreeCount.get(edge.from) || 0) + 1);
       degreeCount.set(edge.to, (degreeCount.get(edge.to) || 0) + 1);
+
+      if (!adjacency.has(edge.from)) adjacency.set(edge.from, []);
+      adjacency.get(edge.from)!.push(edge.to);
     }
 
     const nodes = Array.from(nodesMap.values()).map(node => {
@@ -1044,6 +1049,102 @@ export class GraphifyService {
 
     const communities = Array.from(communityMap.values()).sort((a, b) => b.count - a.count);
 
+    // Pass 5: Advanced Graphify Intelligence & Analytics (God Nodes, Surprising Links, Cycles, Questions)
+    const godNodes = nodes
+      .filter(n => n.file_type === 'code' || n.file_type === 'class')
+      .sort((a, b) => b.degree - a.degree)
+      .slice(0, 8)
+      .map(n => ({
+        id: n.id,
+        label: n.label,
+        source_file: n.source_file,
+        degree: n.degree,
+        file_type: n.file_type
+      }));
+
+    // Surprising connections (Cross-community or API network bridges)
+    const surprisingConnections = edges
+      .filter(e => {
+        if (e.type === 'api-network') return true;
+        const fromNode = nodesMap.get(e.from);
+        const toNode = nodesMap.get(e.to);
+        return fromNode && toNode && fromNode.community !== toNode.community;
+      })
+      .slice(0, 10)
+      .map(e => {
+        const fromNode = nodesMap.get(e.from);
+        const toNode = nodesMap.get(e.to);
+        const isApi = e.type === 'api-network';
+        return {
+          from: e.from,
+          to: e.to,
+          fromLabel: fromNode?.label || e.from,
+          toLabel: toNode?.label || e.to,
+          relation: e.relation || 'links',
+          type: e.type,
+          reason: isApi
+            ? `Cross-Boundary API call (${e.label || 'HTTP'})`
+            : `Cross-Module coupling between [${fromNode?.community_name}] and [${toNode?.community_name}]`
+        };
+      });
+
+    // Import Cycle Detection (DFS)
+    const importCycles: { path: string[]; labels: string[] }[] = [];
+    const visited = new Set<string>();
+    const recStack = new Set<string>();
+    const currentPath: string[] = [];
+
+    const detectCycles = (u: string) => {
+      visited.add(u);
+      recStack.add(u);
+      currentPath.push(u);
+
+      const neighbors = adjacency.get(u) || [];
+      for (const v of neighbors) {
+        if (importCycles.length >= 5) break; // cap cycles
+        if (!visited.has(v)) {
+          detectCycles(v);
+        } else if (recStack.has(v)) {
+          // Cycle found
+          const cycleStartIndex = currentPath.indexOf(v);
+          if (cycleStartIndex !== -1) {
+            const cyclePath = currentPath.slice(cycleStartIndex).concat(v);
+            const cycleLabels = cyclePath.map(id => nodesMap.get(id)?.label || id);
+            importCycles.push({ path: cyclePath, labels: cycleLabels });
+          }
+        }
+      }
+
+      currentPath.pop();
+      recStack.delete(u);
+    };
+
+    for (const node of nodes) {
+      if (!visited.has(node.id) && importCycles.length < 5) {
+        detectCycles(node.id);
+      }
+    }
+
+    // Suggested Questions Generation
+    const suggestedQuestions = [
+      ...(godNodes.length > 0 ? [{
+        question: `How does the core abstraction '${godNodes[0].label}' orchestrate the rest of the application?`,
+        category: 'architecture' as const
+      }] : []),
+      ...(surprisingConnections.length > 0 ? [{
+        question: `Why does '${surprisingConnections[0].fromLabel}' directly connect to '${surprisingConnections[0].toLabel}'?`,
+        category: 'coupling' as const
+      }] : []),
+      ...(importCycles.length > 0 ? [{
+        question: `How can we refactor the circular dependency between ${importCycles[0].labels.join(' ➔ ')}?`,
+        category: 'architecture' as const
+      }] : []),
+      {
+        question: `What is the entrypoint flow and data flow across the primary modules?`,
+        category: 'flow' as const
+      }
+    ];
+
     this.cachedData = {
       nodes,
       edges,
@@ -1052,6 +1153,12 @@ export class GraphifyService {
         nodeCount: nodes.length,
         edgeCount: edges.length,
         communityCount: communities.length
+      },
+      analytics: {
+        godNodes,
+        surprisingConnections,
+        importCycles,
+        suggestedQuestions
       }
     };
 
@@ -1114,23 +1221,30 @@ ${apiEdges.map(e => {
       md += '\n';
     }
 
-    md += `---
+    md += `## 👑 Core Abstractions & God Nodes (Highest Connectivity)
 
-## 🔗 Key Dependency Relationships
+${data.analytics?.godNodes && data.analytics.godNodes.length > 0 ? `| Component | File Path | Degree (Connections) | Type |
+|---|---|---|---|
+${data.analytics.godNodes.map(g => `| **\`${g.label}\`** | \`${g.source_file}\` | \`${g.degree}\` | \`${g.file_type}\` |`).join('\n')}` : `*No central god nodes detected.*`}
 
-| Source Module | Relation | Target Module |
-|---|---|---|
-`;
+---
 
-    for (const edge of importEdges.slice(0, 50)) {
-      const fromNode = data.nodes.find((n) => n.id === edge.from);
-      const toNode = data.nodes.find((n) => n.id === edge.to);
-      if (fromNode && toNode) {
-        md += `| \`${fromNode.label}\` | \`${edge.relation || 'imports'}\` | \`${toNode.label}\` |\n`;
-      }
-    }
+## ⚡ Surprising Connections & Cross-Module Couplings
 
-    md += `\n> *Showing first 50 dependency links.*
+${data.analytics?.surprisingConnections && data.analytics.surprisingConnections.length > 0 ? `| Source | Target | Relation | Coupling Reason |
+|---|---|---|---|
+${data.analytics.surprisingConnections.map(c => `| \`${c.fromLabel}\` | \`${c.toLabel}\` | \`${c.relation}\` | ${c.reason} |`).join('\n')}` : `*No unexpected cross-module couplings detected.*`}
+
+---
+
+${data.analytics?.importCycles && data.analytics.importCycles.length > 0 ? `## ⚠️ Circular Dependencies & Import Cycles
+
+${data.analytics.importCycles.map((cy, i) => `- **Cycle #${i + 1}**: \`${cy.labels.join(' ➔ ')}\``).join('\n')}
+
+---
+` : ''}## 💡 Suggested Architectural Discovery Questions
+
+${data.analytics?.suggestedQuestions && data.analytics.suggestedQuestions.length > 0 ? data.analytics.suggestedQuestions.map(q => `- **[${q.category.toUpperCase()}]** *${q.question}*`).join('\n') : `*No questions generated.*`}
 
 ---
 

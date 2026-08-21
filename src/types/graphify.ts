@@ -50,6 +50,41 @@ export interface GraphCommunity {
   selected?: boolean;
 }
 
+export interface GodNode {
+  id: string;
+  label: string;
+  source_file: string;
+  degree: number;
+  file_type: string;
+}
+
+export interface SurprisingConnection {
+  from: string;
+  to: string;
+  fromLabel: string;
+  toLabel: string;
+  relation: string;
+  type?: string | undefined;
+  reason: string;
+}
+
+export interface ImportCycle {
+  path: string[];
+  labels: string[];
+}
+
+export interface SuggestedQuestion {
+  question: string;
+  category: 'architecture' | 'coupling' | 'flow' | 'security';
+}
+
+export interface GraphifyAnalytics {
+  godNodes: GodNode[];
+  surprisingConnections: SurprisingConnection[];
+  importCycles: ImportCycle[];
+  suggestedQuestions: SuggestedQuestion[];
+}
+
 export interface GraphifyData {
   nodes: GraphNode[];
   edges: GraphEdge[];
@@ -59,4 +94,5 @@ export interface GraphifyData {
     edgeCount: number;
     communityCount: number;
   };
+  analytics?: GraphifyAnalytics | undefined;
 }

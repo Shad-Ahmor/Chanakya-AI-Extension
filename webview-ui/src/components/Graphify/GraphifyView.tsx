@@ -18,12 +18,19 @@ import {
   FileText,
   X,
   Code,
-  Sparkles
+  Crown,
+  GitFork,
+  AlertTriangle,
+  HelpCircle,
+  Send,
+  Navigation
 } from 'lucide-react';
 
 interface GraphifyViewProps {
   onBack?: () => void;
 }
+
+type DrawerTab = 'layers' | 'godNodes' | 'bridges' | 'cycles' | 'insights';
 
 export default function GraphifyView({ onBack }: GraphifyViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -34,11 +41,12 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
   const [data, setData] = useState<GraphifyData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
-  const [activeNeighbors, setActiveNeighbors] = useState<GraphNode[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCommunities, setSelectedCommunities] = useState<Set<number>>(new Set());
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
+  const [activeTab, setActiveTab] = useState<DrawerTab>('layers');
   const [isPhysicsEnabled, setIsPhysicsEnabled] = useState<boolean>(true);
+  const [pathTargetNodeId, setPathTargetNodeId] = useState<string>('');
 
   // Request initial graph data from extension backend
   useEffect(() => {
@@ -82,11 +90,11 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
       (e) => visibleNodeIds.has(e.from) && visibleNodeIds.has(e.to)
     );
 
-    // Format nodes for vis-network with glowing aesthetics
+    // Format nodes with custom styling
     const visNodes = visibleNodes.map((node) => ({
       id: node.id,
       label: node.label,
-      title: `${node.label} (${node.file_type})\nPath: ${node.source_file}\nDegree: ${node.degree}`,
+      title: node.title,
       value: node.size,
       color: {
         background: node.color.background,
@@ -178,7 +186,7 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
         smooth: {
           enabled: true,
           type: 'continuous',
-          roundness: 0.15
+          roundness: 0.18
         }
       },
       physics: {
@@ -201,139 +209,165 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
         hover: true,
         hoverConnectedEdges: true,
         tooltipDelay: 80,
-        zoomView: true,
-        dragView: true,
         navigationButtons: false,
-        keyboard: true
+        keyboard: true,
+        zoomView: true,
+        dragView: true
       }
     };
-
-    if (networkRef.current) {
-      networkRef.current.destroy();
-    }
 
     const network = new Network(
       containerRef.current,
       { nodes: nodesDataSetRef.current, edges: edgesDataSetRef.current },
       options
     );
-    networkRef.current = network;
 
-    // Single Click: Select node, open inspector, AND open file immediately in central editor
+    // Single-click selection: open file in editor and populate inspector drawer
     network.on('click', (params) => {
-      if (params.nodes.length > 0) {
+      if (params.nodes && params.nodes.length > 0) {
         const nodeId = params.nodes[0];
         const found = data.nodes.find((n) => n.id === nodeId);
         if (found) {
           setSelectedNode(found);
-          const connectedIds = network.getConnectedNodes(nodeId) as string[];
-          const neighbors = data.nodes.filter((n) => connectedIds.includes(n.id));
-          setActiveNeighbors(neighbors);
           setIsSidebarOpen(true);
 
-          // Open file in central VS Code editor
-          if (found.source_file) {
-            vscode.postMessage({
-              type: 'openFile',
-              payload: { filePath: found.source_file }
-            });
-          }
-        }
-      } else {
-        setSelectedNode(null);
-        setActiveNeighbors([]);
-      }
-    });
-
-    // Double Click: Focus and re-trigger open file
-    network.on('doubleClick', (params) => {
-      if (params.nodes.length > 0) {
-        const nodeId = params.nodes[0];
-        const found = data.nodes.find((n) => n.id === nodeId);
-        if (found && found.source_file) {
+          // Dispatch openFile to VS Code central main editor
           vscode.postMessage({
             type: 'openFile',
             payload: { filePath: found.source_file }
           });
-          network.focus(nodeId, {
-            scale: 1.3,
-            animation: { duration: 500, easingFunction: 'easeInOutQuad' }
-          });
         }
+      } else {
+        setSelectedNode(null);
       }
     });
 
-    // Hover Node: Highlight connected edges and dim unrelated nodes
-    network.on('hoverNode', (params) => {
-      if (!nodesDataSetRef.current || !edgesDataSetRef.current) return;
-      const hoveredId = params.node;
-      const connectedNodeIds = new Set(network.getConnectedNodes(hoveredId) as string[]);
-      connectedNodeIds.add(hoveredId);
-
-      // Dim unrelated nodes
-      const allNodes = nodesDataSetRef.current.get();
-      const nodeUpdates = allNodes.map((n: any) => ({
-        id: n.id,
-        opacity: connectedNodeIds.has(n.id) ? 1.0 : 0.2
-      }));
-      nodesDataSetRef.current.update(nodeUpdates);
+    // Double-click to zoom and focus smoothly on node
+    network.on('doubleClick', (params) => {
+      if (params.nodes && params.nodes.length > 0) {
+        network.focus(params.nodes[0], {
+          scale: 1.4,
+          animation: {
+            duration: 600,
+            easingFunction: 'easeInOutQuad'
+          }
+        });
+      }
     });
 
-    // Blur Node: Restore original opacity
+    // Hover glow effect: illuminate connected nodes and edges, dim non-neighbors
+    network.on('hoverNode', (params) => {
+      const hoveredId = params.node;
+      if (!nodesDataSetRef.current) return;
+
+      const connectedNodes = new Set(network.getConnectedNodes(hoveredId) as string[]);
+      connectedNodes.add(hoveredId);
+
+      const allNodes = nodesDataSetRef.current.get();
+      const updates = allNodes.map((n: any) => ({
+        id: n.id,
+        opacity: connectedNodes.has(n.id) ? 1.0 : 0.25
+      }));
+      nodesDataSetRef.current.update(updates);
+    });
+
     network.on('blurNode', () => {
       if (!nodesDataSetRef.current) return;
       const allNodes = nodesDataSetRef.current.get();
-      const nodeUpdates = allNodes.map((n: any) => ({
+      const updates = allNodes.map((n: any) => ({
         id: n.id,
         opacity: 1.0
       }));
-      nodesDataSetRef.current.update(nodeUpdates);
+      nodesDataSetRef.current.update(updates);
     });
 
+    networkRef.current = network;
+
     return () => {
-      if (networkRef.current) {
-        networkRef.current.destroy();
-        networkRef.current = null;
-      }
+      network.destroy();
+      networkRef.current = null;
     };
   }, [data, selectedCommunities, isPhysicsEnabled]);
 
-  // Search filtering
-  const filteredSearchResults = useMemo(() => {
-    if (!data || !searchQuery.trim()) return [];
+  // Search filter matches
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim() || !data) return [];
     const q = searchQuery.toLowerCase();
-    return data.nodes
-      .filter((n) => n.label.toLowerCase().includes(q) || n.source_file.toLowerCase().includes(q))
-      .slice(0, 15);
-  }, [data, searchQuery]);
+    return data.nodes.filter(
+      (n) => n.label.toLowerCase().includes(q) || n.source_file.toLowerCase().includes(q)
+    );
+  }, [searchQuery, data]);
+
+  // Shortest Path Finder (BFS between selectedNode and targetNode)
+  const handleTraceShortestPath = (targetId: string) => {
+    if (!selectedNode || !data || !networkRef.current || !nodesDataSetRef.current) return;
+    const startId = selectedNode.id;
+    if (startId === targetId) return;
+
+    // Adjacency graph
+    const adj = new Map<string, string[]>();
+    for (const e of data.edges) {
+      if (!adj.has(e.from)) adj.set(e.from, []);
+      if (!adj.has(e.to)) adj.set(e.to, []);
+      adj.get(e.from)!.push(e.to);
+      adj.get(e.to)!.push(e.from);
+    }
+
+    // BFS
+    const queue: string[] = [startId];
+    const prev = new Map<string, string>();
+    const visited = new Set<string>([startId]);
+    let found = false;
+
+    while (queue.length > 0) {
+      const u = queue.shift()!;
+      if (u === targetId) {
+        found = true;
+        break;
+      }
+      for (const v of adj.get(u) || []) {
+        if (!visited.has(v)) {
+          visited.add(v);
+          prev.set(v, u);
+          queue.push(v);
+        }
+      }
+    }
+
+    if (found) {
+      const path: string[] = [];
+      let curr: string | undefined = targetId;
+      while (curr) {
+        path.unshift(curr);
+        curr = prev.get(curr);
+      }
+      // Fit network to path
+      networkRef.current.fit({
+        nodes: path,
+        animation: { duration: 700, easingFunction: 'easeInOutQuad' }
+      });
+    }
+  };
 
   const handleSelectSearchResult = (node: GraphNode) => {
     setSelectedNode(node);
     setSearchQuery('');
     if (networkRef.current) {
-      networkRef.current.focus(node.id, {
-        scale: 1.3,
-        animation: { duration: 600, easingFunction: 'easeInOutQuad' }
-      });
       networkRef.current.selectNodes([node.id]);
-
-      // Open in VS Code editor
-      if (node.source_file) {
-        vscode.postMessage({
-          type: 'openFile',
-          payload: { filePath: node.source_file }
-        });
-      }
+      networkRef.current.focus(node.id, {
+        scale: 1.4,
+        animation: { duration: 500, easingFunction: 'easeInOutQuad' }
+      });
     }
   };
 
-  const handleToggleCommunity = (commId: number) => {
+  const handleToggleCommunity = (communityId: number) => {
     setSelectedCommunities((prev) => {
       const next = new Set(prev);
-      if (next.has(commId)) {
-        next.delete(commId);
+      if (next.has(communityId)) {
+        next.delete(communityId);
       } else {
-        next.add(commId);
+        next.add(communityId);
       }
       return next;
     });
@@ -350,134 +384,152 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
 
   const handleFit = () => {
     if (networkRef.current) {
-      networkRef.current.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+      networkRef.current.fit({
+        animation: { duration: 500, easingFunction: 'easeInOutQuad' }
+      });
     }
   };
 
-  const handleZoomIn = () => {
+  const handleZoom = (direction: 'in' | 'out') => {
     if (networkRef.current) {
-      const scale = networkRef.current.getScale();
-      networkRef.current.moveTo({ scale: scale * 1.3, animation: { duration: 300, easingFunction: 'easeInOutQuad' } });
+      const currentScale = networkRef.current.getScale();
+      const newScale = direction === 'in' ? currentScale * 1.3 : currentScale * 0.7;
+      networkRef.current.moveTo({ scale: newScale, animation: { duration: 300, easingFunction: 'easeInOutQuad' } });
     }
   };
 
-  const handleZoomOut = () => {
-    if (networkRef.current) {
-      const scale = networkRef.current.getScale();
-      networkRef.current.moveTo({ scale: scale * 0.7, animation: { duration: 300, easingFunction: 'easeInOutQuad' } });
-    }
-  };
-
-  const handleRefresh = () => {
-    setLoading(true);
-    vscode.postMessage({ type: 'getGraphifyData', payload: { refresh: true } });
+  const handleAskQuestion = (question: string) => {
+    vscode.postMessage({
+      type: 'sendMessage',
+      payload: {
+        text: `Analyze the codebase architecture: ${question}`,
+        contextItems: []
+      }
+    });
   };
 
   const hasNoNodes = !loading && (!data || data.nodes.length === 0);
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#0a0a12] text-slate-200 overflow-hidden select-none font-sans relative">
-      {/* Top Header Bar */}
-      <div className="flex items-center justify-between px-3 py-2 bg-[#12121f] border-b border-white/10 z-20 shrink-0 gap-2">
-        <div className="flex items-center gap-2 min-w-0">
+    <div className="flex flex-col w-full h-full bg-[#0a0a12] text-slate-100 overflow-hidden select-none font-sans">
+      {/* Top Navbar */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-[#12121f] shrink-0 z-20 gap-2">
+        {/* Left: Back & Title */}
+        <div className="flex items-center gap-2">
           {onBack && (
             <button
               onClick={onBack}
-              className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-white/5 hover:bg-white/10 text-slate-300 transition shrink-0"
-              title="Back"
+              className="p-1.5 rounded-lg hover:bg-white/10 text-slate-300 hover:text-white transition"
+              title="Back to Dashboard"
             >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Back</span>
+              <ArrowLeft className="w-4 h-4" />
             </button>
           )}
-          <div className="flex items-center gap-1.5 min-w-0 truncate">
-            <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse shrink-0 shadow-sm shadow-cyan-400/50" />
-            <h1 className="text-xs sm:text-sm font-semibold text-white tracking-wide truncate">
+          <div className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
+            <span className="font-bold text-sm tracking-wide bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
               Graphify Architecture
-            </h1>
+            </span>
           </div>
         </div>
 
-        {/* Toolbar Controls */}
-        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-          {/* Search bar */}
+        {/* Center: Search Autocomplete */}
+        <div className="relative flex-1 max-w-xs">
           <div className="relative">
-            <div className="flex items-center bg-[#0a0a12] border border-white/10 rounded-md px-2 py-1 text-xs w-28 sm:w-44 focus-within:w-48 sm:focus-within:w-56 focus-within:border-cyan-500/50 transition-all">
-              <Search className="w-3 h-3 text-slate-400 mr-1.5 shrink-0" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search..."
-                className="bg-transparent border-none outline-none text-slate-200 w-full placeholder-slate-500 text-xs"
-              />
-            </div>
-            {/* Search Dropdown */}
-            {filteredSearchResults.length > 0 && (
-              <div className="absolute right-0 top-full mt-1 bg-[#1a1a2e] border border-white/15 rounded-lg shadow-2xl max-h-60 overflow-y-auto z-50 p-1 w-64">
-                {filteredSearchResults.map((n) => (
-                  <div
-                    key={n.id}
-                    onClick={() => handleSelectSearchResult(n)}
-                    className="flex items-center justify-between px-2.5 py-1.5 rounded text-xs hover:bg-cyan-500/20 cursor-pointer transition"
-                  >
-                    <span className="font-medium text-slate-200 truncate">{n.label}</span>
-                    <span className="text-[10px] text-slate-400 uppercase ml-2">{n.file_type}</span>
-                  </div>
-                ))}
-              </div>
-            )}
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search file, component, symbol..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-8 pr-3 py-1 bg-black/40 border border-white/10 rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition"
+            />
           </div>
 
+          {/* Autocomplete Dropdown */}
+          {searchResults.length > 0 && (
+            <div className="absolute top-full left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-[#141426] border border-white/10 rounded-lg shadow-2xl z-50 p-1 flex flex-col gap-0.5">
+              {searchResults.slice(0, 8).map((node) => (
+                <div
+                  key={node.id}
+                  onClick={() => handleSelectSearchResult(node)}
+                  className="flex items-center justify-between px-2.5 py-1.5 rounded-md hover:bg-cyan-500/20 cursor-pointer text-xs transition"
+                >
+                  <div className="flex items-center gap-2 truncate">
+                    <div
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: node.color.background }}
+                    />
+                    <span className="truncate font-medium text-slate-200">{node.label}</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 truncate max-w-[120px] font-mono">
+                    {node.source_file}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Right Toolbar Actions */}
+        <div className="flex items-center gap-1.5">
+          {/* Zoom Buttons */}
           <button
-            onClick={handleZoomIn}
-            className="p-1 rounded bg-white/5 hover:bg-white/10 text-slate-300 transition"
+            onClick={() => handleZoom('in')}
+            className="p-1.5 rounded hover:bg-white/10 text-slate-300 hover:text-white transition"
             title="Zoom In"
           >
             <ZoomIn className="w-3.5 h-3.5" />
           </button>
           <button
-            onClick={handleZoomOut}
-            className="p-1 rounded bg-white/5 hover:bg-white/10 text-slate-300 transition"
+            onClick={() => handleZoom('out')}
+            className="p-1.5 rounded hover:bg-white/10 text-slate-300 hover:text-white transition"
             title="Zoom Out"
           >
             <ZoomOut className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={handleFit}
-            className="p-1 rounded bg-white/5 hover:bg-white/10 text-slate-300 transition"
+            className="p-1.5 rounded hover:bg-white/10 text-slate-300 hover:text-white transition"
             title="Fit to Screen"
           >
             <Maximize2 className="w-3.5 h-3.5" />
           </button>
+
+          {/* Physics Toggle */}
           <button
             onClick={() => setIsPhysicsEnabled((prev) => !prev)}
-            className={`p-1 rounded transition ${
-              isPhysicsEnabled ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-white/5 text-slate-400'
+            className={`p-1.5 rounded transition ${
+              isPhysicsEnabled ? 'text-cyan-400 hover:bg-cyan-500/10' : 'text-slate-500 hover:bg-white/5'
             }`}
-            title="Toggle Physics"
+            title={isPhysicsEnabled ? 'Freeze Physics Simulation' : 'Enable Physics Simulation'}
           >
             <Sliders className="w-3.5 h-3.5" />
           </button>
+
+          {/* Refresh Graph */}
           <button
-            onClick={handleRefresh}
-            className="p-1 rounded bg-cyan-600/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-600/30 transition"
-            title="Re-scan Workspace"
+            onClick={() => {
+              setLoading(true);
+              vscode.postMessage({ type: 'getGraphifyData', payload: { refresh: true } });
+            }}
+            className="p-1.5 rounded hover:bg-white/10 text-slate-300 hover:text-white transition"
+            title="Rescan & Refresh Graph"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-cyan-400' : ''}`} />
           </button>
 
           {/* Export architecture.md Button */}
           <button
             onClick={() => vscode.postMessage({ type: 'exportArchitectureMd' })}
             className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30 transition"
-            title="Export architecture.md to workspace"
+            title="Export architecture.md with full analytics to workspace"
           >
             <FileText className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Export .md</span>
           </button>
 
-          {/* Communities Toggle Button */}
+          {/* Drawer Toggle Button */}
           <button
             onClick={() => setIsSidebarOpen((prev) => !prev)}
             className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition ${
@@ -485,15 +537,10 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
                 ? 'bg-cyan-500 text-black font-semibold'
                 : 'bg-white/10 text-slate-200 hover:bg-white/15'
             }`}
-            title="Toggle Communities & Inspector"
+            title="Toggle Inspector & Analytics Drawer"
           >
             <Layers className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Layers</span>
-            {data && data.communities && (
-              <span className="text-[10px] bg-black/30 px-1 py-0.2 rounded font-mono">
-                {data.communities.length}
-              </span>
-            )}
+            <span className="hidden sm:inline">Insights</span>
           </button>
         </div>
       </div>
@@ -506,7 +553,7 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
         {loading && (
           <div className="absolute inset-0 bg-black/75 backdrop-blur-sm flex flex-col items-center justify-center gap-3 z-30">
             <div className="w-8 h-8 border-3 border-cyan-400/20 border-t-cyan-400 rounded-full animate-spin" />
-            <div className="text-xs font-medium text-slate-300">Parsing AST & Building Interactive Graph...</div>
+            <div className="text-xs font-medium text-slate-300">Parsing AST & Building Universal Architecture Graph...</div>
           </div>
         )}
 
@@ -518,10 +565,13 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
             </div>
             <h2 className="text-base font-bold text-white mb-1.5">No Open Workspace Found</h2>
             <p className="text-xs text-slate-400 max-w-sm mb-5 leading-relaxed">
-              Open a project folder in VS Code to generate an interactive architectural graph of all your files, classes, and dependencies.
+              Open a project folder in VS Code to generate an interactive multi-language architecture graph.
             </p>
             <button
-              onClick={handleRefresh}
+              onClick={() => {
+                setLoading(true);
+                vscode.postMessage({ type: 'getGraphifyData', payload: { refresh: true } });
+              }}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-black font-semibold text-xs transition shadow-md shadow-cyan-500/20"
             >
               <RefreshCw className="w-3.5 h-3.5" />
@@ -551,15 +601,15 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
           </div>
         )}
 
-        {/* Slide-in / Collapsible Right Drawer for Communities & Inspector */}
+        {/* Slide-in Right Drawer with Multi-Tab Analytics */}
         {isSidebarOpen && (
-          <div className="absolute right-0 top-0 bottom-0 w-72 max-w-[85vw] bg-[#121222]/95 backdrop-blur-md border-l border-white/10 flex flex-col z-30 shadow-2xl animate-in slide-in-from-right duration-200">
+          <div className="absolute right-0 top-0 bottom-0 w-80 max-w-[85vw] bg-[#121222]/95 backdrop-blur-md border-l border-white/10 flex flex-col z-30 shadow-2xl animate-in slide-in-from-right duration-200">
             {/* Drawer Header */}
             <div className="px-3 py-2 border-b border-white/10 flex items-center justify-between bg-[#16162a]">
               <div className="flex items-center gap-1.5">
                 <Layers className="w-3.5 h-3.5 text-cyan-400" />
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
-                  Inspector & Layers
+                  Architecture Hub
                 </span>
               </div>
               <button
@@ -570,7 +620,51 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
               </button>
             </div>
 
-            {/* Node Inspector Card */}
+            {/* Tab Navigation Rail */}
+            <div className="flex items-center border-b border-white/10 bg-[#10101c] px-1 py-1 gap-1 text-[11px] overflow-x-auto">
+              <button
+                onClick={() => setActiveTab('layers')}
+                className={`px-2.5 py-1 rounded font-medium transition flex items-center gap-1 ${
+                  activeTab === 'layers' ? 'bg-cyan-500 text-black font-semibold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Layers className="w-3 h-3" /> Layers
+              </button>
+              <button
+                onClick={() => setActiveTab('godNodes')}
+                className={`px-2.5 py-1 rounded font-medium transition flex items-center gap-1 ${
+                  activeTab === 'godNodes' ? 'bg-cyan-500 text-black font-semibold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Crown className="w-3 h-3 text-amber-400" /> Hubs
+              </button>
+              <button
+                onClick={() => setActiveTab('bridges')}
+                className={`px-2.5 py-1 rounded font-medium transition flex items-center gap-1 ${
+                  activeTab === 'bridges' ? 'bg-cyan-500 text-black font-semibold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <GitFork className="w-3 h-3 text-rose-400" /> Bridges
+              </button>
+              <button
+                onClick={() => setActiveTab('cycles')}
+                className={`px-2.5 py-1 rounded font-medium transition flex items-center gap-1 ${
+                  activeTab === 'cycles' ? 'bg-cyan-500 text-black font-semibold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <AlertTriangle className="w-3 h-3 text-yellow-400" /> Cycles
+              </button>
+              <button
+                onClick={() => setActiveTab('insights')}
+                className={`px-2.5 py-1 rounded font-medium transition flex items-center gap-1 ${
+                  activeTab === 'insights' ? 'bg-cyan-500 text-black font-semibold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <HelpCircle className="w-3 h-3 text-purple-400" /> AI
+              </button>
+            </div>
+
+            {/* Selected Node Inspector Card (Always visible if a node is selected) */}
             {selectedNode && (
               <div className="p-3 border-b border-white/10 bg-[#141426] flex flex-col gap-2 shrink-0">
                 <div className="flex items-center justify-between">
@@ -607,13 +701,36 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
                   <span>Module: <b className="text-slate-200">{selectedNode.community_name}</b></span>
                 </div>
 
+                {/* Path Trace Input */}
+                <div className="mt-1 pt-1.5 border-t border-white/10 flex items-center gap-1.5">
+                  <Navigation className="w-3 h-3 text-amber-400 shrink-0" />
+                  <select
+                    value={pathTargetNodeId}
+                    onChange={(e) => {
+                      setPathTargetNodeId(e.target.value);
+                      handleTraceShortestPath(e.target.value);
+                    }}
+                    className="flex-1 bg-black/40 border border-white/10 rounded px-1.5 py-1 text-[10px] text-slate-300 focus:outline-none focus:border-amber-400"
+                  >
+                    <option value="">Trace Shortest Path to...</option>
+                    {data?.nodes
+                      .filter((n) => n.id !== selectedNode.id)
+                      .slice(0, 50)
+                      .map((n) => (
+                        <option key={n.id} value={n.id}>
+                          {n.label} ({n.source_file})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
                 {/* Exported AST Symbols */}
                 {selectedNode.symbols && selectedNode.symbols.length > 0 && (
                   <div className="mt-1">
                     <div className="text-[10px] text-slate-400 uppercase font-semibold mb-1 flex items-center gap-1">
                       <Code className="w-3 h-3 text-purple-400" /> Exported Symbols ({selectedNode.symbols.length})
                     </div>
-                    <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto pr-1">
+                    <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto pr-1">
                       {selectedNode.symbols.slice(0, 10).map((sym, idx) => (
                         <span key={idx} className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-200 font-mono border border-purple-500/30 truncate max-w-full">
                           {sym}
@@ -622,76 +739,164 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
                     </div>
                   </div>
                 )}
+              </div>
+            )}
 
-                {/* Neighbors List */}
-                {activeNeighbors.length > 0 && (
-                  <div className="mt-1">
-                    <div className="text-[10px] text-slate-400 uppercase font-semibold mb-1 flex items-center gap-1">
-                      <Sparkles className="w-3 h-3 text-cyan-400" /> Connected Files ({activeNeighbors.length})
-                    </div>
-                    <div className="max-h-28 overflow-y-auto flex flex-col gap-1 pr-1">
-                      {activeNeighbors.map((neighbor) => (
-                        <div
-                          key={neighbor.id}
-                          onClick={() => handleSelectSearchResult(neighbor)}
-                          className="flex items-center justify-between px-2 py-1 rounded text-[11px] bg-black/40 hover:bg-cyan-500/20 cursor-pointer transition border border-white/5"
-                        >
-                          <span className="truncate max-w-[150px] text-slate-300">{neighbor.label}</span>
+            {/* Tab 1: Layers & Communities */}
+            {activeTab === 'layers' && (
+              <div className="flex-1 overflow-y-auto flex flex-col">
+                <div className="px-3 py-2 border-b border-white/10 flex items-center justify-between bg-[#141426] shrink-0">
+                  <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                    Layers ({data?.communities.length || 0})
+                  </span>
+                  <button
+                    onClick={handleToggleAllCommunities}
+                    className="text-[11px] text-cyan-400 hover:text-cyan-300 font-medium transition"
+                  >
+                    {data && selectedCommunities.size === data.communities.length ? 'Deselect All' : 'Select All'}
+                  </button>
+                </div>
+                <div className="p-2 space-y-1">
+                  {data?.communities.map((comm) => {
+                    const isSelected = selectedCommunities.has(comm.id);
+                    return (
+                      <div
+                        key={comm.id}
+                        onClick={() => handleToggleCommunity(comm.id)}
+                        className={`flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs cursor-pointer transition select-none ${
+                          isSelected ? 'bg-white/5 text-slate-200 hover:bg-white/10' : 'text-slate-500 hover:bg-white/5 opacity-60'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {}}
+                            className="w-3.5 h-3.5 rounded border-slate-700 text-cyan-500 focus:ring-0 cursor-pointer pointer-events-none"
+                          />
                           <div
                             className="w-2.5 h-2.5 rounded-full shrink-0"
-                            style={{ backgroundColor: neighbor.color.background }}
+                            style={{ backgroundColor: comm.color }}
                           />
+                          <span className="truncate font-medium">{comm.name}</span>
                         </div>
-                      ))}
+                        <span className="text-[11px] font-mono text-slate-400 ml-2">{comm.count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Tab 2: God Nodes / Core Hubs */}
+            {activeTab === 'godNodes' && (
+              <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+                <div className="text-[11px] text-slate-400 px-1 py-1">
+                  Core abstractions that orchestrate application flow (highest connectivity):
+                </div>
+                {data?.analytics?.godNodes.map((g, idx) => (
+                  <div
+                    key={g.id}
+                    onClick={() => {
+                      const found = data.nodes.find((n) => n.id === g.id);
+                      if (found) handleSelectSearchResult(found);
+                    }}
+                    className="p-2.5 rounded-lg bg-black/40 hover:bg-cyan-500/20 border border-white/5 cursor-pointer transition flex flex-col gap-1"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                        <span className="w-4 h-4 rounded-full bg-amber-500/20 text-amber-300 flex items-center justify-center text-[10px] font-mono">
+                          {idx + 1}
+                        </span>
+                        {g.label}
+                      </span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono">
+                        {g.degree} links
+                      </span>
                     </div>
+                    <span className="text-[10px] text-slate-400 font-mono truncate">{g.source_file}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Tab 3: Surprising Cross-Domain Bridges */}
+            {activeTab === 'bridges' && (
+              <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+                <div className="text-[11px] text-slate-400 px-1 py-1">
+                  Cross-boundary API calls & unexpected cross-module couplings:
+                </div>
+                {data?.analytics?.surprisingConnections.map((b, idx) => (
+                  <div
+                    key={idx}
+                    className="p-2.5 rounded-lg bg-black/40 border border-white/5 flex flex-col gap-1 text-xs"
+                  >
+                    <div className="flex items-center justify-between text-slate-200 font-medium">
+                      <span className="text-cyan-300 truncate max-w-[110px]">{b.fromLabel}</span>
+                      <span className="text-[10px] text-slate-500 font-mono">➔</span>
+                      <span className="text-rose-300 truncate max-w-[110px]">{b.toLabel}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400">{b.reason}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Tab 4: Circular Dependencies */}
+            {activeTab === 'cycles' && (
+              <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                <div className="text-[11px] text-slate-400 px-1 py-1">
+                  Circular dependencies detected in the codebase:
+                </div>
+                {data?.analytics?.importCycles && data.analytics.importCycles.length > 0 ? (
+                  data.analytics.importCycles.map((cy, idx) => (
+                    <div
+                      key={idx}
+                      className="p-2.5 rounded-lg bg-red-500/10 border border-red-500/30 text-xs flex flex-col gap-1.5"
+                    >
+                      <div className="flex items-center gap-1.5 text-red-400 font-bold text-[11px]">
+                        <AlertTriangle className="w-3.5 h-3.5" /> Cycle #{idx + 1}
+                      </div>
+                      <div className="text-[11px] font-mono text-slate-300 leading-relaxed">
+                        {cy.labels.join(' ➔ ')}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-4 text-center text-xs text-slate-400">
+                    ✅ No circular dependencies detected!
                   </div>
                 )}
               </div>
             )}
 
-            {/* Communities Header Controls */}
-            <div className="px-3 py-2 border-b border-white/10 flex items-center justify-between bg-[#141426] shrink-0">
-              <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
-                Layers ({data?.communities.length || 0})
-              </span>
-              <button
-                onClick={handleToggleAllCommunities}
-                className="text-[11px] text-cyan-400 hover:text-cyan-300 font-medium transition"
-              >
-                {data && selectedCommunities.size === data.communities.length ? 'Deselect All' : 'Select All'}
-              </button>
-            </div>
-
-            {/* Communities Scrollable List */}
-            <div className="flex-1 overflow-y-auto p-2 space-y-1">
-              {data?.communities.map((comm) => {
-                const isSelected = selectedCommunities.has(comm.id);
-                return (
+            {/* Tab 5: Architectural Questions & AI Insights */}
+            {activeTab === 'insights' && (
+              <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                <div className="text-[11px] text-slate-400 px-1 py-1">
+                  AI-suggested architectural queries based on graph topology:
+                </div>
+                {data?.analytics?.suggestedQuestions.map((q, idx) => (
                   <div
-                    key={comm.id}
-                    onClick={() => handleToggleCommunity(comm.id)}
-                    className={`flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs cursor-pointer transition select-none ${
-                      isSelected ? 'bg-white/5 text-slate-200 hover:bg-white/10' : 'text-slate-500 hover:bg-white/5 opacity-60'
-                    }`}
+                    key={idx}
+                    className="p-2.5 rounded-lg bg-[#141426] border border-white/5 flex flex-col gap-2 text-xs hover:border-purple-500/30 transition"
                   >
-                    <div className="flex items-center gap-2 truncate">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => {}}
-                        className="w-3.5 h-3.5 rounded border-slate-700 text-cyan-500 focus:ring-0 cursor-pointer pointer-events-none"
-                      />
-                      <div
-                        className="w-2.5 h-2.5 rounded-full shrink-0"
-                        style={{ backgroundColor: comm.color }}
-                      />
-                      <span className="truncate font-medium">{comm.name}</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] uppercase px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 font-bold tracking-wider">
+                        {q.category}
+                      </span>
                     </div>
-                    <span className="text-[11px] font-mono text-slate-400 ml-2">{comm.count}</span>
+                    <p className="text-slate-300 leading-snug">{q.question}</p>
+                    <button
+                      onClick={() => handleAskQuestion(q.question)}
+                      className="self-end flex items-center gap-1 px-2 py-1 rounded bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 text-[11px] font-medium transition"
+                    >
+                      <Send className="w-3 h-3" /> Ask Chanakya AI
+                    </button>
                   </div>
-                );
-              })}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
