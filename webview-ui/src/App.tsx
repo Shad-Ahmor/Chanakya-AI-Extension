@@ -537,15 +537,8 @@ export default function App() {
             <History className="w-3.5 h-3.5" />
           </button>
           <button
-            onClick={() => setViewMode('dashboard')}
-            title="Open AI Dashboard & Model Hub"
-            className="p-1.5 hover:bg-sky-500/20 rounded-lg transition text-sky-400/80 hover:text-sky-400 border border-transparent hover:border-sky-500/30"
-          >
-            <Zap className="w-3.5 h-3.5" />
-          </button>
-          <button
             onClick={() => vscode.postMessage({ type: 'openSettings' })}
-            title="Open Extension Settings"
+            title="Open Settings & AI Dashboard"
             className="p-1.5 hover:bg-white/10 rounded-lg transition text-white/60 hover:text-white"
           >
             <Settings className="w-3.5 h-3.5" />
