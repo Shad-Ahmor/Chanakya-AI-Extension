@@ -12,6 +12,7 @@ import { VectorStore } from './services/memory/VectorStore';
 import { ConversationManager } from './services/ConversationManager';
 import { EvaluationService } from './services/evaluationService';
 import { WorkspaceIndexer } from './services/workspaceIndexer';
+import { GraphifyService } from './services/graphifyService';
 /**
  * Chanakya AI Enhancer Extension Activation Entrypoint (Phases 1-5 Complete)
  */
@@ -28,7 +29,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Initialize EvaluationService
   EvaluationService.getInstance().initialize(context);
 
-  // 1.5 Initialize MCP Service
+  // 1.5 Initialize MCP Client & Auto-Discovery
   const mcpService = McpService.getInstance();
   const wsFolders = vscode.workspace.workspaceFolders;
   if (wsFolders && wsFolders.length > 0) {
@@ -38,6 +39,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // 1.8 Initialize Vector Database for Memory RAG
   const vectorStore = VectorStore.getInstance();
   vectorStore.initialize(context.globalStorageUri);
+
+  // 1.9 Register Graphify Incremental Watcher
+  GraphifyService.getInstance().registerIncrementalWatcher(context);
 
   // 2. Register Sidebar Provider (Replaces Full Screen Dashboard)
   const sidebarProvider = new SidebarProvider(context.extensionUri, context);

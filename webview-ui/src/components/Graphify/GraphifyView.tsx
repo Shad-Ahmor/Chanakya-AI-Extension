@@ -750,15 +750,36 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
                   <span>Module: <b className="text-slate-200">{selectedNode.community_name}</b></span>
                 </div>
 
-                {/* Blast Radius Trigger Button */}
-                <button
-                  onClick={() => handleCalculateBlastRadius(selectedNode.id)}
-                  disabled={isCalculatingBlast}
-                  className="w-full mt-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-semibold transition shadow-md shadow-rose-500/10"
-                >
-                  <Flame className="w-3.5 h-3.5 text-rose-400" />
-                  <span>{isCalculatingBlast ? 'Calculating Blast...' : 'Calculate Blast Radius (Impact)'}</span>
-                </button>
+                <div className="grid grid-cols-2 gap-1.5 mt-1">
+                  {/* Blast Radius Trigger Button */}
+                  <button
+                    onClick={() => handleCalculateBlastRadius(selectedNode.id)}
+                    disabled={isCalculatingBlast}
+                    className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-[11px] font-semibold transition"
+                    title="Calculate Blast Radius and Upstream Broken Dependents"
+                  >
+                    <Flame className="w-3 h-3 text-rose-400" />
+                    <span>{isCalculatingBlast ? 'Calculating...' : 'Blast Radius'}</span>
+                  </button>
+
+                  {/* Explain with Chanakya AI Button */}
+                  <button
+                    onClick={() => {
+                      vscode.postMessage({
+                        type: 'sendMessage',
+                        payload: {
+                          text: `Please explain the architectural role, dependencies, caller paths, and impact of modifying \`${selectedNode.label}\` (${selectedNode.source_file}) in this project.`,
+                          contextItems: []
+                        }
+                      });
+                    }}
+                    className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 border border-purple-500/40 text-[11px] font-semibold transition"
+                    title="Ask Chanakya AI to Explain this Component"
+                  >
+                    <HelpCircle className="w-3 h-3 text-purple-300" />
+                    <span>Explain Node</span>
+                  </button>
+                </div>
 
                 {/* Path Trace Input */}
                 <div className="mt-1 pt-1.5 border-t border-white/10 flex items-center gap-1.5">

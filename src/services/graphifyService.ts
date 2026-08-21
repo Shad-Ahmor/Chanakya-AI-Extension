@@ -170,18 +170,37 @@ export class GraphifyService {
     const serverListeningPorts: ServerListeningPort[] = [];
     const backendServerEntrypoints = new Set<string>();
 
-    const getCommunity = (dirName: string) => {
-      const normalized = dirName === '.' || dirName === '' ? 'Root' : dirName;
-      if (!communityMap.has(normalized)) {
+    const getCommunity = (dirPath: string) => {
+      const p = dirPath.toLowerCase().replace(/\\/g, '/');
+      let name = dirPath === '.' || dirPath === '' ? 'Core Root' : dirPath;
+
+      // Smart semantic classification
+      if (p.includes('route') || p.includes('controller') || p.includes('api') || p.includes('endpoint')) {
+        name = 'API & Routes';
+      } else if (p.includes('component') || p.includes('view') || p.includes('ui') || p.includes('page')) {
+        name = 'Frontend UI & Views';
+      } else if (p.includes('service') || p.includes('provider') || p.includes('manager')) {
+        name = 'Services & Providers';
+      } else if (p.includes('model') || p.includes('schema') || p.includes('entity') || p.includes('type') || p.includes('dto')) {
+        name = 'Data Models & Types';
+      } else if (p.includes('util') || p.includes('helper') || p.includes('lib') || p.includes('common')) {
+        name = 'Utilities & Common';
+      } else if (p.includes('test') || p.includes('spec') || p.includes('mock')) {
+        name = 'Test Suite';
+      } else if (p.includes('config') || p.includes('setting') || p.includes('env')) {
+        name = 'Configuration & Environment';
+      }
+
+      if (!communityMap.has(name)) {
         const color = COMMUNITY_PALETTE[(nextCommunityId - 1) % COMMUNITY_PALETTE.length];
-        communityMap.set(normalized, {
+        communityMap.set(name, {
           id: nextCommunityId++,
-          name: normalized,
+          name,
           color,
           count: 0
         });
       }
-      const comm = communityMap.get(normalized)!;
+      const comm = communityMap.get(name)!;
       comm.count++;
       return comm;
     };
@@ -235,8 +254,7 @@ export class GraphifyService {
       const ext = path.extname(relPath).toLowerCase();
 
       // Top level folder or architectural layer
-      const topDir = dir === '.' ? 'Root' : (dir.split('/')[0] || dir);
-      const community = getCommunity(topDir);
+      const community = getCommunity(dir);
 
       const nodeId = `file_${relPath.replace(/[^a-zA-Z0-9_]/g, '_')}`;
 
@@ -1332,5 +1350,65 @@ ${data.analytics?.suggestedQuestions && data.analytics.suggestedQuestions.length
       totalAffected: affectedNodes.length,
       maxDepth
     };
+  }
+
+  /**
+   * Generates a Mermaid flowchart of the architecture graph.
+   */
+  public async generateMermaidDiagram(maxEdges = 50): Promise<string> {
+    const data = await this.generateGraphData(false);
+    let mermaid = '```mermaid\nflowchart TD\n';
+
+    // Subgraph clusters by community
+    for (const comm of data.communities.slice(0, 8)) {
+      const commNodes = data.nodes.filter((n) => n.community === comm.id).slice(0, 12);
+      if (commNodes.length > 0) {
+        const safeCommName = comm.name.replace(/[^a-zA-Z0-9_]/g, '_');
+        mermaid += `  subgraph ${safeCommName}["${comm.name}"]\n`;
+        for (const node of commNodes) {
+          const safeNodeId = node.id.replace(/[^a-zA-Z0-9_]/g, '_');
+          mermaid += `    ${safeNodeId}["${node.label}"]\n`;
+        }
+        mermaid += `  end\n`;
+      }
+    }
+
+    // Edges
+    let count = 0;
+    for (const edge of data.edges) {
+      if (count++ >= maxEdges) break;
+      const from = edge.from.replace(/[^a-zA-Z0-9_]/g, '_');
+      const to = edge.to.replace(/[^a-zA-Z0-9_]/g, '_');
+      if (edge.type === 'api-network') {
+        mermaid += `  ${from} -.->|API: ${edge.label || 'call'}| ${to}\n`;
+      } else {
+        mermaid += `  ${from} --> ${to}\n`;
+      }
+    }
+
+    mermaid += '```\n';
+    return mermaid;
+  }
+
+  /**
+   * Registers automatic file-save watcher for incremental graph cache invalidation.
+   */
+  public registerIncrementalWatcher(context: vscode.ExtensionContext): void {
+    let debounceTimer: NodeJS.Timeout | null = null;
+
+    const onFileEvent = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        this.logger.log('[GraphifyService] File change detected, auto-invalidating graph cache');
+        this.cachedData = null;
+      }, 2500);
+    };
+
+    context.subscriptions.push(
+      vscode.workspace.onDidSaveTextDocument(onFileEvent),
+      vscode.workspace.onDidCreateFiles(onFileEvent),
+      vscode.workspace.onDidDeleteFiles(onFileEvent),
+      vscode.workspace.onDidRenameFiles(onFileEvent)
+    );
   }
 }
