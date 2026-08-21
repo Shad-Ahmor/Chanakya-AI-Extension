@@ -19,31 +19,76 @@ const COMMUNITY_PALETTE = [
 ];
 
 const EXT_COLOR_MAP: Record<string, string> = {
-  '.tsx': '#06b6d4', // React Cyan
-  '.jsx': '#38bdf8', // React Sky
-  '.ts': '#3b82f6',  // TS Blue
-  '.js': '#f59e0b',  // JS Amber
+  // Web & JavaScript / TypeScript
+  '.tsx': '#06b6d4', // React TSX (Cyan)
+  '.jsx': '#38bdf8', // React JSX (Sky)
+  '.ts': '#3b82f6',  // TypeScript (Blue)
+  '.js': '#f59e0b',  // JavaScript (Amber)
   '.mjs': '#f59e0b',
   '.cjs': '#f59e0b',
-  '.py': '#84cc16',  // Python Lime
-  '.css': '#ec4899', // Pink
-  '.scss': '#f43f5e',// Rose
+  '.vue': '#41b883', // Vue (Vue Green)
+  '.svelte': '#ff3e00', // Svelte (Orange-Red)
+  
+  // Python & Data
+  '.py': '#84cc16',  // Python (Lime)
+  '.pyw': '#84cc16',
+  '.ipynb': '#eab308', // Jupyter (Yellow)
+  
+  // Java, Kotlin & Android
+  '.java': '#ea580c',// Java (Orange)
+  '.kt': '#a855f7',  // Kotlin (Purple)
+  '.kts': '#a855f7',
+  '.gradle': '#0284c7', // Gradle (Blue)
+  
+  // C#, .NET & Microsoft
+  '.cs': '#16a34a',  // C# (Green)
+  '.csx': '#16a34a',
+  '.vb': '#0284c7',  // VB.NET (Blue)
+  '.csproj': '#16a34a',
+  '.sln': '#16a34a',
+  
+  // PHP & WordPress / Laravel
+  '.php': '#8b5cf6', // PHP (Violet)
+  '.phtml': '#8b5cf6',
+  
+  // Ruby & Rails
+  '.rb': '#e11d48',  // Ruby (Rose)
+  '.erb': '#e11d48',
+  '.rake': '#e11d48',
+  
+  // C / C++
+  '.cpp': '#6366f1', // C++ (Indigo)
+  '.cc': '#6366f1',
+  '.cxx': '#6366f1',
+  '.c': '#64748b',   // C (Slate)
+  '.h': '#6366f1',   // Header
+  '.hpp': '#6366f1',
+  '.hxx': '#6366f1',
+  
+  // Systems & Other Languages
+  '.go': '#06b6d4',  // Go (Cyan)
+  '.rs': '#ef4444',  // Rust (Red)
+  '.dart': '#0284c7',// Dart/Flutter (Sky)
+  '.swift': '#f97316',// Swift (Orange)
+  '.sql': '#0ea5e9', // SQL
+  '.prisma': '#0f172a',
+  
+  // Web Markup & Styles
+  '.html': '#f97316',// HTML (Orange)
+  '.htm': '#f97316',
+  '.css': '#ec4899', // CSS (Pink)
+  '.scss': '#f43f5e',// SCSS (Rose)
   '.sass': '#f43f5e',
   '.less': '#ec4899',
-  '.html': '#f97316',// HTML Orange
-  '.htm': '#f97316',
-  '.json': '#10b981',// Config Emerald
+  
+  // Config & Documentation
+  '.json': '#10b981',// Config (Emerald)
   '.yaml': '#10b981',
   '.yml': '#10b981',
   '.toml': '#10b981',
-  '.md': '#a855f7',  // Markdown Purple
-  '.markdown': '#a855f7',
-  '.rs': '#ef4444',  // Rust Red
-  '.go': '#06b6d4',  // Go Cyan
-  '.java': '#ea580c',// Java Orange
-  '.cpp': '#6366f1', // C++
-  '.c': '#6366f1',
-  '.h': '#6366f1'
+  '.xml': '#14b8a6',
+  '.md': '#a855f7',  // Markdown (Purple)
+  '.markdown': '#a855f7'
 };
 
 interface BackendRoute {
@@ -82,7 +127,7 @@ export class GraphifyService {
   }
 
   /**
-   * Scans workspace, analyzes files, dependencies, cross-boundary API routes, AST symbols, and constructs Graphify graph data.
+   * Universal workspace indexer: analyzes dependencies, AST, routes, and architecture across all programming languages.
    */
   public async generateGraphData(forceRefresh = false): Promise<GraphifyData> {
     if (this.cachedData && !forceRefresh) {
@@ -108,10 +153,10 @@ export class GraphifyService {
       };
     }
 
-    this.logger.log(`[GraphifyService] Scanning workspace for graph: ${rootPath}`);
+    this.logger.log(`[GraphifyService] Scanning universal workspace for graph: ${rootPath}`);
 
-    const excludePattern = '{**/node_modules/**,**/dist/**,**/.git/**,**/.vscode/**,**/build/**,**/out/**,**/.next/**,**/venv/**,**/__pycache__/**,**/.chanakya/**}';
-    const uris = await vscode.workspace.findFiles('**/*', excludePattern, 2000);
+    const excludePattern = '{**/node_modules/**,**/dist/**,**/.git/**,**/.vscode/**,**/build/**,**/out/**,**/.next/**,**/venv/**,**/__pycache__/**,**/.chanakya/**,**/bin/**,**/obj/**,**/target/**,**/.gradle/**}';
+    const uris = await vscode.workspace.findFiles('**/*', excludePattern, 2500);
 
     const nodesMap = new Map<string, GraphNode>();
     const edges: GraphEdge[] = [];
@@ -168,7 +213,7 @@ export class GraphifyService {
           color: type === 'api-network' ? {
             color: '#f43f5e',
             highlight: '#fb7185',
-            hover: '#fb7185',
+            hover: '#38bdf8',
             opacity: 0.95
           } : undefined,
           width: type === 'api-network' ? 2.2 : 1.2
@@ -178,6 +223,7 @@ export class GraphifyService {
 
     // File path -> node id map (multiple lookup keys for resilient matching)
     const fileToNodeId = new Map<string, string>();
+    const fileNameOnlyToNodeId = new Map<string, string>();
     const symbolToNodeId = new Map<string, string>();
 
     // Pass 1: Create File & Module Nodes
@@ -185,9 +231,10 @@ export class GraphifyService {
       const relPath = vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
       const dir = path.dirname(relPath);
       const fileName = path.basename(relPath);
+      const baseNameWithoutExt = path.basename(relPath, path.extname(relPath));
       const ext = path.extname(relPath).toLowerCase();
 
-      // Top level folder or component community (e.g. frontend, backend, src, server)
+      // Top level folder or architectural layer
       const topDir = dir === '.' ? 'Root' : (dir.split('/')[0] || dir);
       const community = getCommunity(topDir);
 
@@ -198,13 +245,15 @@ export class GraphifyService {
       fileToNodeId.set(relPath.toLowerCase(), nodeId);
       fileToNodeId.set(relPath.replace(/\.[^/.]+$/, ''), nodeId); // without ext
       fileToNodeId.set(relPath.replace(/\.[^/.]+$/, '').toLowerCase(), nodeId);
+      fileNameOnlyToNodeId.set(fileName.toLowerCase(), nodeId);
+      fileNameOnlyToNodeId.set(baseNameWithoutExt.toLowerCase(), nodeId);
 
       let fileType: GraphNode['file_type'] = 'file';
-      if (['.ts', '.tsx', '.js', '.jsx', '.py', '.rs', '.go', '.java', '.cpp', '.c'].includes(ext)) {
+      if (['.ts', '.tsx', '.js', '.jsx', '.py', '.rs', '.go', '.java', '.kt', '.cs', '.vb', '.php', '.rb', '.cpp', '.c', '.h', '.hpp', '.dart', '.swift'].includes(ext)) {
         fileType = 'code';
       } else if (['.md', '.markdown', '.txt'].includes(ext)) {
         fileType = 'markdown';
-      } else if (['.json', '.yaml', '.yml', '.toml', '.xml'].includes(ext)) {
+      } else if (['.json', '.yaml', '.yml', '.toml', '.xml', '.gradle', '.csproj', '.config'].includes(ext)) {
         fileType = 'config';
       }
 
@@ -229,18 +278,18 @@ export class GraphifyService {
       });
     }
 
-    // Helper: normalize route path (e.g. "/api/users/:id" -> "/api/users")
+    // Helper: normalize route path
     const normalizeRoute = (raw: string): string => {
-      let r = raw.trim().replace(/^https?:\/\/[^/]+/i, ''); // Strip http://localhost:5000
-      r = r.split('?')[0]; // Strip query params
-      r = r.replace(/\$\{[^}]+\}/g, '*'); // Replace ${id} with *
-      r = r.replace(/:[a-zA-Z0-9_]+/g, '*'); // Replace :id with *
-      r = r.replace(/\/+$/, ''); // Strip trailing slash
+      let r = raw.trim().replace(/^https?:\/\/[^/]+/i, '');
+      r = r.split('?')[0];
+      r = r.replace(/\$\{[^}]+\}/g, '*');
+      r = r.replace(/:[a-zA-Z0-9_]+/g, '*');
+      r = r.replace(/\/+$/, '');
       if (!r.startsWith('/')) r = '/' + r;
       return r.toLowerCase();
     };
 
-    // Helper: resolve relative or aliased import path to target node ID
+    // Helper: resolve relative, aliased, or package import path to target node ID
     const resolveTargetNode = (sourceRelPath: string, importSpec: string): string | undefined => {
       const cleaned = importSpec.trim().replace(/^['"]|['"]$/g, '');
       if (!cleaned) return undefined;
@@ -252,24 +301,11 @@ export class GraphifyService {
         // Relative import
         const direct = path.normalize(path.join(sourceDir, cleaned)).replace(/\\/g, '/');
         candidatePaths.push(direct);
-        candidatePaths.push(`${direct}.ts`);
-        candidatePaths.push(`${direct}.tsx`);
-        candidatePaths.push(`${direct}.js`);
-        candidatePaths.push(`${direct}.jsx`);
-        candidatePaths.push(`${direct}.d.ts`);
-        candidatePaths.push(`${direct}.css`);
-        candidatePaths.push(`${direct}.scss`);
-        candidatePaths.push(`${direct}.html`);
-        candidatePaths.push(`${direct}.json`);
-        candidatePaths.push(`${direct}.py`);
-        candidatePaths.push(`${direct}/index.ts`);
-        candidatePaths.push(`${direct}/index.tsx`);
-        candidatePaths.push(`${direct}/index.js`);
-        candidatePaths.push(`${direct}/index.jsx`);
-        candidatePaths.push(`${direct}/index.html`);
-        candidatePaths.push(`${direct}/index.css`);
+        const exts = ['.ts', '.tsx', '.js', '.jsx', '.d.ts', '.css', '.scss', '.html', '.json', '.py', '.java', '.kt', '.cs', '.php', '.rb', '.cpp', '.c', '.h', '.vue', '.svelte'];
+        for (const e of exts) candidatePaths.push(`${direct}${e}`);
+        for (const e of ['.ts', '.tsx', '.js', '.jsx', '.java', '.php', '.py']) candidatePaths.push(`${direct}/index${e}`);
       } else if (cleaned.startsWith('@/') || cleaned.startsWith('~/')) {
-        // Alias import (e.g. @/components/...)
+        // Alias import
         const noAlias = cleaned.replace(/^[@~]\//, '');
         const direct = path.normalize(noAlias).replace(/\\/g, '/');
         const inSrc = path.normalize(path.join('src', noAlias)).replace(/\\/g, '/');
@@ -283,14 +319,14 @@ export class GraphifyService {
           candidatePaths.push(`${base}.jsx`);
           candidatePaths.push(`${base}/index.ts`);
           candidatePaths.push(`${base}/index.tsx`);
-          candidatePaths.push(`${base}/index.js`);
         }
       } else {
-        // Monorepo cross-directory lookup (e.g. backend/server, frontend/App)
+        // Monorepo cross-directory / package resolution
         const inSrc = path.normalize(path.join('src', cleaned)).replace(/\\/g, '/');
         const inWebview = path.normalize(path.join('webview-ui/src', cleaned)).replace(/\\/g, '/');
         const inBackend = path.normalize(path.join('backend', cleaned)).replace(/\\/g, '/');
         const inServer = path.normalize(path.join('server', cleaned)).replace(/\\/g, '/');
+        const inApp = path.normalize(path.join('app', cleaned)).replace(/\\/g, '/');
 
         candidatePaths.push(cleaned);
         candidatePaths.push(inSrc);
@@ -299,7 +335,15 @@ export class GraphifyService {
         candidatePaths.push(inWebview);
         candidatePaths.push(inBackend);
         candidatePaths.push(`${inBackend}.js`);
+        candidatePaths.push(`${inBackend}.ts`);
         candidatePaths.push(inServer);
+        candidatePaths.push(inApp);
+
+        // Name fallback (e.g. Java "import com.example.UserService" -> "UserService.java")
+        const baseName = path.basename(cleaned.replace(/\./g, '/'));
+        if (fileNameOnlyToNodeId.has(baseName.toLowerCase())) {
+          return fileNameOnlyToNodeId.get(baseName.toLowerCase());
+        }
       }
 
       for (const p of candidatePaths) {
@@ -310,7 +354,7 @@ export class GraphifyService {
       return undefined;
     };
 
-    // Pass 2: Deep parse contents for AST symbols, imports, AND cross-boundary API endpoints
+    // Pass 2: Deep parse contents for AST symbols, imports, and cross-boundary routes across ALL languages
     for (const uri of uris) {
       const relPath = vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
       const fileNodeId = fileToNodeId.get(relPath);
@@ -323,17 +367,22 @@ export class GraphifyService {
       const topDir = dir === '.' ? 'Root' : (dir.split('/')[0] || dir);
       const community = getCommunity(topDir);
 
-      // Identify backend server entrypoints
+      // Identify backend / server entrypoints across all stacks
       if (
         fileName.includes('server') ||
         fileName.includes('app') ||
         fileName.includes('main') ||
         fileName.includes('index') ||
+        fileName.includes('program') ||
+        fileName.includes('startup') ||
+        fileName.includes('application') ||
+        fileName.includes('settings') ||
         dir.includes('backend') ||
         dir.includes('server') ||
-        dir.includes('api')
+        dir.includes('api') ||
+        dir.includes('controllers')
       ) {
-        if (['.js', '.ts', '.py', '.go', '.rs'].includes(ext)) {
+        if (['.js', '.ts', '.py', '.go', '.rs', '.java', '.kt', '.cs', '.php', '.rb'].includes(ext)) {
           backendServerEntrypoints.add(fileNodeId);
         }
       }
@@ -342,9 +391,11 @@ export class GraphifyService {
         const fileBytes = await vscode.workspace.fs.readFile(uri);
         const content = Buffer.from(fileBytes).toString('utf-8');
 
-        // 2a. JS / TS / JSX / TSX Parsing
-        if (['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'].includes(ext)) {
-          // 1. Classes
+        // ==========================================
+        // 1. JavaScript / TypeScript / React / Node / Nest / Angular / Vue / Svelte
+        // ==========================================
+        if (['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.vue', '.svelte'].includes(ext)) {
+          // Classes
           const classRegex = /(?:export\s+)?(?:default\s+)?class\s+([A-Za-z0-9_]+)/g;
           let match;
           while ((match = classRegex.exec(content)) !== null) {
@@ -375,7 +426,7 @@ export class GraphifyService {
             }
           }
 
-          // 2. Interfaces
+          // Interfaces & Types
           const ifaceRegex = /(?:export\s+)?interface\s+([A-Za-z0-9_]+)/g;
           while ((match = ifaceRegex.exec(content)) !== null) {
             const symName = match[1];
@@ -405,7 +456,7 @@ export class GraphifyService {
             }
           }
 
-          // 3. Top functions & React components
+          // Functions & Components
           const fnRegex = /(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+([A-Za-z0-9_]+)/g;
           while ((match = fnRegex.exec(content)) !== null) {
             const symName = match[1];
@@ -435,7 +486,7 @@ export class GraphifyService {
             }
           }
 
-          // 4. Static Imports (ESM import, export from, dynamic import, require)
+          // Static Imports & Requires
           const importRegex = /(?:import\s+(?:(?:\{[^}]*\}|[A-Za-z0-9_*$\s,]+)\s+from\s+)?['"]([^'"]+)['"]|export\s+(?:\{[^}]*\}|\*)\s+from\s+['"]([^'"]+)['"]|require\(\s*['"]([^'"]+)['"]\s*\)|import\(\s*['"]([^'"]+)['"]\s*\))/g;
           while ((match = importRegex.exec(content)) !== null) {
             const spec = match[1] || match[2] || match[3] || match[4];
@@ -447,21 +498,41 @@ export class GraphifyService {
             }
           }
 
-          // 5. Backend Server Routes & Listening Ports (Express, Fastify, Nest, Koa, Hono)
-          const expressRouteRegex = /(?:app|router|server|fastify|hono)\.(get|post|put|delete|patch|all|use)\s*\(\s*['"`]([^'"`]+)['"`]/g;
+          // NestJS / Express / Fastify / Koa Route Handlers
+          const expressRouteRegex = /(?:app|router|server|fastify|hono)\.(get|post|put|delete|patch|all|use)\s*\(\s*['"`]([^'"`]+)['"`]|@(Get|Post|Put|Delete|Patch)\s*\(\s*['"`]([^'"`]+)['"`]/g;
           while ((match = expressRouteRegex.exec(content)) !== null) {
-            const method = (match[1] || 'GET').toUpperCase();
-            const rawRoute = match[2];
-            backendRoutes.push({
-              fileNodeId,
-              sourceRelPath: relPath,
-              method,
-              rawRoute,
-              normalizedRoute: normalizeRoute(rawRoute)
-            });
-            backendServerEntrypoints.add(fileNodeId);
+            const method = (match[1] || match[3] || 'GET').toUpperCase();
+            const rawRoute = match[2] || match[4];
+            if (rawRoute) {
+              backendRoutes.push({
+                fileNodeId,
+                sourceRelPath: relPath,
+                method,
+                rawRoute,
+                normalizedRoute: normalizeRoute(rawRoute)
+              });
+              backendServerEntrypoints.add(fileNodeId);
+            }
           }
 
+          // Angular @Component templateUrl and styleUrls
+          const angularTemplateRegex = /templateUrl\s*:\s*['"`]([^'"`]+)['"`]/g;
+          while ((match = angularTemplateRegex.exec(content)) !== null) {
+            const targetNodeId = resolveTargetNode(relPath, match[1]);
+            if (targetNodeId) addEdge(fileNodeId, targetNodeId, 'template', 'import');
+          }
+          const angularStyleRegex = /styleUrls\s*:\s*\[([^\]]+)\]/g;
+          while ((match = angularStyleRegex.exec(content)) !== null) {
+            const styleList = match[1];
+            const strRegex = /['"`]([^'"`]+)['"`]/g;
+            let sMatch;
+            while ((sMatch = strRegex.exec(styleList)) !== null) {
+              const targetNodeId = resolveTargetNode(relPath, sMatch[1]);
+              if (targetNodeId) addEdge(fileNodeId, targetNodeId, 'styles', 'style');
+            }
+          }
+
+          // Server Listening Ports
           const listenPortRegex = /\.(?:listen|run|serve)\s*\(\s*(\d{2,5})/g;
           while ((match = listenPortRegex.exec(content)) !== null) {
             serverListeningPorts.push({
@@ -472,7 +543,7 @@ export class GraphifyService {
             backendServerEntrypoints.add(fileNodeId);
           }
 
-          // 6. Frontend Network API Calls (fetch, axios, ky, custom client)
+          // Frontend Network API Calls (fetch, axios, custom API client)
           const fetchRegex = /fetch\s*\(\s*(?:['"`]([^'"`]+)['"`]|(?:API_URL|BASE_URL|API|VITE_API_URL|process\.env\.[A-Z0-9_]+)\s*\+\s*['"`]([^'"`]+)['"`])/g;
           while ((match = fetchRegex.exec(content)) !== null) {
             const rawEndpoint = match[1] || match[2];
@@ -503,60 +574,13 @@ export class GraphifyService {
               port: portMatch ? (portMatch[1] || portMatch[2]) : undefined
             });
           }
-
-          const genericUrlRegex = /['"`](https?:\/\/(?:localhost|127\.0\.0\.1):(\d+)(\/[^'"`?]*)?)['"`]/g;
-          while ((match = genericUrlRegex.exec(content)) !== null) {
-            const rawEndpoint = match[1];
-            const port = match[2];
-            const routePart = match[3] || '/';
-            frontendApiCalls.push({
-              fileNodeId,
-              sourceRelPath: relPath,
-              method: 'API',
-              rawEndpoint,
-              normalizedRoute: normalizeRoute(routePart),
-              port
-            });
-          }
         }
 
-        // 2b. HTML File Parsing (<script src="...">, <link href="...">)
-        else if (['.html', '.htm'].includes(ext)) {
-          const scriptRegex = /<script\s+[^>]*src=["']([^"']+)["']/gi;
-          let match;
-          while ((match = scriptRegex.exec(content)) !== null) {
-            const targetNodeId = resolveTargetNode(relPath, match[1]);
-            if (targetNodeId && targetNodeId !== fileNodeId) {
-              addEdge(fileNodeId, targetNodeId, 'includes_script', 'import');
-            }
-          }
-
-          const linkRegex = /<link\s+[^>]*href=["']([^"']+)["']/gi;
-          while ((match = linkRegex.exec(content)) !== null) {
-            const targetNodeId = resolveTargetNode(relPath, match[1]);
-            if (targetNodeId && targetNodeId !== fileNodeId) {
-              addEdge(fileNodeId, targetNodeId, 'links_stylesheet', 'style');
-            }
-          }
-        }
-
-        // 2c. CSS / SCSS File Parsing (@import "...")
-        else if (['.css', '.scss', '.sass', '.less'].includes(ext)) {
-          const cssImportRegex = /@import\s+(?:url\(['"]?([^"')]+)['"]?\)|['"]([^'"]+)['"])/g;
-          let match;
-          while ((match = cssImportRegex.exec(content)) !== null) {
-            const spec = match[1] || match[2];
-            if (spec) {
-              const targetNodeId = resolveTargetNode(relPath, spec);
-              if (targetNodeId && targetNodeId !== fileNodeId) {
-                addEdge(fileNodeId, targetNodeId, 'imports_style', 'style');
-              }
-            }
-          }
-        }
-
-        // 2d. Python Parsing (class, def, routes, imports)
+        // ==========================================
+        // 2. Python (Django, Flask, FastAPI)
+        // ==========================================
         else if (ext === '.py') {
+          // Classes & Models
           const pyClassRegex = /^class\s+([A-Za-z0-9_]+)/gm;
           let match;
           while ((match = pyClassRegex.exec(content)) !== null) {
@@ -587,6 +611,7 @@ export class GraphifyService {
             }
           }
 
+          // Defs
           const pyDefRegex = /^(?:async\s+)?def\s+([A-Za-z0-9_]+)/gm;
           while ((match = pyDefRegex.exec(content)) !== null) {
             const symName = match[1];
@@ -617,7 +642,7 @@ export class GraphifyService {
             }
           }
 
-          // FastAPI / Flask / Django route decorators
+          // FastAPI / Flask Route Decorators
           const pyRouteRegex = /@(?:app|router|api|blueprint|bp)\.(get|post|put|delete|patch|route)\s*\(\s*['"`]([^'"`]+)['"`]/g;
           while ((match = pyRouteRegex.exec(content)) !== null) {
             const method = (match[1] || 'GET').toUpperCase();
@@ -632,6 +657,26 @@ export class GraphifyService {
             backendServerEntrypoints.add(fileNodeId);
           }
 
+          // Django urls.py path('api/prime', views.prime_view)
+          const djangoPathRegex = /path\s*\(\s*['"`]([^'"`]+)['"`]\s*,\s*([A-Za-z0-9_.]+)/g;
+          while ((match = djangoPathRegex.exec(content)) !== null) {
+            const rawRoute = match[1];
+            const targetView = match[2];
+            backendRoutes.push({
+              fileNodeId,
+              sourceRelPath: relPath,
+              method: 'GET',
+              rawRoute: '/' + rawRoute.replace(/^\/+/, ''),
+              normalizedRoute: normalizeRoute(rawRoute)
+            });
+            backendServerEntrypoints.add(fileNodeId);
+
+            // Connect urls.py to views.py
+            const viewTargetId = resolveTargetNode(relPath, targetView.split('.')[0]);
+            if (viewTargetId) addEdge(fileNodeId, viewTargetId, 'routes_to', 'import');
+          }
+
+          // Python Server Listening Ports
           const pyPortRegex = /(?:uvicorn\.run\([^)]*port\s*=\s*(\d{2,5})|app\.run\([^)]*port\s*=\s*(\d{2,5}))/g;
           while ((match = pyPortRegex.exec(content)) !== null) {
             const p = match[1] || match[2];
@@ -645,6 +690,7 @@ export class GraphifyService {
             }
           }
 
+          // Python Imports
           const pyImportRegex = /(?:from\s+([A-Za-z0-9_.]+)\s+import|import\s+([A-Za-z0-9_.]+))/g;
           while ((match = pyImportRegex.exec(content)) !== null) {
             const mod = match[1] || match[2];
@@ -657,7 +703,264 @@ export class GraphifyService {
           }
         }
 
-        // 2e. Markdown Links ([label](./path))
+        // ==========================================
+        // 3. Java & Kotlin (Spring Boot & Android)
+        // ==========================================
+        else if (['.java', '.kt'].includes(ext)) {
+          // Class & Interface
+          const javaClassRegex = /(?:public\s+|protected\s+|private\s+)?(?:abstract\s+|final\s+)?(?:class|interface|enum)\s+([A-Za-z0-9_]+)/g;
+          let match;
+          while ((match = javaClassRegex.exec(content)) !== null) {
+            const symName = match[1];
+            if (fileNode && fileNode.symbols) fileNode.symbols.push(symName);
+          }
+
+          // Java Imports (import com.example.service.UserService)
+          const javaImportRegex = /import\s+([A-Za-z0-9_.]+);/g;
+          while ((match = javaImportRegex.exec(content)) !== null) {
+            const fullPackage = match[1];
+            const className = fullPackage.split('.').pop();
+            if (className && fileNameOnlyToNodeId.has(className.toLowerCase())) {
+              const targetId = fileNameOnlyToNodeId.get(className.toLowerCase());
+              if (targetId && targetId !== fileNodeId) {
+                addEdge(fileNodeId, targetId, 'imports', 'import');
+              }
+            }
+          }
+
+          // Spring Boot Route Annotations (@GetMapping("/api/prime"), @RequestMapping)
+          const springRouteRegex = /@(GetMapping|PostMapping|PutMapping|DeleteMapping|PatchMapping|RequestMapping)\s*\(\s*(?:value\s*=\s*)?['"`]([^'"`]+)['"`]/g;
+          while ((match = springRouteRegex.exec(content)) !== null) {
+            const method = match[1].replace('Mapping', '').toUpperCase();
+            const rawRoute = match[2];
+            backendRoutes.push({
+              fileNodeId,
+              sourceRelPath: relPath,
+              method: method === 'REQUEST' ? 'ALL' : method,
+              rawRoute,
+              normalizedRoute: normalizeRoute(rawRoute)
+            });
+            backendServerEntrypoints.add(fileNodeId);
+          }
+        }
+
+        // ==========================================
+        // 4. C# / .NET / ASP.NET / VB.NET
+        // ==========================================
+        else if (['.cs', '.vb'].includes(ext)) {
+          // Class & Interface
+          const csClassRegex = /(?:public\s+|internal\s+)?(?:abstract\s+|sealed\s+|static\s+)?(?:class|interface|struct|enum)\s+([A-Za-z0-9_]+)/g;
+          let match;
+          while ((match = csClassRegex.exec(content)) !== null) {
+            const symName = match[1];
+            if (fileNode && fileNode.symbols) fileNode.symbols.push(symName);
+          }
+
+          // Using Statements (using MyProject.Services;)
+          const usingRegex = /(?:using|Imports)\s+([A-Za-z0-9_.]+);?/g;
+          while ((match = usingRegex.exec(content)) !== null) {
+            const ns = match[1];
+            const lastPart = ns.split('.').pop();
+            if (lastPart && fileNameOnlyToNodeId.has(lastPart.toLowerCase())) {
+              const targetId = fileNameOnlyToNodeId.get(lastPart.toLowerCase());
+              if (targetId && targetId !== fileNodeId) {
+                addEdge(fileNodeId, targetId, 'uses_namespace', 'import');
+              }
+            }
+          }
+
+          // ASP.NET Controller Attributes ([HttpGet("api/prime")], [Route("api/[controller]")])
+          const aspRouteRegex = /\[(HttpGet|HttpPost|HttpPut|HttpDelete|Route)\s*\(\s*['"`]([^'"`]+)['"`]\s*\)\]/g;
+          while ((match = aspRouteRegex.exec(content)) !== null) {
+            const method = match[1].replace('Http', '').toUpperCase();
+            const rawRoute = match[2];
+            backendRoutes.push({
+              fileNodeId,
+              sourceRelPath: relPath,
+              method: method === 'ROUTE' ? 'ALL' : method,
+              rawRoute,
+              normalizedRoute: normalizeRoute(rawRoute)
+            });
+            backendServerEntrypoints.add(fileNodeId);
+          }
+        }
+
+        // ==========================================
+        // 5. PHP / WordPress / Laravel
+        // ==========================================
+        else if (['.php', '.phtml'].includes(ext)) {
+          // Class & Interface
+          const phpClassRegex = /(?:class|interface|trait)\s+([A-Za-z0-9_]+)/g;
+          let match;
+          while ((match = phpClassRegex.exec(content)) !== null) {
+            const symName = match[1];
+            if (fileNode && fileNode.symbols) fileNode.symbols.push(symName);
+          }
+
+          // Use statements & requires
+          const phpUseRegex = /(?:use\s+([A-Za-z0-9_\\]+);|require(?:_once)?\s*\(?['"`]([^'"`]+)['"`]\)?|include(?:_once)?\s*\(?['"`]([^'"`]+)['"`]\)?)/g;
+          while ((match = phpUseRegex.exec(content)) !== null) {
+            const spec = match[1] || match[2] || match[3];
+            if (spec) {
+              const targetId = resolveTargetNode(relPath, spec.replace(/\\/g, '/'));
+              if (targetId && targetId !== fileNodeId) {
+                addEdge(fileNodeId, targetId, 'imports', 'import');
+              }
+            }
+          }
+
+          // Laravel Routes (Route::get('/api/prime', ...))
+          const laravelRouteRegex = /Route::(get|post|put|delete|patch|any)\s*\(\s*['"`]([^'"`]+)['"`]/g;
+          while ((match = laravelRouteRegex.exec(content)) !== null) {
+            const method = match[1].toUpperCase();
+            const rawRoute = match[2];
+            backendRoutes.push({
+              fileNodeId,
+              sourceRelPath: relPath,
+              method,
+              rawRoute,
+              normalizedRoute: normalizeRoute(rawRoute)
+            });
+            backendServerEntrypoints.add(fileNodeId);
+          }
+
+          // WordPress template part (get_template_part('template-parts/content', 'page'))
+          const wpTemplateRegex = /get_template_part\s*\(\s*['"`]([^'"`]+)['"`]/g;
+          while ((match = wpTemplateRegex.exec(content)) !== null) {
+            const targetId = resolveTargetNode(relPath, `${match[1]}.php`);
+            if (targetId) addEdge(fileNodeId, targetId, 'template_part', 'import');
+          }
+        }
+
+        // ==========================================
+        // 6. Ruby & Rails
+        // ==========================================
+        else if (['.rb', '.rake'].includes(ext)) {
+          const rbRequireRegex = /require(?:_relative)?\s+['"`]([^'"`]+)['"`]/g;
+          let match;
+          while ((match = rbRequireRegex.exec(content)) !== null) {
+            const targetId = resolveTargetNode(relPath, `${match[1]}.rb`);
+            if (targetId && targetId !== fileNodeId) {
+              addEdge(fileNodeId, targetId, 'requires', 'import');
+            }
+          }
+
+          // Rails routes
+          const railsRouteRegex = /(get|post|put|delete|patch)\s+['"`]([^'"`]+)['"`]/g;
+          while ((match = railsRouteRegex.exec(content)) !== null) {
+            const method = match[1].toUpperCase();
+            const rawRoute = match[2];
+            backendRoutes.push({
+              fileNodeId,
+              sourceRelPath: relPath,
+              method,
+              rawRoute,
+              normalizedRoute: normalizeRoute(rawRoute)
+            });
+            backendServerEntrypoints.add(fileNodeId);
+          }
+        }
+
+        // ==========================================
+        // 7. C / C++ Header & Source Inclusion
+        // ==========================================
+        else if (['.c', '.cpp', '.cc', '.cxx', '.h', '.hpp', '.hxx'].includes(ext)) {
+          const cppIncludeRegex = /#include\s+["<]([^">]+)[">]/g;
+          let match;
+          while ((match = cppIncludeRegex.exec(content)) !== null) {
+            const headerName = match[1];
+            const targetId = resolveTargetNode(relPath, headerName) || fileNameOnlyToNodeId.get(headerName.toLowerCase());
+            if (targetId && targetId !== fileNodeId) {
+              addEdge(fileNodeId, targetId, 'includes', 'import');
+            }
+          }
+        }
+
+        // ==========================================
+        // 8. Go & Rust
+        // ==========================================
+        else if (ext === '.go') {
+          const goImportRegex = /"([^"]+)"/g;
+          let match;
+          while ((match = goImportRegex.exec(content)) !== null) {
+            const pkg = match[1];
+            const basePkg = path.basename(pkg);
+            if (fileNameOnlyToNodeId.has(`${basePkg}.go`)) {
+              const targetId = fileNameOnlyToNodeId.get(`${basePkg}.go`);
+              if (targetId && targetId !== fileNodeId) {
+                addEdge(fileNodeId, targetId, 'imports', 'import');
+              }
+            }
+          }
+
+          // Gin / Fiber routes
+          const goRouteRegex = /\.(GET|POST|PUT|DELETE|PATCH|Handle)\s*\(\s*['"`]([^'"`]+)['"`]/g;
+          while ((match = goRouteRegex.exec(content)) !== null) {
+            backendRoutes.push({
+              fileNodeId,
+              sourceRelPath: relPath,
+              method: match[1],
+              rawRoute: match[2],
+              normalizedRoute: normalizeRoute(match[2])
+            });
+            backendServerEntrypoints.add(fileNodeId);
+          }
+        } else if (ext === '.rs') {
+          const rustModRegex = /(?:mod\s+([A-Za-z0-9_]+);|use\s+(?:crate::)?([A-Za-z0-9_]+))/g;
+          let match;
+          while ((match = rustModRegex.exec(content)) !== null) {
+            const modName = match[1] || match[2];
+            if (modName && fileNameOnlyToNodeId.has(`${modName}.rs`)) {
+              const targetId = fileNameOnlyToNodeId.get(`${modName}.rs`);
+              if (targetId && targetId !== fileNodeId) {
+                addEdge(fileNodeId, targetId, 'uses_mod', 'import');
+              }
+            }
+          }
+        }
+
+        // ==========================================
+        // 9. HTML (<script src="...">, <link href="...">)
+        // ==========================================
+        else if (['.html', '.htm'].includes(ext)) {
+          const scriptRegex = /<script\s+[^>]*src=["']([^"']+)["']/gi;
+          let match;
+          while ((match = scriptRegex.exec(content)) !== null) {
+            const targetNodeId = resolveTargetNode(relPath, match[1]);
+            if (targetNodeId && targetNodeId !== fileNodeId) {
+              addEdge(fileNodeId, targetNodeId, 'includes_script', 'import');
+            }
+          }
+
+          const linkRegex = /<link\s+[^>]*href=["']([^"']+)["']/gi;
+          while ((match = linkRegex.exec(content)) !== null) {
+            const targetNodeId = resolveTargetNode(relPath, match[1]);
+            if (targetNodeId && targetNodeId !== fileNodeId) {
+              addEdge(fileNodeId, targetNodeId, 'links_stylesheet', 'style');
+            }
+          }
+        }
+
+        // ==========================================
+        // 10. CSS / SCSS / LESS (@import "...")
+        // ==========================================
+        else if (['.css', '.scss', '.sass', '.less'].includes(ext)) {
+          const cssImportRegex = /@import\s+(?:url\(['"]?([^"')]+)['"]?\)|['"]([^'"]+)['"])/g;
+          let match;
+          while ((match = cssImportRegex.exec(content)) !== null) {
+            const spec = match[1] || match[2];
+            if (spec) {
+              const targetNodeId = resolveTargetNode(relPath, spec);
+              if (targetNodeId && targetNodeId !== fileNodeId) {
+                addEdge(fileNodeId, targetNodeId, 'imports_style', 'style');
+              }
+            }
+          }
+        }
+
+        // ==========================================
+        // 11. Markdown Links ([label](./path))
+        // ==========================================
         else if (['.md', '.markdown'].includes(ext)) {
           const mdLinkRegex = /\[[^\]]+\]\(((?:\.\/|\.\.\/|[A-Za-z0-9_-]+\/)[^)#\s]+)\)/g;
           let match;
@@ -674,7 +977,7 @@ export class GraphifyService {
     }
 
     // Pass 3: Cross-Boundary API Edge Matching (The Bridge)
-    this.logger.log(`[GraphifyService] Bridging cross-boundary APIs: ${frontendApiCalls.length} frontend calls, ${backendRoutes.length} backend routes`);
+    this.logger.log(`[GraphifyService] Bridging cross-boundary APIs: ${frontendApiCalls.length} frontend calls, ${backendRoutes.length} backend routes across all stacks`);
 
     for (const call of frontendApiCalls) {
       let matched = false;
@@ -719,7 +1022,7 @@ export class GraphifyService {
           const title = `🌐 API Endpoint Call: ${call.method} ${call.rawEndpoint} ➔ ${srvNode?.source_file || 'Server'}`;
           addEdge(call.fileNodeId, srvNodeId, 'api-network', 'api-network', label, title, [6, 4]);
           matched = true;
-          break; // connect to primary server
+          break;
         }
       }
     }
