@@ -25,14 +25,16 @@ import {
   Send,
   Navigation,
   Flame,
-  Radio
+  Radio,
+  GitCommit,
+  Copy
 } from 'lucide-react';
 
 interface GraphifyViewProps {
   onBack?: () => void;
 }
 
-type DrawerTab = 'layers' | 'godNodes' | 'bridges' | 'cycles' | 'blast' | 'insights';
+type DrawerTab = 'layers' | 'godNodes' | 'blast' | 'git' | 'bridges' | 'cycles' | 'dedup' | 'insights';
 
 export default function GraphifyView({ onBack }: GraphifyViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -688,6 +690,14 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
                 <Flame className="w-3 h-3 text-rose-400" /> Blast
               </button>
               <button
+                onClick={() => setActiveTab('git')}
+                className={`px-2 py-1 rounded font-medium transition flex items-center gap-1 shrink-0 ${
+                  activeTab === 'git' ? 'bg-amber-500 text-black font-semibold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <GitCommit className="w-3 h-3 text-amber-400" /> Git
+              </button>
+              <button
                 onClick={() => setActiveTab('bridges')}
                 className={`px-2 py-1 rounded font-medium transition flex items-center gap-1 shrink-0 ${
                   activeTab === 'bridges' ? 'bg-cyan-500 text-black font-semibold' : 'text-slate-400 hover:text-white'
@@ -702,6 +712,14 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
                 }`}
               >
                 <AlertTriangle className="w-3 h-3 text-yellow-400" /> Cycles
+              </button>
+              <button
+                onClick={() => setActiveTab('dedup')}
+                className={`px-2 py-1 rounded font-medium transition flex items-center gap-1 shrink-0 ${
+                  activeTab === 'dedup' ? 'bg-indigo-500 text-white font-semibold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Copy className="w-3 h-3 text-indigo-400" /> Redundant
               </button>
               <button
                 onClick={() => setActiveTab('insights')}
@@ -954,13 +972,66 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
                 ) : (
                   <div className="p-4 text-center text-xs text-slate-400 flex flex-col items-center justify-center gap-2">
                     <Flame className="w-8 h-8 text-rose-500/40" />
-                    <span>Select any file/component and click <b>"Calculate Blast Radius"</b> to inspect all upstream code affected by changes.</span>
+                    <span>Select any file/component and click <b>"Blast Radius"</b> to inspect all upstream code affected by changes.</span>
                   </div>
                 )}
               </div>
             )}
 
-            {/* Tab 4: Surprising Cross-Domain Bridges */}
+            {/* Tab 4: Git Working Set Impact */}
+            {activeTab === 'git' && (
+              <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                <div className="text-[11px] text-slate-400 px-1 py-1">
+                  Pre-Commit Impact: Files modified in Git working tree and their affected upstream dependents:
+                </div>
+                {data?.analytics?.gitImpact && data.analytics.gitImpact.modifiedFiles.length > 0 ? (
+                  <div className="flex flex-col gap-2">
+                    <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs flex flex-col gap-1">
+                      <div className="flex items-center justify-between font-bold text-amber-400">
+                        <span>Modified in Git: {data.analytics.gitImpact.modifiedFiles.length} files</span>
+                        <span className="px-1.5 py-0.5 bg-amber-500/20 rounded font-mono text-[10px]">
+                          {data.analytics.gitImpact.totalAffected} downstream affected
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {data.analytics.gitImpact.modifiedFiles.map((f, i) => (
+                          <span key={i} className="text-[10px] px-1.5 py-0.5 bg-black/40 rounded border border-white/5 font-mono text-slate-300">
+                            {f}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="text-[11px] font-bold text-slate-300 uppercase tracking-wider px-1">
+                      Potentially Impacted Files:
+                    </div>
+
+                    {data.analytics.gitImpact.affectedFiles.map((aff, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => {
+                          const found = data?.nodes.find((n) => n.id === aff.id);
+                          if (found) handleSelectSearchResult(found);
+                        }}
+                        className="p-2 rounded-lg bg-black/40 hover:bg-amber-500/20 border border-white/5 cursor-pointer transition text-xs flex flex-col gap-0.5"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-slate-200">{aff.label}</span>
+                          <span className="text-[10px] text-amber-300 font-mono">Depth {aff.depth}</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-mono truncate">{aff.source_file}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-4 text-center text-xs text-slate-400">
+                    ✅ Clean Git working tree! No uncommitted changes detected.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Tab 5: Surprising Cross-Domain Bridges */}
             {activeTab === 'bridges' && (
               <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
                 <div className="text-[11px] text-slate-400 px-1 py-1">
@@ -982,7 +1053,7 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
               </div>
             )}
 
-            {/* Tab 5: Circular Dependencies */}
+            {/* Tab 6: Circular Dependencies */}
             {activeTab === 'cycles' && (
               <div className="flex-1 overflow-y-auto p-2 space-y-2">
                 <div className="text-[11px] text-slate-400 px-1 py-1">
@@ -1010,7 +1081,49 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
               </div>
             )}
 
-            {/* Tab 6: Architectural Questions & AI Insights */}
+            {/* Tab 7: Duplicate / Redundant Code Entities */}
+            {activeTab === 'dedup' && (
+              <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                <div className="text-[11px] text-slate-400 px-1 py-1">
+                  Duplicate symbol declarations across multiple non-test files:
+                </div>
+                {data?.analytics?.duplicates && data.analytics.duplicates.length > 0 ? (
+                  data.analytics.duplicates.map((dup, idx) => (
+                    <div
+                      key={idx}
+                      className="p-2.5 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-xs flex flex-col gap-1.5"
+                    >
+                      <div className="flex items-center justify-between text-indigo-300 font-bold">
+                        <span>Symbol: `{dup.name}`</span>
+                        <span className="text-[10px] font-mono bg-indigo-500/20 px-1.5 py-0.5 rounded">
+                          {dup.occurrences.length} declarations
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        {dup.occurrences.map((occ, oIdx) => (
+                          <div
+                            key={oIdx}
+                            onClick={() => {
+                              const found = data?.nodes.find((n) => n.id === occ.nodeId);
+                              if (found) handleSelectSearchResult(found);
+                            }}
+                            className="p-1 rounded bg-black/40 hover:bg-indigo-500/20 cursor-pointer text-[10px] font-mono text-slate-300 truncate"
+                          >
+                            {occ.file}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-4 text-center text-xs text-slate-400">
+                    ✅ No redundant duplicate symbols found.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Tab 8: Architectural Questions & AI Insights */}
             {activeTab === 'insights' && (
               <div className="flex-1 overflow-y-auto p-2 space-y-2">
                 <div className="text-[11px] text-slate-400 px-1 py-1">

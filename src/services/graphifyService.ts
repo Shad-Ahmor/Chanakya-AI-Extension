@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { GraphNode, GraphEdge, GraphifyData, BlastRadiusResult, AffectedNode } from '../types/graphify';
+import { GraphNode, GraphEdge, GraphifyData, BlastRadiusResult, AffectedNode, DuplicateEntity, GitImpactResult } from '../types/graphify';
 import { Logger } from '../utils/logger';
 
 const COMMUNITY_PALETTE = [
@@ -1163,6 +1163,66 @@ export class GraphifyService {
       }
     ];
 
+    // Duplicate Entity / Redundant Symbol Detection (dedup.py logic)
+    const symbolUsage = new Map<string, { nodeId: string; label: string; file: string }[]>();
+    for (const node of nodes) {
+      if (node.symbols && !node.source_file.includes('test') && !node.source_file.includes('spec')) {
+        for (const sym of node.symbols) {
+          if (sym.length >= 4) {
+            if (!symbolUsage.has(sym)) symbolUsage.set(sym, []);
+            symbolUsage.get(sym)!.push({ nodeId: node.id, label: node.label, file: node.source_file });
+          }
+        }
+      }
+    }
+
+    const duplicates: DuplicateEntity[] = [];
+    for (const [sym, occurrences] of symbolUsage.entries()) {
+      if (occurrences.length > 1) {
+        duplicates.push({ name: sym, occurrences });
+        if (duplicates.length >= 8) break;
+      }
+    }
+
+    // Git Working Tree Impact Calculation (prs.py logic)
+    let gitImpact: GitImpactResult | undefined;
+    try {
+      const { execSync } = await import('child_process');
+      const wsFolders = vscode.workspace.workspaceFolders;
+      if (wsFolders && wsFolders.length > 0) {
+        const rootPath = wsFolders[0].uri.fsPath;
+        const statusOutput = execSync('git status --porcelain', { cwd: rootPath, encoding: 'utf-8', timeout: 2000 });
+        const modifiedRelPaths = statusOutput
+          .split('\n')
+          .map((l) => l.slice(3).trim().replace(/\\/g, '/'))
+          .filter(Boolean);
+
+        if (modifiedRelPaths.length > 0) {
+          const matchedNodes = nodes.filter((n) =>
+            modifiedRelPaths.some((p) => n.source_file.includes(p) || p.includes(n.source_file))
+          );
+          const affectedMap = new Map<string, AffectedNode>();
+
+          for (const mNode of matchedNodes) {
+            const blast = await this.calculateBlastRadius(mNode.id, 2);
+            if (blast) {
+              for (const aff of blast.affectedNodes) {
+                affectedMap.set(aff.id, aff);
+              }
+            }
+          }
+
+          gitImpact = {
+            modifiedFiles: modifiedRelPaths,
+            affectedFiles: Array.from(affectedMap.values()),
+            totalAffected: affectedMap.size
+          };
+        }
+      }
+    } catch {
+      // Git command non-fatal fallback
+    }
+
     this.cachedData = {
       nodes,
       edges,
@@ -1176,7 +1236,9 @@ export class GraphifyService {
         godNodes,
         surprisingConnections,
         importCycles,
-        suggestedQuestions
+        suggestedQuestions,
+        duplicates,
+        gitImpact
       }
     };
 

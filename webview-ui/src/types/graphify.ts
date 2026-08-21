@@ -105,12 +105,25 @@ export interface WorkMemoryLesson {
   lesson: string;
 }
 
+export interface GitImpactResult {
+  modifiedFiles: string[];
+  affectedFiles: AffectedNode[];
+  totalAffected: number;
+}
+
+export interface DuplicateEntity {
+  name: string;
+  occurrences: { nodeId: string; label: string; file: string }[];
+}
+
 export interface GraphifyAnalytics {
   godNodes: GodNode[];
   surprisingConnections: SurprisingConnection[];
   importCycles: ImportCycle[];
   suggestedQuestions: SuggestedQuestion[];
   lessons?: WorkMemoryLesson[] | undefined;
+  duplicates?: DuplicateEntity[] | undefined;
+  gitImpact?: GitImpactResult | undefined;
 }
 
 export interface GraphifyData {
