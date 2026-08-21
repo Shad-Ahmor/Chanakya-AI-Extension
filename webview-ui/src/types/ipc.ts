@@ -129,7 +129,8 @@ export type FromWebviewMessage =
   | { type: 'toggleMcpServer'; payload: { name: string; enabled: boolean } }
   | { type: 'pingMcpServer'; payload: { name: string } }
   | { type: 'testMcpTool'; payload: { serverName: string; toolName: string; args: Record<string, any> } }
-  | { type: 'renderPxPipePreview'; payload: { text: string; title?: string } };
+  | { type: 'renderPxPipePreview'; payload: { text: string; title?: string } }
+  | { type: 'getPxPipeTelemetry' };
 
 /**
  * Messages sent FROM Extension Host TO React Webview
@@ -164,6 +165,7 @@ export type ToWebviewMessage =
   | { type: 'mcpHubDataResult'; payload: { servers: any[]; logs: any[] } }
   | { type: 'mcpToolTestResult'; payload: { toolName: string; result?: string; error?: string; latencyMs: number } }
   | { type: 'pxpipePreviewResult'; payload: { dataUri: string; width: number; height: number; charCount: number; textTokens: number; imageTokens: number; savingsPercentage: number; factsheet: string[] } }
+  | { type: 'pxpipeTelemetryResult'; payload: { telemetry: any; recentLogs: any[] } }
   | { type: 'streamThoughtChunk'; payload: { messageId: string; chunk: string } }
   | { type: 'thoughtComplete'; payload: { messageId: string; thought: string; durationMs: number } }
   | { type: 'planUpdated'; payload: { plan: any | null } }

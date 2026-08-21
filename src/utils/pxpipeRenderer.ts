@@ -1,4 +1,5 @@
 import * as zlib from 'zlib';
+import { FactsheetExtractor } from './factsheetExtractor';
 
 /**
  * Pure TypeScript Zero-Dependency PNG Generator & Text-to-Pixel Rasterizer
@@ -59,37 +60,10 @@ export class PxPipeRenderer {
   }
 
   /**
-   * Extract precision-critical tokens (file paths, hashes, env vars, UUIDs)
-   * that must be preserved with 100% byte-exact accuracy alongside the image.
+   * Extract precision-critical tokens using FactsheetExtractor
    */
   public static extractFactsheet(text: string): string[] {
-    const factsheet = new Set<string>();
-
-    // 1. File paths (/path/to/file.ts or C:\path\file.ts)
-    const pathMatches = text.match(/(?:[\w\-.]+[/\\])+[\w\-.]+\.\w{1,5}/g) || [];
-    for (const p of pathMatches.slice(0, 30)) {
-      factsheet.add(p);
-    }
-
-    // 2. Hex hashes / commit SHAs / UUIDs (40-char SHA1 or 36-char UUID or 64-char SHA256)
-    const hashMatches = text.match(/\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b|\b[0-9a-fA-F]{32,64}\b/g) || [];
-    for (const h of hashMatches.slice(0, 20)) {
-      factsheet.add(h);
-    }
-
-    // 3. URLs and API endpoints
-    const urlMatches = text.match(/https?:\/\/[^\s"'<>]+/g) || [];
-    for (const u of urlMatches.slice(0, 15)) {
-      factsheet.add(u);
-    }
-
-    // 4. Port numbers & hostnames
-    const portMatches = text.match(/(?:localhost|127\.0\.0\.1):\d{2,5}/g) || [];
-    for (const port of portMatches) {
-      factsheet.add(port);
-    }
-
-    return Array.from(factsheet);
+    return FactsheetExtractor.extract(text).tokens;
   }
 
   /**

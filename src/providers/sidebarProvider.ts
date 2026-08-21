@@ -1205,6 +1205,21 @@ ${diff}`;
         break;
       }
 
+      case 'getPxPipeTelemetry': {
+        try {
+          const pxpipeService = (await import('../services/pxpipeService')).PxPipeService.getInstance();
+          const telemetry = pxpipeService.getTelemetry();
+          const recentLogs = pxpipeService.getRecentLogs();
+          this.postMessage({
+            type: 'pxpipeTelemetryResult',
+            payload: { telemetry, recentLogs }
+          });
+        } catch (err: any) {
+          this._logger.error('Failed to get PxPipe telemetry:', err);
+        }
+        break;
+      }
+
       case 'openFileInEditor':
       case 'openFile': {
         try {

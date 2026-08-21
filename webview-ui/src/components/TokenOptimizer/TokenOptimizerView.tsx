@@ -63,6 +63,8 @@ export interface TokenOptimizerConfig {
   pxpipeCompressSystemPrompt: boolean;
   pxpipeCompressToolSchemas: boolean;
   pxpipeCompressOldHistory: boolean;
+  pxpipeStripSchemas: boolean;
+  pxpipePromptPinning: boolean;
 }
 
 export const DEFAULT_TOKEN_CONFIG: TokenOptimizerConfig = {
@@ -86,6 +88,8 @@ export const DEFAULT_TOKEN_CONFIG: TokenOptimizerConfig = {
   pxpipeCompressSystemPrompt: true,
   pxpipeCompressToolSchemas: true,
   pxpipeCompressOldHistory: true,
+  pxpipeStripSchemas: true,
+  pxpipePromptPinning: true,
 };
 
 function ChipInput({
@@ -580,7 +584,9 @@ export default function TokenOptimizerView({ config }: { config: any }) {
                 {[
                   { key: 'pxpipeCompressToolSchemas', label: 'Compress MCP Tool Definitions & Schemas' },
                   { key: 'pxpipeCompressSystemPrompt', label: 'Compress System Instructions & Rules' },
-                  { key: 'pxpipeCompressOldHistory', label: 'Compress Older Chat Turns (Keeps latest 2 in text)' }
+                  { key: 'pxpipeCompressOldHistory', label: 'Compress Older Chat Turns (Keeps latest 2 in text)' },
+                  { key: 'pxpipeStripSchemas', label: 'Structure-Aware JSON Schema Stripping (Removes metadata, tokens ↓ 65%)' },
+                  { key: 'pxpipePromptPinning', label: 'Anthropic Ephemeral Cache Pinning (Instant cached replay)' }
                 ].map(({ key, label }) => (
                   <label key={key} className="flex items-center gap-2 text-xs text-[var(--vscode-foreground)] cursor-pointer">
                     <input
@@ -703,7 +709,21 @@ export default function TokenOptimizerView({ config }: { config: any }) {
                         onClick={handleDownloadPng}
                         className="flex items-center gap-1 text-xs text-emerald-400 hover:underline"
                       >
-                        <Download className="w-3.5 h-3.5" /> Download PNG
+                        <Download className="w-3.5 h-3.5" /> PNG
+                      </button>
+                      <button
+                        onClick={() => {
+                          const blob = new Blob([pxpipeResult.factsheet.map((f: string) => `- ${f}`).join('\n')], { type: 'text/plain' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = 'pxpipe-factsheet.txt';
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        }}
+                        className="flex items-center gap-1 text-xs text-amber-400 hover:underline"
+                      >
+                        <FileText className="w-3.5 h-3.5" /> Factsheet
                       </button>
                     </div>
                   </div>
