@@ -1008,6 +1008,17 @@ ${diff}`;
         break;
       }
 
+      case 'exportArchitectureMd': {
+        try {
+          const relativePath = await GraphifyService.getInstance().exportArchitectureToFile();
+          vscode.window.showInformationMessage(`Chanakya AI Enhancer: ${relativePath} generated and opened successfully!`);
+        } catch (err: any) {
+          this._logger.error('Failed to export architecture.md', err);
+          vscode.window.showErrorMessage(`Failed to export architecture.md: ${err.message}`);
+        }
+        break;
+      }
+
       case 'answerUserPrompt': {
         import('../services/agentOrchestrator').then((m) => {
           m.AgentOrchestrator.getInstance().resolveUserOption(message.payload.answer);

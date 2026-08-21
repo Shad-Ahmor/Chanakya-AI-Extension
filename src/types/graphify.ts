@@ -20,6 +20,7 @@ export interface GraphNode {
   source_file: string;
   file_type: 'code' | 'file' | 'class' | 'function' | 'interface' | 'markdown' | 'config';
   degree: number;
+  symbols?: string[] | undefined;
 }
 
 export interface GraphEdge {

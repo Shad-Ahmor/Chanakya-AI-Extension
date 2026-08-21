@@ -15,6 +15,7 @@ import {
   ZoomIn,
   ZoomOut,
   FolderTree,
+  FileText,
   X
 } from 'lucide-react';
 
@@ -389,6 +390,16 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
             title="Re-scan Workspace"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+
+          {/* Export architecture.md Button */}
+          <button
+            onClick={() => vscode.postMessage({ type: 'exportArchitectureMd' })}
+            className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30 transition"
+            title="Export architecture.md to workspace"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Export .md</span>
           </button>
 
           {/* Communities Toggle Button */}

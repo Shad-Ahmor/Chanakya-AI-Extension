@@ -405,4 +405,89 @@ export class GraphifyService {
     this.logger.log(`[GraphifyService] Generated graph: ${nodes.length} nodes, ${edges.length} edges, ${communities.length} communities`);
     return this.cachedData;
   }
+
+  /**
+   * Generates comprehensive architecture.md markdown content from AST graph data.
+   */
+  public async generateArchitectureMarkdown(): Promise<string> {
+    const data = await this.generateGraphData(false);
+    const now = new Date().toISOString().split('T')[0];
+
+    let md = `# Project Architecture & Codebase Map
+
+> Generated automatically by **Chanakya AI Enhancer Graphify Engine** on ${now}.
+
+---
+
+## 📊 Overview & Metrics
+
+- **Total Files / Symbols Indexed**: ${data.stats.nodeCount}
+- **Dependency Connections**: ${data.stats.edgeCount}
+- **Functional Communities**: ${data.stats.communityCount}
+
+---
+
+## 🏛️ Module & Community Breakdown
+
+`;
+
+    for (const comm of data.communities) {
+      const commNodes = data.nodes.filter((n) => n.community === comm.id);
+      md += `### 📁 ${comm.name} (${comm.count} components)\n\n`;
+
+      for (const node of commNodes) {
+        md += `- **\`${node.label}\`** (${node.file_type})\n`;
+        md += `  - Path: \`${node.source_file}\`\n`;
+        if (node.symbols && node.symbols.length > 0) {
+          md += `  - Exported Symbols: ${node.symbols.map((s) => `\`${s}\``).join(', ')}\n`;
+        }
+      }
+      md += '\n';
+    }
+
+    md += `---
+
+## 🔗 Key Dependency Relationships
+
+| Source Module | Relation | Target Module |
+|---|---|---|
+`;
+
+    for (const edge of data.edges.slice(0, 50)) {
+      const fromNode = data.nodes.find((n) => n.id === edge.from);
+      const toNode = data.nodes.find((n) => n.id === edge.to);
+      if (fromNode && toNode) {
+        md += `| \`${fromNode.label}\` | \`${edge.relation || 'imports'}\` | \`${toNode.label}\` |\n`;
+      }
+    }
+
+    md += `\n> *Showing first 50 dependency links.*
+
+---
+
+*Chanakya AI Enhancer — Deep Architecture Intelligence*
+`;
+
+    return md;
+  }
+
+  /**
+   * Saves architecture.md to workspace root and opens it in editor.
+   */
+  public async exportArchitectureToFile(): Promise<string> {
+    const wsFolders = vscode.workspace.workspaceFolders;
+    if (!wsFolders || wsFolders.length === 0) {
+      throw new Error('No open workspace folder to save architecture.md');
+    }
+
+    const rootUri = wsFolders[0].uri;
+    const archUri = vscode.Uri.joinPath(rootUri, 'architecture.md');
+    const content = await this.generateArchitectureMarkdown();
+
+    await vscode.workspace.fs.writeFile(archUri, Buffer.from(content, 'utf-8'));
+    const doc = await vscode.workspace.openTextDocument(archUri);
+    await vscode.window.showTextDocument(doc);
+
+    return vscode.workspace.asRelativePath(archUri);
+  }
 }

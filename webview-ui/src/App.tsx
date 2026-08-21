@@ -861,7 +861,61 @@ export default function App() {
                 </div>
                 <div>
                   <div className="font-bold text-[11px] text-purple-300">/edit</div>
-                  <div className="text-[9px] text-white/40">Edit selected code (same as Cmd+I)</div>
+                  <div className="text-[9px] text-white/40">Inline edit instructions</div>
+                </div>
+              </button>
+            )}
+
+            {(!slashQuery || 'plan'.includes(slashQuery)) && (
+              <button
+                onClick={() => {
+                  setShowSlashMenu(false);
+                  setInput('Formulate a structured step-by-step implementation plan for the current task using todo_write and execute it sequentially.');
+                }}
+                className="w-full text-left px-3 py-2 hover:bg-blue-500/20 hover:text-blue-200 flex items-center gap-2 border-b border-white/5 transition"
+              >
+                <div className="p-1 rounded bg-blue-500/20">
+                  <Target className="w-3 h-3 text-blue-400" />
+                </div>
+                <div>
+                  <div className="font-bold text-[11px] text-blue-300">/plan</div>
+                  <div className="text-[9px] text-white/40">DeepSeek Multi-step Task DAG Plan</div>
+                </div>
+              </button>
+            )}
+
+            {(!slashQuery || 'arch'.includes(slashQuery)) && (
+              <button
+                onClick={() => {
+                  setShowSlashMenu(false);
+                  setViewMode('graphify');
+                }}
+                className="w-full text-left px-3 py-2 hover:bg-cyan-500/20 hover:text-cyan-200 flex items-center gap-2 border-b border-white/5 transition"
+              >
+                <div className="p-1 rounded bg-cyan-500/20">
+                  <Network className="w-3 h-3 text-cyan-400" />
+                </div>
+                <div>
+                  <div className="font-bold text-[11px] text-cyan-300">/arch</div>
+                  <div className="text-[9px] text-white/40">Open Graphify Architecture Map</div>
+                </div>
+              </button>
+            )}
+
+            {(!slashQuery || 'lsp'.includes(slashQuery)) && (
+              <button
+                onClick={() => {
+                  setShowSlashMenu(false);
+                  setInput('Use LSP semantic tools (lsp_goto_definition, lsp_find_references, lsp_hover) to analyze the active symbol.');
+                }}
+                className="w-full text-left px-3 py-2 hover:bg-emerald-500/20 hover:text-emerald-200 flex items-center gap-2 transition"
+              >
+                <div className="p-1 rounded bg-emerald-500/20">
+                  <Code className="w-3 h-3 text-emerald-400" />
+                </div>
+                <div>
+                  <div className="font-bold text-[11px] text-emerald-300">/lsp</div>
+                  <div className="text-[9px] text-white/40">Query Language Server Protocol</div>
                 </div>
               </button>
             )}
