@@ -11,7 +11,7 @@ import { InlineEditCommand } from './commands/inlineEdit';
 import { VectorStore } from './services/memory/VectorStore';
 import { ConversationManager } from './services/ConversationManager';
 import { EvaluationService } from './services/evaluationService';
-
+import { WorkspaceIndexer } from './services/workspaceIndexer';
 /**
  * Chanakya AI Enhancer Extension Activation Entrypoint (Phases 1-5 Complete)
  */

@@ -8,7 +8,7 @@ import { SecurityUtils } from '../utils/security';
 import { ConversationManager } from '../services/ConversationManager';
 import { WorkspaceIndexer } from '../services/workspaceIndexer';
 import { DocumentParserService } from '../services/documentParserService';
-import { ContextExtractor } from '../services/contextExtractor';
+import { ContextProvider } from '../services/contextProvider';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'chanakya-ai-launcher';
@@ -394,16 +394,10 @@ ${diff}`;
         // Auto-inject active editor context if no other files were manually attached
         const hasManualFiles = enrichedContextItems.some(i => i.type === 'file');
         if (!hasManualFiles) {
-          const activeContext = ContextExtractor.getActiveEditorContext();
-          if (activeContext) {
-            enrichedContextItems.push({
-              id: `active-${Date.now()}`,
-              type: 'file',
-              name: `[ACTIVE FILE] ${activeContext.fileName}`,
-              content: activeContext.content,
-              path: activeContext.fileName
-            });
-            this._logger.log(`Auto-injected active editor context: ${activeContext.fileName}`);
+          const activeContextItem = ContextProvider.getInstance().getActiveEditorContext();
+          if (activeContextItem) {
+            enrichedContextItems.push(activeContextItem);
+            this._logger.log(`Auto-injected active editor context: ${activeContextItem.name}`);
           }
         }
 
