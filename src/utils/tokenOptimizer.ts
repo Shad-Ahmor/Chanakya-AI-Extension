@@ -149,4 +149,34 @@ export class TokenOptimizer {
     this.logger.log(`[TokenOptimizer] Pro-trimmed from ${messages.length} to ${finalMessages.length} messages. Tokens: ${totalTokens}`);
     return finalMessages;
   }
+
+  /**
+   * Calculate PxPipe Token Arbitrage (Text Tokens vs Image Tokens & Savings)
+   */
+  public static calculatePxPipeArbitrage(text: string, modelType: 'claude' | 'gemini' | 'openai' = 'claude'): {
+    textTokens: number;
+    imageTokens: number;
+    savedTokens: number;
+    savingsPercentage: number;
+    isProfitable: boolean;
+  } {
+    const textTokens = this.countTokens(text);
+    // Model vision tile costs:
+    // Claude ~1600 tokens
+    // Gemini Flash ~258 tokens
+    // OpenAI ~765 tokens
+    const imageTokens = modelType === 'gemini' ? 258 : modelType === 'openai' ? 765 : 1600;
+    const savedTokens = Math.max(0, textTokens - imageTokens);
+    const savingsPercentage = textTokens > 0 ? Math.round((savedTokens / textTokens) * 100) : 0;
+    const isProfitable = textTokens > imageTokens;
+
+    return {
+      textTokens,
+      imageTokens,
+      savedTokens,
+      savingsPercentage,
+      isProfitable
+    };
+  }
 }
+

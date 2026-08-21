@@ -14,6 +14,7 @@ import { GraphifyService } from '../services/graphifyService';
 import { PlanTracker } from '../services/planTracker';
 import { McpService } from '../services/mcpService';
 import { McpDbService } from '../services/mcpDbService';
+import { PxPipeRenderer } from '../utils/pxpipeRenderer';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'chanakya-ai-launcher';
@@ -1173,6 +1174,33 @@ ${diff}`;
               latencyMs
             }
           });
+        }
+        break;
+      }
+
+      case 'renderPxPipePreview': {
+        try {
+          const result = PxPipeRenderer.renderTextToPng(message.payload.text, {
+            title: message.payload.title || 'CHANAKYA PXPIPE COMPRESSED CONTEXT',
+            columns: message.payload.text.length > 5000 ? 2 : 1,
+            showLineNumbers: true
+          });
+
+          this.postMessage({
+            type: 'pxpipePreviewResult',
+            payload: {
+              dataUri: result.dataUri,
+              width: result.width,
+              height: result.height,
+              charCount: result.charCount,
+              textTokens: result.estimatedTextTokens,
+              imageTokens: result.estimatedImageTokens,
+              savingsPercentage: result.savingsPercentage,
+              factsheet: result.factsheet
+            }
+          });
+        } catch (err: any) {
+          this._logger.error('Failed to render PxPipe preview:', err);
         }
         break;
       }
