@@ -7,6 +7,8 @@ import { Logger } from '../utils/logger';
 import { SecurityUtils } from '../utils/security';
 import { ConversationManager } from '../services/ConversationManager';
 import { WorkspaceIndexer } from '../services/workspaceIndexer';
+import { DocumentParserService } from '../services/documentParserService';
+import { ContextExtractor } from '../services/contextExtractor';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'chanakya-ai-launcher';
@@ -42,6 +44,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         if (this._view) {
           this.postMessage({
             type: 'artifactUpdated',
+            payload
+          });
+        }
+      });
+      m.AgentOrchestrator.getInstance().events.on('fileChanged', (payload) => {
+        if (this._view) {
+          this.postMessage({
+            type: 'fileChanged',
             payload
           });
         }
@@ -269,6 +279,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         break;
       }
 
+      case 'openSourceControl': {
+        vscode.commands.executeCommand('workbench.view.scm');
+        break;
+      }
+
       case 'searchWorkspaceFiles': {
         const query = message.payload.query;
         const files = await vscode.workspace.findFiles(`**/*${query}*`, '**/node_modules/**', 20);
@@ -375,6 +390,23 @@ ${diff}`;
         this.postMessage({ type: 'setLoading', payload: { isLoading: true } });
 
         let enrichedContextItems = [...(contextItems || [])];
+        
+        // Auto-inject active editor context if no other files were manually attached
+        const hasManualFiles = enrichedContextItems.some(i => i.type === 'file');
+        if (!hasManualFiles) {
+          const activeContext = ContextExtractor.getActiveEditorContext();
+          if (activeContext) {
+            enrichedContextItems.push({
+              id: `active-${Date.now()}`,
+              type: 'file',
+              name: `[ACTIVE FILE] ${activeContext.fileName}`,
+              content: activeContext.content,
+              path: activeContext.fileName
+            });
+            this._logger.log(`Auto-injected active editor context: ${activeContext.fileName}`);
+          }
+        }
+
         const hasCodebase = enrichedContextItems.find(i => i.type === 'codebase');
         
         if (hasCodebase) {
@@ -399,7 +431,7 @@ ${diff}`;
                   id: `rag-${file.fsPath}`,
                   type: 'file',
                   name: vscode.workspace.asRelativePath(file),
-                  content: Buffer.from(bytes).toString('utf-8').slice(0, 3000), 
+                  content: Buffer.from(bytes).toString('utf-8'),
                   path: file.fsPath
                 });
               }
@@ -806,8 +838,7 @@ ${diff}`;
         if (uris && uris.length > 0) {
           for (const uri of uris) {
             try {
-              const fileContent = await vscode.workspace.fs.readFile(uri);
-              const contentStr = new TextDecoder('utf-8').decode(fileContent);
+              const contentStr = await DocumentParserService.getInstance().parseDocument(uri.fsPath);
               this._view?.webview.postMessage({
                 type: 'fileAttached',
                 payload: {

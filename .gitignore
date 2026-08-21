@@ -17,3 +17,4 @@ GEMINI.md
 
 # Lockfiles
 package-lock.json
+local_llm_server.py

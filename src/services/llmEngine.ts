@@ -51,7 +51,7 @@ export class LLMEngine {
     const { prompt, contextItems, optimizerConfig, callbacks, cancellationToken, existingMessages } = params;
     const config = this.configManager.getConfig();
     const activeModel =
-      config.models.find((m) => m.id === config.activeChatModelId) || config.models[0];
+      config.models.find((m) => m.id === config.activeChatModelId || m.name === config.activeChatModelId) || config.models[0];
 
     if (!activeModel) {
       callbacks.onError(new Error('No model configured. Please add a model in Model Hub.'));
@@ -133,11 +133,34 @@ export class LLMEngine {
         callbacks.onOptimizationStats(originalTokens, optimizedTokens);
       }
 
+      // Sliding Window & Token Limiter Logic
+      const MAX_TOKENS = activeModel.defaultCompletionOptions?.contextLength || 8192;
+      let promptTokens = estimateTokens(prompt);
+      let messagesTokens = estimateTokens(JSON.stringify(existingMessages || []));
+      let contextItemsTokens = optimizedTokens;
+      
+      let totalTokens = promptTokens + messagesTokens + contextItemsTokens;
+      let finalMessages = existingMessages ? [...existingMessages] : [];
+
+      // If we exceed max tokens, try pruning older conversation messages first
+      while (totalTokens > MAX_TOKENS * 0.9 && finalMessages.length > 2) {
+        // Remove the oldest message (index 0 is usually system prompt if it exists, but let's just shift)
+        finalMessages.shift();
+        messagesTokens = estimateTokens(JSON.stringify(finalMessages));
+        totalTokens = promptTokens + messagesTokens + contextItemsTokens;
+        this.logger.log(`[TokenOptimizer] Pruned old message. New total tokens: ${totalTokens}`);
+      }
+
+      // If STILL too big even after removing all history except latest
+      if (totalTokens > MAX_TOKENS) {
+         throw new Error(`Token Limit Exceeded! Your prompt and attachments (${totalTokens} tokens) exceed the model's maximum context length of ${MAX_TOKENS} tokens. Please try clearing the chat or attaching smaller files.`);
+      }
+
       if (activeModel.provider === 'gemini' && !activeModel.apiBase?.includes('/v1')) {
-        await this.streamGemini(activeModel, prompt, optimizedContextItems, optimizerConfig, wrappedCallbacks, abortController.signal, existingMessages);
+        await this.streamGemini(activeModel, prompt, optimizedContextItems, optimizerConfig, wrappedCallbacks, abortController.signal, finalMessages);
       } else {
         // OpenAI-compatible / Ollama / LM Studio / Enterprise AI Foundry
-        await this.streamOpenAICompatible(activeModel, prompt, optimizedContextItems, optimizerConfig, wrappedCallbacks, abortController.signal, existingMessages);
+        await this.streamOpenAICompatible(activeModel, prompt, optimizedContextItems, optimizerConfig, wrappedCallbacks, abortController.signal, finalMessages);
       }
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') {
@@ -190,12 +213,12 @@ export class LLMEngine {
       '4. ALWAYS prefer `replace_in_file` over `edit_file` when modifying existing files to prevent accidental deletion of code. Only use `edit_file` if you need to rewrite the ENTIRE file from scratch.\n' +
       '5. When scaffolding full projects or creating multiple files, use the `create_file` tool one by one. The system will automatically execute it and return the result to you so you can iteratively call the next tool until the project is complete.\n' +
       '6. PROACTIVE RECOMMENDATIONS: When faced with design choices or implementations, propose 2-3 high-level recommendations with pros/cons and ask the user to select one (just like Antigravity does). Do not just blindly code sub-optimal solutions.\n' +
-      '7. PLANNING MODE (For Complex Tasks/Projects):\n' +
-      'When asked to build a project or do a complex task, YOU MUST follow this strict workflow:\n' +
-      '  Phase 1: Write an `implementation_plan.md` using `create_file` detailing your approach. Then STOP and ask the user to type "Proceed" to approve it. DO NOT generate other files yet.\n' +
-      '  Phase 2: Once approved, write a `plan.md` file using `create_file` containing a checklist of all files to be created/edited/deleted, their paths, and specific actions (e.g. `- [ ] create src/App.tsx - Add main component`).\n' +
-      '  Phase 3: Execute the tasks one by one autonomously. After completing each file, you MUST use `replace_in_file` to update `plan.md` by checking off the completed task (`- [x]`).\n' +
-      '  Phase 4: Continue this loop until all tasks in `plan.md` are marked `[x]`. If disconnected, you can read `plan.md` to resume exactly where you left off.';
+      '7. PLANNING MODE (For Complex Tasks or Very Long Prompts):\n' +
+      'When asked to build a project, do a complex task, OR if the user provides a very long requirements document (e.g., 25-30+ pages), YOU MUST follow this strict workflow:\n' +
+      '  Phase 1: DO NOT start coding immediately. Take time to think, optimize, and deeply understand the text. Write an `implementation_plan.md` using `create_file` detailing your approach and architecture. Then STOP and ask the user to type "Proceed" to approve it.\n' +
+      '  Phase 2: Once approved, write a `task.md` file (or `plan.md`) using `create_file` containing a checklist of all files to be created/edited/deleted, their paths, and specific actions (e.g. `- [ ] create src/App.tsx - Add main component`).\n' +
+      '  Phase 3: Execute the tasks one by one autonomously from the work plan. After completing each file, you MUST use `replace_in_file` to update `task.md` by checking off the completed task (`- [x]`).\n' +
+      '  Phase 4: Continue this loop until all tasks are marked `[x]`.';
 
     if (useXmlTools) {
       systemContent += '\n\n' + await orchestrator.getXMLToolInstructions();
@@ -592,12 +615,12 @@ export class LLMEngine {
       '4. Provide clean, efficient, and well-documented code.\n' +
       '5. When scaffolding full projects or creating multiple files, use the `create_file` tool one by one. The system will automatically execute it and return the result to you so you can iteratively call the next tool until the project is complete.\n' +
       '6. PROACTIVE RECOMMENDATIONS: When faced with design choices or implementations, propose 2-3 high-level recommendations with pros/cons and ask the user to select one (just like Antigravity does). Do not just blindly code sub-optimal solutions.\n' +
-      '7. PLANNING MODE (For Complex Tasks/Projects):\n' +
-      'When asked to build a project or do a complex task, YOU MUST follow this strict workflow:\n' +
-      '  Phase 1: Write an `implementation_plan.md` using `create_file` detailing your approach. Then STOP and ask the user to type "Proceed" to approve it. DO NOT generate other files yet.\n' +
-      '  Phase 2: Once approved, write a `plan.md` file using `create_file` containing a checklist of all files to be created/edited/deleted, their paths, and specific actions (e.g. `- [ ] create src/App.tsx - Add main component`).\n' +
-      '  Phase 3: Execute the tasks one by one autonomously. After completing each file, you MUST use `replace_in_file` to update `plan.md` by checking off the completed task (`- [x]`).\n' +
-      '  Phase 4: Continue this loop until all tasks in `plan.md` are marked `[x]`. If disconnected, you can read `plan.md` to resume exactly where you left off.';
+      '7. PLANNING MODE (For Complex Tasks or Very Long Prompts):\n' +
+      'When asked to build a project, do a complex task, OR if the user provides a very long requirements document (e.g., 25-30+ pages), YOU MUST follow this strict workflow:\n' +
+      '  Phase 1: DO NOT start coding immediately. Take time to think, optimize, and deeply understand the text. Write an `implementation_plan.md` using `create_file` detailing your approach and architecture. Then STOP and ask the user to type "Proceed" to approve it.\n' +
+      '  Phase 2: Once approved, write a `task.md` file (or `plan.md`) using `create_file` containing a checklist of all files to be created/edited/deleted, their paths, and specific actions (e.g. `- [ ] create src/App.tsx - Add main component`).\n' +
+      '  Phase 3: Execute the tasks one by one autonomously from the work plan. After completing each file, you MUST use `replace_in_file` to update `task.md` by checking off the completed task (`- [x]`).\n' +
+      '  Phase 4: Continue this loop until all tasks are marked `[x]`. If disconnected, you can read `task.md` to resume exactly where you left off.';
       
     systemInstruction += '\n\n' + await AgentOrchestrator.getInstance().getXMLToolInstructions();
 

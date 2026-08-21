@@ -69,8 +69,8 @@ export default function ModelEditModal({ model, onSave, onClose }: Props) {
   const [executionMode, setExecutionMode] = useState<ModelExecutionMode>(
     model?.executionMode || (model?.isLocal ? 'local' : model?.requestOptions?.headers ? 'enterprise_foundry' : 'online_api')
   );
-  const [roles, setRoles] = useState<ModelRole[]>(model?.roles || ['chat', 'edit', 'apply']);
-  const [capabilities, setCapabilities] = useState<ModelCapability[]>(model?.capabilities || []);
+  const [roles, setRoles] = useState<ModelRole[]>((model?.roles as ModelRole[]) || ['chat', 'edit', 'apply']);
+  const [capabilities, setCapabilities] = useState<ModelCapability[]>((model?.capabilities as ModelCapability[]) || []);
   const [contextLength, setContextLength] = useState(model?.defaultCompletionOptions?.contextLength || 1047576);
   const [maxTokens, setMaxTokens] = useState(model?.defaultCompletionOptions?.maxTokens || 32768);
   const [useLegacyCompletionsEndpoint, _setUseLegacyCompletionsEndpoint] = useState(model?.useLegacyCompletionsEndpoint ?? false);

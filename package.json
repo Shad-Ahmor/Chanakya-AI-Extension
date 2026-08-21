@@ -75,6 +75,18 @@
 				"title": "Chanakya AI Enhancer: Open Models Hub",
 				"category": "Chanakya AI Enhancer",
 				"icon": "$(hub)"
+			},
+			{
+				"command": "aiEnhancer.generateArchitecture",
+				"title": "Chanakya AI Enhancer: Generate Workspace Architecture",
+				"category": "Chanakya AI Enhancer",
+				"icon": "$(list-tree)"
+			},
+			{
+				"command": "aiEnhancer.setupMcp",
+				"title": "Chanakya AI Enhancer: Setup MCP Configuration",
+				"category": "Chanakya AI Enhancer",
+				"icon": "$(gear)"
 			}
 		],
 		"keybindings": [
@@ -232,7 +244,10 @@
 	"dependencies": {
 		"@huggingface/transformers": "^4.2.0",
 		"@modelcontextprotocol/sdk": "^1.30.0",
+		"glob": "^13.0.6",
 		"js-tiktoken": "^1.0.21",
+		"mammoth": "^1.12.1",
+		"pdf-parse": "^2.4.5",
 		"uuid": "^14.0.2",
 		"vectra": "^0.15.0",
 		"yaml": "^2.9.0"

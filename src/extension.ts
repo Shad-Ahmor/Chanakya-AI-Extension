@@ -149,6 +149,42 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(
     vscode.commands.registerCommand('aiEnhancer.openModelsHub', (args?: { tab?: string }) => {
       dashboardProvider.show(args);
+    }),
+    vscode.commands.registerCommand('aiEnhancer.generateArchitecture', async () => {
+      try {
+        const outPath = await WorkspaceIndexer.getInstance().generateArchitectureMap();
+        vscode.window.showInformationMessage(`Workspace architecture generated at: ${outPath}`);
+      } catch (err: any) {
+        vscode.window.showErrorMessage(`Failed to generate architecture: ${err.message}`);
+      }
+    }),
+    vscode.commands.registerCommand('aiEnhancer.setupMcp', async () => {
+      const wsFolders = vscode.workspace.workspaceFolders;
+      if (!wsFolders || wsFolders.length === 0) {
+        vscode.window.showErrorMessage('No workspace open to setup MCP.');
+        return;
+      }
+      const mcpPath = vscode.Uri.joinPath(wsFolders[0].uri, '.vscode', 'mcp.json');
+      try {
+        await vscode.workspace.fs.stat(mcpPath);
+        vscode.window.showInformationMessage('.vscode/mcp.json already exists!');
+        const doc = await vscode.workspace.openTextDocument(mcpPath);
+        vscode.window.showTextDocument(doc);
+      } catch {
+        const exampleConfig = {
+          mcpServers: {
+            "example-server": {
+              command: "npx",
+              args: ["-y", "@modelcontextprotocol/server-everything"]
+            }
+          }
+        };
+        const encoder = new TextEncoder();
+        await vscode.workspace.fs.writeFile(mcpPath, encoder.encode(JSON.stringify(exampleConfig, null, 2)));
+        vscode.window.showInformationMessage('Created example .vscode/mcp.json for MCP configuration.');
+        const doc = await vscode.workspace.openTextDocument(mcpPath);
+        vscode.window.showTextDocument(doc);
+      }
     })
   );
 

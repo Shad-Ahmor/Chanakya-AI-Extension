@@ -34,6 +34,13 @@ export interface ChatMessage {
   readonly tool_calls?: any[] | undefined;
   readonly tool_call_id?: string | undefined;
   readonly name?: string | undefined;
+  readonly artifacts?: { readonly name: string; readonly content: string }[] | undefined;
+  readonly fileChanges?: {
+    readonly count: number;
+    readonly added: number;
+    readonly deleted: number;
+    readonly modified: number;
+  } | undefined;
 }
 
 export interface Conversation {
@@ -95,7 +102,8 @@ export type FromWebviewMessage =
   | { type: 'clearAllConversations' }
   | { type: 'openFilePicker' }
   | { type: 'showInformationMessage'; payload: { message: string } }
-  | { type: 'submitProceed' };
+  | { type: 'submitProceed' }
+  | { type: 'openSourceControl' };
 
 /**
  * Messages sent FROM Extension Host TO React Webview
@@ -122,4 +130,5 @@ export type ToWebviewMessage =
   | { type: 'conversationsLoaded'; payload: { conversations: Conversation[]; activeId: string | null } }
   | { type: 'activeConversationChanged'; payload: { conversation: Conversation } }
   | { type: 'fileAttached'; payload: { name: string; path: string; content: string } }
-  | { type: 'artifactUpdated'; payload: { name: string; content: string } };
+  | { type: 'artifactUpdated'; payload: { name: string; content: string } }
+  | { type: 'fileChanged'; payload: { path: string; changeType: 'create' | 'modify' | 'delete' } };

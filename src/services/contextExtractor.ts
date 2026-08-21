@@ -7,7 +7,6 @@ import { TokenOptimizer } from '../utils/tokenOptimizer';
  */
 export class ContextExtractor {
   private static readonly MAX_SURROUNDING_LINES = 25;
-  private static readonly MAX_SELECTION_TOKENS = 3000; // ~3000 tokens max to protect token quota
 
   /**
    * Extracts active editor context with intelligent token/character budgeting.
@@ -22,9 +21,6 @@ export class ContextExtractor {
     const selection = editor.selection;
     let selectedText = document.getText(selection);
 
-    // If selection exceeds safe limit, truncate using TokenOptimizer
-    selectedText = TokenOptimizer.truncateText(selectedText, this.MAX_SELECTION_TOKENS, false);
-
     let surroundingContext = '';
     if (!selection.isEmpty) {
       const startLine = Math.max(0, selection.start.line - this.MAX_SURROUNDING_LINES);
@@ -36,11 +32,7 @@ export class ContextExtractor {
       const beforeText = document.getText(beforeRange);
       const afterText = document.getText(afterRange);
 
-      // Truncate surrounding context if it's too large to save tokens
-      const safeBeforeText = TokenOptimizer.truncateText(beforeText, 1000, true);
-      const safeAfterText = TokenOptimizer.truncateText(afterText, 1000, false);
-
-      surroundingContext = `// --- Surrounding Context (Lines ${startLine + 1} to ${endLine + 1}) ---\n${safeBeforeText}\n/* [SELECTED CODE BLOCK] */\n${safeAfterText}`;
+      surroundingContext = `// --- Surrounding Context (Lines ${startLine + 1} to ${endLine + 1}) ---\n${beforeText}\n/* [SELECTED CODE BLOCK] */\n${afterText}`;
       // Minify surrounding context to aggressively save tokens
       surroundingContext = TokenOptimizer.minifyCode(surroundingContext, document.languageId);
     }

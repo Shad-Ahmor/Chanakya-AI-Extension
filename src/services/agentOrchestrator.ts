@@ -386,6 +386,7 @@ Only one tool call per response is supported. Do not output anything else if you
       this.logger.error(`Failed to open document ${fullPath} in UI`, e);
     }
     
+    this.events.emit('fileChanged', { path: fullPath, changeType: 'modify' });
     return `Successfully modified file: ${filePath}`;
   }
 
@@ -413,6 +414,7 @@ Only one tool call per response is supported. Do not output anything else if you
       this.logger.error(`Failed to open document ${fullPath} in UI`, e);
     }
     
+    this.events.emit('fileChanged', { path: fullPath, changeType: 'modify' });
     return `Successfully replaced content in file: ${filePath}`;
     } catch (err: any) {
       return `Failed to read/write file: ${err.message}`;
@@ -437,6 +439,7 @@ Only one tool call per response is supported. Do not output anything else if you
       this.logger.error(`Failed to open document ${fullPath} in UI`, e);
     }
     
+    this.events.emit('fileChanged', { path: fullPath, changeType: 'create' });
     return `Successfully created file: ${filePath}`;
   }
 
@@ -444,6 +447,7 @@ Only one tool call per response is supported. Do not output anything else if you
     const fullPath = this.resolvePath(filePath);
     try {
       await fs.unlink(fullPath);
+      this.events.emit('fileChanged', { path: fullPath, changeType: 'delete' });
       return `Successfully deleted file: ${filePath}`;
     } catch (e: any) {
       return `Failed to delete file ${filePath}: ${e.message}`;

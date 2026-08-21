@@ -2,7 +2,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ChatMessage } from '../../types/ipc';
 import CodeBlock from './CodeBlock';
-import { Code, FileText, Bot, User, Sparkles, Undo2, ArrowDownRight, Loader2, ChevronRight, Copy, Check } from 'lucide-react';
+import { Code, FileText, Bot, User, Sparkles, Undo2, ArrowDownRight, Loader2, ChevronRight, Copy, Check, ThumbsUp, ThumbsDown, GitBranch } from 'lucide-react';
 import { vscode } from '../../vscode';
 import { useState, useEffect } from 'react';
 
@@ -20,9 +20,10 @@ function DynamicTimer() {
 }
 interface Props {
   message: ChatMessage;
+  onOpenArtifact?: (name: string, content: string) => void;
 }
 
-export default function ChatMessageItem({ message }: Props) {
+export default function ChatMessageItem({ message, onOpenArtifact }: Props) {
   const isUser = message.role === 'user';
   const [copied, setCopied] = useState(false);
   const [answeredTools, setAnsweredTools] = useState<Record<string, string>>({});
@@ -356,6 +357,66 @@ export default function ChatMessageItem({ message }: Props) {
               {Math.round(((message.optimizationStats.originalTokens - message.optimizationStats.optimizedTokens) / message.optimizationStats.originalTokens) * 100)}% optimized
             </span>
           </div>
+        </div>
+      )}
+
+      {/* Inline Artifacts */}
+      {!isUser && !message.isStreaming && message.artifacts && message.artifacts.length > 0 && (
+        <div className="mt-4 flex flex-col gap-2">
+          {message.artifacts.map((artifact, idx) => (
+            <div 
+              key={idx}
+              onClick={() => onOpenArtifact && onOpenArtifact(artifact.name, artifact.content)}
+              className="flex items-center gap-3 p-3 rounded-xl bg-black/20 hover:bg-black/40 border border-white/5 hover:border-white/10 cursor-pointer transition-all shadow-sm group"
+            >
+              <div className="p-2 rounded-lg bg-sky-500/20 text-sky-400 group-hover:scale-110 transition-transform">
+                <FileText className="w-4 h-4" />
+              </div>
+              <div className="flex-1 overflow-hidden">
+                <div className="text-sm font-semibold text-white/90 truncate">{artifact.name === 'task.md' ? 'Task' : artifact.name === 'implementation_plan.md' ? 'Implementation Plan' : artifact.name === 'walkthrough.md' ? 'Walkthrough' : artifact.name}</div>
+                <div className="text-[11px] text-white/50 truncate">Click to view artifact details</div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-white/30 group-hover:text-white/70 transition-colors" />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* File Changes Summary */}
+      {!isUser && !message.isStreaming && message.fileChanges && message.fileChanges.count > 0 && (
+        <div className="mt-3 flex items-center justify-between p-3 rounded-xl bg-black/20 border border-white/5 shadow-sm">
+          <div className="flex items-center gap-3 text-sm text-white/80">
+            <GitBranch className="w-4 h-4 text-emerald-400" />
+            <span className="font-mono text-xs">
+              {message.fileChanges.count} files changed <span className="text-emerald-400">+{message.fileChanges.added}</span> <span className="text-red-400">-{message.fileChanges.deleted}</span>
+            </span>
+          </div>
+          <button 
+            onClick={() => vscode.postMessage({ type: 'openSourceControl' })}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded border border-emerald-500/20 transition-colors cursor-pointer"
+          >
+            <Check className="w-3.5 h-3.5" />
+            Review
+          </button>
+        </div>
+      )}
+
+      {/* Message Footer (Like, Dislike, Copy) */}
+      {!message.isStreaming && (
+        <div className="mt-3 flex justify-end gap-1 border-t border-white/5 pt-2 select-none">
+          <button onClick={handleCopyMessage} className="p-1.5 text-white/40 hover:text-white hover:bg-white/10 rounded transition-colors cursor-pointer" title="Copy Message">
+            {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+          </button>
+          {!isUser && (
+            <>
+              <button className="p-1.5 text-white/40 hover:text-white hover:bg-white/10 rounded transition-colors cursor-pointer" title="Helpful">
+                <ThumbsUp className="w-3.5 h-3.5" />
+              </button>
+              <button className="p-1.5 text-white/40 hover:text-white hover:bg-white/10 rounded transition-colors cursor-pointer" title="Not Helpful">
+                <ThumbsDown className="w-3.5 h-3.5" />
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>

@@ -31,7 +31,8 @@ import {
   Paperclip,
   AtSign,
   ScrollText,
-  Target
+  Target,
+  Network
 } from 'lucide-react';
 
 export default function App() {
@@ -249,6 +250,42 @@ export default function App() {
             ...prev,
             [message.payload.name]: message.payload.content
           }));
+          setMessages((prev) => {
+            const lastMsg = prev[prev.length - 1];
+            if (lastMsg && lastMsg.role === 'assistant') {
+              const currentArtifacts = lastMsg.artifacts || [];
+              // Only add if not already present
+              const existingIdx = currentArtifacts.findIndex(a => a.name === message.payload.name);
+              let newArtifacts = [...currentArtifacts];
+              if (existingIdx >= 0) {
+                newArtifacts[existingIdx] = message.payload;
+              } else {
+                newArtifacts.push(message.payload);
+              }
+              const newMsg = { ...lastMsg, artifacts: newArtifacts };
+              return [...prev.slice(0, -1), newMsg];
+            }
+            return prev;
+          });
+          break;
+        }
+
+        case 'fileChanged': {
+          setMessages((prev) => {
+            const lastMsg = prev[prev.length - 1];
+            if (lastMsg && lastMsg.role === 'assistant') {
+              const currentChanges = lastMsg.fileChanges || { count: 0, added: 0, deleted: 0, modified: 0 };
+              const type = message.payload.changeType;
+              const newChanges = {
+                count: currentChanges.count + 1,
+                added: currentChanges.added + (type === 'create' ? 1 : 0),
+                deleted: currentChanges.deleted + (type === 'delete' ? 1 : 0),
+                modified: currentChanges.modified + (type === 'modify' ? 1 : 0),
+              };
+              return [...prev.slice(0, -1), { ...lastMsg, fileChanges: newChanges }];
+            }
+            return prev;
+          });
           break;
         }
       }
@@ -347,12 +384,13 @@ export default function App() {
 
   const handleQuickAction = (action: string) => {
     let prompt = '';
-    if (action === 'enhance') prompt = 'Enhance and optimize this code for maximum performance and readability.';
-    else if (action === 'refactor') prompt = 'Refactor this code following clean code architecture and SOLID principles.';
-    else if (action === 'bugs') prompt = 'Review this code carefully and identify any bugs, edge cases, or potential security vulnerabilities.';
-    else if (action === 'docstrings') prompt = 'Add complete JSDoc / docstrings and type annotations to this code.';
-    else if (action === 'tests') prompt = 'Write comprehensive unit test cases for this code covering happy paths and edge cases.';
-    else if (action === 'explain') prompt = 'Explain this code in detail, breaking down what it does step by step.';
+    if (action === 'enhance') prompt = 'You are an elite performance optimization expert. Your task is to deeply analyze this code and enhance it for maximum performance, minimal memory usage, and optimal Big-O time complexity. Implement modern best practices, clean up technical debt, and ensure the code is highly readable. Do not alter the core business logic, but do improve the underlying algorithms and data structures.';
+    else if (action === 'refactor') prompt = 'You are a master software architect. Your task is to refactor this code following Clean Architecture and SOLID principles. Break down large monolithic functions into smaller, modular, and reusable components. Improve naming conventions, reduce cyclomatic complexity, and ensure the code is easily testable and maintainable without changing its external behavior.';
+    else if (action === 'bugs') prompt = 'You are a senior security researcher and QA engineer. Review this code methodically line-by-line to identify hidden bugs, edge cases, race conditions, memory leaks, and potential security vulnerabilities (e.g., injection flaws, unhandled exceptions). Highlight every issue you find, explain the root cause, and provide a robust code fix to patch it.';
+    else if (action === 'docstrings') prompt = 'Act as a strict documentation standardizer. Add comprehensive, professional-grade docstrings and type annotations to all functions, classes, and complex logic blocks in this code. Include detailed descriptions, `@param` and `@returns` definitions, and explain the "why" behind non-obvious logic. The documentation must be ready for auto-generation tools.';
+    else if (action === 'tests') prompt = 'You are an expert Test-Driven Development (TDD) engineer. Write a comprehensive suite of unit tests for this code using a modern testing framework. Cover all happy paths, boundary conditions, edge cases, and error-handling scenarios. Mock external dependencies where necessary and ensure high code coverage.';
+    else if (action === 'architecture') prompt = 'You are a Master Software Architect. Your task is to deeply analyze the entire open project. You must autonomously open every single file and folder—DO NOT miss or skip a single file, no matter how small or deeply nested. Carefully read and understand their purpose, the language used, how they connect with other components, and their overall workflow. As you process each file, you MUST continuously and live-update a detailed `architecture.md` file that maps out this structure. Use the local offline memory and workspace tools to understand the project deeply according to your plan. Note: THERE ARE NO TOKEN LIMITS for this task. Take as much time and context as you need to build a 100% complete and exhaustive architecture plan. Creating this architecture plan is strictly necessary so that the AI agent and MCP server can fully comprehend everything happening in the project.';
+    else if (action === 'explain') prompt = 'Act as an expert technical mentor. Break down this code step-by-step and explain exactly how it works. Discuss the data flow, the architectural decisions, and the purpose of each major block. Use clear analogies if the logic is complex, and outline any dependencies or side-effects the code might have.';
     else if (action === 'edit') prompt = 'I want you to edit this code. Reply ONLY with the complete modified code, do not use markdown blocks, just raw code.';
 
     handleSendPrompt(prompt);
@@ -541,6 +579,13 @@ export default function App() {
           <TestTube className="w-3 h-3 text-blue-400" />
           <span>Unit Tests</span>
         </button>
+        <button
+          onClick={() => handleQuickAction('architecture')}
+          className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border border-rose-500/30 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20 whitespace-nowrap transition"
+        >
+          <Network className="w-3 h-3 text-rose-400" />
+          <span>Architecture</span>
+        </button>
       </div>
 
       {/* Artifacts Top Bar */}
@@ -597,7 +642,13 @@ export default function App() {
             </div>
           </div>
         ) : (
-          messages.map((msg) => <ChatMessageItem key={msg.id} message={msg} />)
+          messages.map((msg) => (
+            <ChatMessageItem 
+              key={msg.id} 
+              message={msg}
+              onOpenArtifact={(name, content) => setActiveArtifactModal({ name, content })}
+            />
+          ))
         )}
         <div ref={messagesEndRef} />
       </main>

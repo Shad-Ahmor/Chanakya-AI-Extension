@@ -12,7 +12,6 @@ import { Logger } from '../utils/logger';
 export class ContextProvider {
   private static instance: ContextProvider;
   private readonly logger = Logger.getInstance();
-  private static readonly MAX_FILE_CHARS = 16000; // ~4000 tokens per file
 
   public static getInstance(): ContextProvider {
     if (!ContextProvider.instance) {
@@ -26,16 +25,9 @@ export class ContextProvider {
    */
   public async getFileContext(filePath: string): Promise<ContextItem | null> {
     try {
-      const uri = vscode.Uri.file(filePath);
-      const bytes = await vscode.workspace.fs.readFile(uri);
-      let content = Buffer.from(bytes).toString('utf-8').replace(/\r\n/g, '\n');
+      const doc = await vscode.workspace.openTextDocument(filePath);
+      let content = doc.getText().replace(/\r\n/g, '\n');
       const fileName = path.basename(filePath);
-
-      if (content.length > ContextProvider.MAX_FILE_CHARS) {
-        content =
-          content.substring(0, ContextProvider.MAX_FILE_CHARS) +
-          '\n\n/* ... [Truncated by Chanakya AI Enhancer to respect token budget] ... */';
-      }
 
       return {
         id: `file-${Date.now()}`,
@@ -60,12 +52,6 @@ export class ContextProvider {
     const doc = editor.document;
     const fileName = path.basename(doc.fileName);
     let content = doc.getText().replace(/\r\n/g, '\n');
-
-    if (content.length > ContextProvider.MAX_FILE_CHARS) {
-      content =
-        content.substring(0, ContextProvider.MAX_FILE_CHARS) +
-        '\n\n/* ... [Truncated by Chanakya AI Enhancer] ... */';
-    }
 
     return {
       id: `active-${Date.now()}`,
