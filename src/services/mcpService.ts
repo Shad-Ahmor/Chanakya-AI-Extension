@@ -92,24 +92,49 @@ export class McpService {
   }
 
   public async callTool(serverName: string, toolName: string, args: Record<string, any>): Promise<any> {
-    const client = this._clients.get(serverName);
+    let client = this._clients.get(serverName);
     if (!client) {
-      throw new Error(`MCP Server ${serverName} not connected.`);
+      // Attempt auto-reconnection if server is registered in config
+      if (this._config.mcpServers[serverName]) {
+        this._logger.log(`Attempting on-demand reconnection to MCP server: ${serverName}`);
+        await this._connectServers();
+        client = this._clients.get(serverName);
+      }
+      if (!client) {
+        throw new Error(`MCP Server "${serverName}" is not connected or failed to start.`);
+      }
     }
 
     try {
       const result = await client.request(
-        { method: "tools/call", params: { name: toolName, arguments: args } },
+        { method: "tools/call", params: { name: toolName, arguments: args || {} } },
         CallToolResultSchema
       );
       
       if (result.isError) {
-        throw new Error(result.content.map(c => c.type === 'text' ? c.text : 'Unknown Error').join('\\n'));
+        throw new Error(result.content.map(c => c.type === 'text' ? c.text : 'Unknown Error').join('\n'));
       }
       
-      return result.content.map(c => c.type === 'text' ? c.text : JSON.stringify(c)).join('\\n');
+      return result.content.map(c => c.type === 'text' ? c.text : JSON.stringify(c)).join('\n');
     } catch (e: any) {
       this._logger.error(`Failed to call tool ${toolName} on ${serverName}:`, e);
+      // Attempt single auto-reconnect retry
+      try {
+        this._clients.delete(serverName);
+        await this._connectServers();
+        const retryClient = this._clients.get(serverName);
+        if (retryClient) {
+          const retryResult = await retryClient.request(
+            { method: "tools/call", params: { name: toolName, arguments: args || {} } },
+            CallToolResultSchema
+          );
+          if (!retryResult.isError) {
+            return retryResult.content.map(c => c.type === 'text' ? c.text : JSON.stringify(c)).join('\n');
+          }
+        }
+      } catch (retryErr) {
+        this._logger.error(`Retry failed for tool ${toolName} on ${serverName}`, retryErr);
+      }
       throw e;
     }
   }

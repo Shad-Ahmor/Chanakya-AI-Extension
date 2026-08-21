@@ -210,6 +210,22 @@ export class AgentOrchestrator {
       {
         type: 'function',
         function: {
+          name: 'lsp_goto_implementation',
+          description: 'Uses VS Code LSP to find all concrete class/method implementations of an interface or abstract method across the workspace.',
+          parameters: {
+            type: 'object',
+            properties: {
+              filePath: { type: 'string', description: 'Relative or absolute path to the source file.' },
+              line: { type: 'number', description: '0-based line number where the interface symbol occurs.' },
+              character: { type: 'number', description: '0-based character column offset.' }
+            },
+            required: ['filePath', 'line', 'character']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
           name: 'lsp_find_references',
           description: 'Uses VS Code LSP to find all usages and references of a symbol across the entire workspace. Use before refactoring to prevent breaking callers.',
           parameters: {
@@ -374,6 +390,11 @@ Only one tool call per response is supported. Do not output anything else if you
         case 'lsp_goto_definition': {
           const results = await LspService.getInstance().goToDefinition(args.filePath, Number(args.line || 0), Number(args.character || 0));
           rawResult = results.length === 0 ? 'No definitions found.' : JSON.stringify(results, null, 2);
+          break;
+        }
+        case 'lsp_goto_implementation': {
+          const results = await LspService.getInstance().goToImplementation(args.filePath, Number(args.line || 0), Number(args.character || 0));
+          rawResult = results.length === 0 ? 'No implementations found.' : JSON.stringify(results, null, 2);
           break;
         }
         case 'lsp_find_references': {

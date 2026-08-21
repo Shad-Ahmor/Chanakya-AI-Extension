@@ -79,6 +79,53 @@ export class LspService {
   }
 
   /**
+   * Find interface implementations at file position (goToImplementation)
+   */
+  public async goToImplementation(filePath: string, line: number, character: number): Promise<LspLocationResult[]> {
+    try {
+      const uri = this.resolveUri(filePath);
+      const position = new vscode.Position(line, character);
+
+      const implementations = await vscode.commands.executeCommand<vscode.Location[] | vscode.LocationLink[]>(
+        'vscode.executeImplementationProvider',
+        uri,
+        position
+      );
+
+      if (!implementations || implementations.length === 0) {
+        return [];
+      }
+
+      const results: LspLocationResult[] = [];
+      for (const impl of implementations) {
+        if ('targetUri' in impl) {
+          const targetUri = impl.targetUri;
+          const range = impl.targetRange;
+          results.push({
+            filePath: vscode.workspace.asRelativePath(targetUri),
+            line: range.start.line,
+            character: range.start.character,
+            previewSnippet: await this.getSnippet(targetUri, range.start.line)
+          });
+        } else {
+          results.push({
+            filePath: vscode.workspace.asRelativePath(impl.uri),
+            line: impl.range.start.line,
+            character: impl.range.start.character,
+            previewSnippet: await this.getSnippet(impl.uri, impl.range.start.line)
+          });
+        }
+      }
+
+      this.logger.log(`[LspService] goToImplementation resolved ${results.length} targets`);
+      return results;
+    } catch (err) {
+      this.logger.error(`[LspService] goToImplementation failed on ${filePath}:${line}:${character}`, err);
+      return [];
+    }
+  }
+
+  /**
    * Find all references of symbol across workspace (findReferences)
    */
   public async findReferences(filePath: string, line: number, character: number): Promise<LspLocationResult[]> {
