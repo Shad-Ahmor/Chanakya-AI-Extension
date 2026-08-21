@@ -27,7 +27,13 @@ import {
   Flame,
   Radio,
   GitCommit,
-  Copy
+  Copy,
+  Download,
+  Eye,
+  EyeOff,
+  Network as NetworkIcon,
+  GitBranch,
+  Filter
 } from 'lucide-react';
 
 interface GraphifyViewProps {
@@ -35,6 +41,8 @@ interface GraphifyViewProps {
 }
 
 type DrawerTab = 'layers' | 'godNodes' | 'blast' | 'git' | 'bridges' | 'cycles' | 'dedup' | 'insights';
+type LayoutMode = 'force' | 'dag-ud' | 'dag-lr';
+type EdgeFilterMode = 'all' | 'api-only' | 'imports-only';
 
 export default function GraphifyView({ onBack }: GraphifyViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -50,6 +58,9 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<DrawerTab>('layers');
   const [isPhysicsEnabled, setIsPhysicsEnabled] = useState<boolean>(true);
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>('force');
+  const [edgeFilterMode, setEdgeFilterMode] = useState<EdgeFilterMode>('all');
+  const [isNeighborhoodIsolated, setIsNeighborhoodIsolated] = useState<boolean>(false);
   const [pathTargetNodeId, setPathTargetNodeId] = useState<string>('');
   const [blastResult, setBlastResult] = useState<BlastRadiusResult | null>(null);
   const [isCalculatingBlast, setIsCalculatingBlast] = useState<boolean>(false);
@@ -111,18 +122,35 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
     };
   }, []);
 
-  // Initialize and configure interactive force-directed Vis Network
+  // Initialize and configure interactive force-directed / Hierarchical DAG Vis Network
   useEffect(() => {
     if (!containerRef.current || !data || data.nodes.length === 0) return;
 
-    // Filter nodes by selected communities
-    const visibleNodes = data.nodes.filter((n) => selectedCommunities.has(n.community));
+    // Determine neighborhood isolated node IDs if active
+    let isolatedNodeIds: Set<string> | null = null;
+    if (isNeighborhoodIsolated && selectedNode) {
+      isolatedNodeIds = new Set<string>([selectedNode.id]);
+      data.edges.forEach((e) => {
+        if (e.from === selectedNode.id) isolatedNodeIds!.add(e.to);
+        if (e.to === selectedNode.id) isolatedNodeIds!.add(e.from);
+      });
+    }
+
+    // Filter nodes by selected communities and isolation
+    const visibleNodes = data.nodes.filter((n) => {
+      if (isolatedNodeIds && !isolatedNodeIds.has(n.id)) return false;
+      return selectedCommunities.has(n.community);
+    });
     const visibleNodeIds = new Set(visibleNodes.map((n) => n.id));
 
-    // Filter edges whose endpoints are both visible
-    const visibleEdges = data.edges.filter(
-      (e) => visibleNodeIds.has(e.from) && visibleNodeIds.has(e.to)
-    );
+    // Filter edges whose endpoints are both visible and match edgeFilterMode
+    const visibleEdges = data.edges.filter((e) => {
+      if (!visibleNodeIds.has(e.from) || !visibleNodeIds.has(e.to)) return false;
+      const isApi = e.type === 'api-network' || e.relation === 'api-network';
+      if (edgeFilterMode === 'api-only' && !isApi) return false;
+      if (edgeFilterMode === 'imports-only' && isApi) return false;
+      return true;
+    });
 
     // Format nodes with custom styling
     const visNodes = visibleNodes.map((node) => ({
@@ -199,7 +227,7 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
         hoverWidth: isApi ? 3.5 : 2.5,
         selectionWidth: isApi ? 3.5 : 3,
         smooth: {
-          enabled: true,
+          enabled: layoutMode === 'force',
           type: 'continuous',
           roundness: 0.18
         }
@@ -209,7 +237,25 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
     nodesDataSetRef.current = new DataSet(visNodes);
     edgesDataSetRef.current = new DataSet(visEdges);
 
+    const isHierarchical = layoutMode !== 'force';
+    const direction = layoutMode === 'dag-lr' ? 'LR' : 'UD';
+
     const options = {
+      layout: isHierarchical
+        ? {
+            hierarchical: {
+              enabled: true,
+              direction,
+              sortMethod: 'directed',
+              nodeSpacing: 140,
+              levelSeparation: 180,
+              blockShifting: true,
+              edgeMinimization: true
+            }
+          }
+        : {
+            hierarchical: { enabled: false }
+          },
       nodes: {
         scaling: {
           min: 9,
@@ -218,13 +264,13 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
       },
       edges: {
         smooth: {
-          enabled: true,
+          enabled: !isHierarchical,
           type: 'continuous',
           roundness: 0.18
         }
       },
       physics: {
-        enabled: isPhysicsEnabled,
+        enabled: isPhysicsEnabled && !isHierarchical,
         solver: 'forceAtlas2Based',
         forceAtlas2Based: {
           gravitationalConstant: -45,
@@ -321,7 +367,7 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
       network.destroy();
       networkRef.current = null;
     };
-  }, [data, selectedCommunities, isPhysicsEnabled]);
+  }, [data, selectedCommunities, isPhysicsEnabled, layoutMode, edgeFilterMode, isNeighborhoodIsolated]);
 
   // Search filter matches
   const searchResults = useMemo(() => {
@@ -390,6 +436,19 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
       type: 'calculateBlastRadius',
       payload: { nodeId }
     });
+  };
+
+  // High-Res PNG Canvas Download
+  const handleExportPng = () => {
+    if (!containerRef.current) return;
+    const canvas = containerRef.current.querySelector('canvas');
+    if (!canvas) return;
+
+    const dataUrl = canvas.toDataURL('image/png');
+    const link = document.createElement('a');
+    link.download = 'chanakya-architecture-graph.png';
+    link.href = dataUrl;
+    link.click();
   };
 
   const handleSelectSearchResult = (node: GraphNode) => {
@@ -516,6 +575,70 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
 
         {/* Right Toolbar Actions */}
         <div className="flex items-center gap-1.5">
+          {/* Layout Mode Switcher */}
+          <div className="flex items-center bg-black/40 border border-white/10 rounded-lg p-0.5 text-xs">
+            <button
+              onClick={() => setLayoutMode('force')}
+              className={`px-2 py-1 rounded transition flex items-center gap-1 text-[11px] ${
+                layoutMode === 'force' ? 'bg-cyan-500 text-black font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+              title="Organic Force-Directed Physics Layout"
+            >
+              <NetworkIcon className="w-3 h-3" />
+              <span className="hidden md:inline">Orbit</span>
+            </button>
+            <button
+              onClick={() => setLayoutMode('dag-ud')}
+              className={`px-2 py-1 rounded transition flex items-center gap-1 text-[11px] ${
+                layoutMode === 'dag-ud' ? 'bg-cyan-500 text-black font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+              title="Hierarchical Architecture Tree (Top ➔ Bottom)"
+            >
+              <GitBranch className="w-3 h-3" />
+              <span className="hidden md:inline">Tree</span>
+            </button>
+            <button
+              onClick={() => setLayoutMode('dag-lr')}
+              className={`px-2 py-1 rounded transition flex items-center gap-1 text-[11px] ${
+                layoutMode === 'dag-lr' ? 'bg-cyan-500 text-black font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+              title="Horizontal Architecture DAG (Left ➔ Right)"
+            >
+              <span className="hidden md:inline">DAG (L➔R)</span>
+            </button>
+          </div>
+
+          {/* Edge Filter Mode Switcher */}
+          <button
+            onClick={() => {
+              setEdgeFilterMode((prev) =>
+                prev === 'all' ? 'api-only' : prev === 'api-only' ? 'imports-only' : 'all'
+              );
+            }}
+            className={`p-1.5 rounded transition flex items-center gap-1 text-xs border ${
+              edgeFilterMode === 'api-only'
+                ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 font-semibold'
+                : edgeFilterMode === 'imports-only'
+                ? 'bg-blue-500/20 text-blue-300 border-blue-500/40 font-semibold'
+                : 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10'
+            }`}
+            title={`Edge Filter: ${edgeFilterMode.toUpperCase()} (Click to toggle: All / API Only / Imports Only)`}
+          >
+            <Filter className="w-3.5 h-3.5" />
+            <span className="text-[10px] hidden xl:inline">
+              {edgeFilterMode === 'all' ? 'All Links' : edgeFilterMode === 'api-only' ? 'APIs Only' : 'Imports Only'}
+            </span>
+          </button>
+
+          {/* Export PNG Screenshot */}
+          <button
+            onClick={handleExportPng}
+            className="p-1.5 rounded hover:bg-white/10 text-slate-300 hover:text-white transition"
+            title="Download Architecture Canvas as High-Res PNG Image"
+          >
+            <Download className="w-3.5 h-3.5" />
+          </button>
+
           {/* Zoom Buttons */}
           <button
             onClick={() => handleZoom('in')}
@@ -798,6 +921,20 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
                     <span>Explain Node</span>
                   </button>
                 </div>
+
+                {/* Subsystem Neighborhood Isolation Toggle */}
+                <button
+                  onClick={() => setIsNeighborhoodIsolated((prev) => !prev)}
+                  className={`w-full flex items-center justify-center gap-1 py-1 px-2 rounded text-[11px] font-medium transition border ${
+                    isNeighborhoodIsolated
+                      ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                      : 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10'
+                  }`}
+                  title="Isolate 1-Hop Neighborhood and hide unrelated nodes"
+                >
+                  {isNeighborhoodIsolated ? <EyeOff className="w-3 h-3 text-cyan-400" /> : <Eye className="w-3 h-3 text-slate-400" />}
+                  <span>{isNeighborhoodIsolated ? 'Clear Subsystem Isolation' : 'Isolate Subsystem Neighborhood'}</span>
+                </button>
 
                 {/* Path Trace Input */}
                 <div className="mt-1 pt-1.5 border-t border-white/10 flex items-center gap-1.5">
