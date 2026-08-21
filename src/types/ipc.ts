@@ -119,6 +119,7 @@ export type FromWebviewMessage =
   | { type: 'getGraphifyData'; payload?: { refresh?: boolean } }
   | { type: 'openFileInEditor'; payload: { filePath: string } }
   | { type: 'openFile'; payload: { filePath: string } }
+  | { type: 'calculateBlastRadius'; payload: { nodeId: string } }
   | { type: 'answerUserPrompt'; payload: { id: string; answer: string } }
   | { type: 'setTaskStatus'; payload: { taskId: string; status: 'pending' | 'in_progress' | 'completed' | 'failed' } }
   | { type: 'exportArchitectureMd' };
@@ -151,6 +152,7 @@ export type ToWebviewMessage =
   | { type: 'artifactUpdated'; payload: { name: string; content: string } }
   | { type: 'fileChanged'; payload: { path: string; changeType: 'create' | 'modify' | 'delete' } }
   | { type: 'graphifyDataResult'; payload: { data: GraphifyData } }
+  | { type: 'blastRadiusResult'; payload: { result: any } }
   | { type: 'openGraphifyView' }
   | { type: 'streamThoughtChunk'; payload: { messageId: string; chunk: string } }
   | { type: 'thoughtComplete'; payload: { messageId: string; thought: string; durationMs: number } }

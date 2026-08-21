@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import { Network } from 'vis-network';
 import { DataSet } from 'vis-data';
 import { vscode } from '../../vscode';
-import { GraphifyData, GraphNode } from '../../types/graphify';
+import { GraphifyData, GraphNode, BlastRadiusResult } from '../../types/graphify';
 import {
   Search,
   RefreshCw,
@@ -23,14 +23,16 @@ import {
   AlertTriangle,
   HelpCircle,
   Send,
-  Navigation
+  Navigation,
+  Flame,
+  Radio
 } from 'lucide-react';
 
 interface GraphifyViewProps {
   onBack?: () => void;
 }
 
-type DrawerTab = 'layers' | 'godNodes' | 'bridges' | 'cycles' | 'insights';
+type DrawerTab = 'layers' | 'godNodes' | 'bridges' | 'cycles' | 'blast' | 'insights';
 
 export default function GraphifyView({ onBack }: GraphifyViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -47,6 +49,8 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
   const [activeTab, setActiveTab] = useState<DrawerTab>('layers');
   const [isPhysicsEnabled, setIsPhysicsEnabled] = useState<boolean>(true);
   const [pathTargetNodeId, setPathTargetNodeId] = useState<string>('');
+  const [blastResult, setBlastResult] = useState<BlastRadiusResult | null>(null);
+  const [isCalculatingBlast, setIsCalculatingBlast] = useState<boolean>(false);
 
   // Request initial graph data from extension backend
   useEffect(() => {
@@ -67,6 +71,34 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
           setSelectedCommunities(new Set(graphData.communities.map((c) => c.id)));
         }
         setLoading(false);
+      } else if (msg.type === 'blastRadiusResult') {
+        const res: BlastRadiusResult = msg.payload.result;
+        setBlastResult(res);
+        setIsCalculatingBlast(false);
+        setActiveTab('blast');
+
+        if (networkRef.current && nodesDataSetRef.current && res) {
+          const affectedIdSet = new Set(res.affectedNodes.map((a) => a.id));
+          affectedIdSet.add(res.targetNodeId);
+
+          const allNodes = nodesDataSetRef.current.get();
+          const updates = allNodes.map((n: any) => ({
+            id: n.id,
+            opacity: affectedIdSet.has(n.id) ? 1.0 : 0.15,
+            color:
+              n.id === res.targetNodeId
+                ? { background: '#ef4444', border: '#dc2626' }
+                : affectedIdSet.has(n.id)
+                ? { background: '#f87171', border: '#ef4444' }
+                : undefined
+          }));
+          nodesDataSetRef.current.update(updates);
+
+          networkRef.current.fit({
+            nodes: Array.from(affectedIdSet),
+            animation: { duration: 700, easingFunction: 'easeInOutQuad' }
+          });
+        }
       }
     };
 
@@ -341,12 +373,21 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
         path.unshift(curr);
         curr = prev.get(curr);
       }
+
       // Fit network to path
       networkRef.current.fit({
         nodes: path,
         animation: { duration: 700, easingFunction: 'easeInOutQuad' }
       });
     }
+  };
+
+  const handleCalculateBlastRadius = (nodeId: string) => {
+    setIsCalculatingBlast(true);
+    vscode.postMessage({
+      type: 'calculateBlastRadius',
+      payload: { nodeId }
+    });
   };
 
   const handleSelectSearchResult = (node: GraphNode) => {
@@ -540,7 +581,7 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
             title="Toggle Inspector & Analytics Drawer"
           >
             <Layers className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Insights</span>
+            <span className="hidden sm:inline">Hub</span>
           </button>
         </div>
       </div>
@@ -624,7 +665,7 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
             <div className="flex items-center border-b border-white/10 bg-[#10101c] px-1 py-1 gap-1 text-[11px] overflow-x-auto">
               <button
                 onClick={() => setActiveTab('layers')}
-                className={`px-2.5 py-1 rounded font-medium transition flex items-center gap-1 ${
+                className={`px-2 py-1 rounded font-medium transition flex items-center gap-1 shrink-0 ${
                   activeTab === 'layers' ? 'bg-cyan-500 text-black font-semibold' : 'text-slate-400 hover:text-white'
                 }`}
               >
@@ -632,15 +673,23 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
               </button>
               <button
                 onClick={() => setActiveTab('godNodes')}
-                className={`px-2.5 py-1 rounded font-medium transition flex items-center gap-1 ${
+                className={`px-2 py-1 rounded font-medium transition flex items-center gap-1 shrink-0 ${
                   activeTab === 'godNodes' ? 'bg-cyan-500 text-black font-semibold' : 'text-slate-400 hover:text-white'
                 }`}
               >
                 <Crown className="w-3 h-3 text-amber-400" /> Hubs
               </button>
               <button
+                onClick={() => setActiveTab('blast')}
+                className={`px-2 py-1 rounded font-medium transition flex items-center gap-1 shrink-0 ${
+                  activeTab === 'blast' ? 'bg-rose-500 text-white font-semibold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Flame className="w-3 h-3 text-rose-400" /> Blast
+              </button>
+              <button
                 onClick={() => setActiveTab('bridges')}
-                className={`px-2.5 py-1 rounded font-medium transition flex items-center gap-1 ${
+                className={`px-2 py-1 rounded font-medium transition flex items-center gap-1 shrink-0 ${
                   activeTab === 'bridges' ? 'bg-cyan-500 text-black font-semibold' : 'text-slate-400 hover:text-white'
                 }`}
               >
@@ -648,7 +697,7 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
               </button>
               <button
                 onClick={() => setActiveTab('cycles')}
-                className={`px-2.5 py-1 rounded font-medium transition flex items-center gap-1 ${
+                className={`px-2 py-1 rounded font-medium transition flex items-center gap-1 shrink-0 ${
                   activeTab === 'cycles' ? 'bg-cyan-500 text-black font-semibold' : 'text-slate-400 hover:text-white'
                 }`}
               >
@@ -656,7 +705,7 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
               </button>
               <button
                 onClick={() => setActiveTab('insights')}
-                className={`px-2.5 py-1 rounded font-medium transition flex items-center gap-1 ${
+                className={`px-2 py-1 rounded font-medium transition flex items-center gap-1 shrink-0 ${
                   activeTab === 'insights' ? 'bg-cyan-500 text-black font-semibold' : 'text-slate-400 hover:text-white'
                 }`}
               >
@@ -700,6 +749,16 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
                   <span>·</span>
                   <span>Module: <b className="text-slate-200">{selectedNode.community_name}</b></span>
                 </div>
+
+                {/* Blast Radius Trigger Button */}
+                <button
+                  onClick={() => handleCalculateBlastRadius(selectedNode.id)}
+                  disabled={isCalculatingBlast}
+                  className="w-full mt-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-semibold transition shadow-md shadow-rose-500/10"
+                >
+                  <Flame className="w-3.5 h-3.5 text-rose-400" />
+                  <span>{isCalculatingBlast ? 'Calculating Blast...' : 'Calculate Blast Radius (Impact)'}</span>
+                </button>
 
                 {/* Path Trace Input */}
                 <div className="mt-1 pt-1.5 border-t border-white/10 flex items-center gap-1.5">
@@ -820,7 +879,67 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
               </div>
             )}
 
-            {/* Tab 3: Surprising Cross-Domain Bridges */}
+            {/* Tab 3: Blast Radius / Impact Analysis */}
+            {activeTab === 'blast' && (
+              <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                {blastResult ? (
+                  <div className="flex flex-col gap-2">
+                    <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 flex flex-col gap-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-rose-300 flex items-center gap-1.5">
+                          <Flame className="w-3.5 h-3.5" /> Target: {blastResult.targetLabel}
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-rose-500/30 text-rose-200 font-bold">
+                          {blastResult.totalAffected} Broken Files
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-mono truncate">{blastResult.targetFile}</span>
+                    </div>
+
+                    <div className="text-[11px] font-bold text-slate-300 uppercase tracking-wider px-1">
+                      Upstream Broken Dependents:
+                    </div>
+
+                    {blastResult.affectedNodes.length > 0 ? (
+                      blastResult.affectedNodes.map((aff, idx) => (
+                        <div
+                          key={idx}
+                          onClick={() => {
+                            const found = data?.nodes.find((n) => n.id === aff.id);
+                            if (found) handleSelectSearchResult(found);
+                          }}
+                          className="p-2.5 rounded-lg bg-black/40 hover:bg-rose-500/20 border border-white/5 cursor-pointer transition flex flex-col gap-1"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                              <Radio className={`w-3 h-3 ${aff.isDirect ? 'text-red-400' : 'text-amber-400'}`} />
+                              {aff.label}
+                            </span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                              aff.isDirect ? 'bg-red-500/20 text-red-300' : 'bg-amber-500/20 text-amber-300'
+                            }`}>
+                              Depth {aff.depth} ({aff.via_relation})
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-mono truncate">{aff.source_file}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-4 text-center text-xs text-slate-400">
+                        Zero upstream dependents! This node can be refactored safely.
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-4 text-center text-xs text-slate-400 flex flex-col items-center justify-center gap-2">
+                    <Flame className="w-8 h-8 text-rose-500/40" />
+                    <span>Select any file/component and click <b>"Calculate Blast Radius"</b> to inspect all upstream code affected by changes.</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Tab 4: Surprising Cross-Domain Bridges */}
             {activeTab === 'bridges' && (
               <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
                 <div className="text-[11px] text-slate-400 px-1 py-1">
@@ -842,7 +961,7 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
               </div>
             )}
 
-            {/* Tab 4: Circular Dependencies */}
+            {/* Tab 5: Circular Dependencies */}
             {activeTab === 'cycles' && (
               <div className="flex-1 overflow-y-auto p-2 space-y-2">
                 <div className="text-[11px] text-slate-400 px-1 py-1">
@@ -870,7 +989,7 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
               </div>
             )}
 
-            {/* Tab 5: Architectural Questions & AI Insights */}
+            {/* Tab 6: Architectural Questions & AI Insights */}
             {activeTab === 'insights' && (
               <div className="flex-1 overflow-y-auto p-2 space-y-2">
                 <div className="text-[11px] text-slate-400 px-1 py-1">

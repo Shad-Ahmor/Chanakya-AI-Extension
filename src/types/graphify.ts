@@ -78,11 +78,39 @@ export interface SuggestedQuestion {
   category: 'architecture' | 'coupling' | 'flow' | 'security';
 }
 
+export interface AffectedNode {
+  id: string;
+  label: string;
+  source_file: string;
+  depth: number;
+  via_relation: string;
+  isDirect: boolean;
+}
+
+export interface BlastRadiusResult {
+  targetNodeId: string;
+  targetLabel: string;
+  targetFile: string;
+  affectedNodes: AffectedNode[];
+  totalAffected: number;
+  maxDepth: number;
+}
+
+export interface WorkMemoryLesson {
+  id: string;
+  topic: string;
+  status: 'preferred' | 'tentative' | 'dead_end';
+  score: number;
+  sources: string[];
+  lesson: string;
+}
+
 export interface GraphifyAnalytics {
   godNodes: GodNode[];
   surprisingConnections: SurprisingConnection[];
   importCycles: ImportCycle[];
   suggestedQuestions: SuggestedQuestion[];
+  lessons?: WorkMemoryLesson[] | undefined;
 }
 
 export interface GraphifyData {

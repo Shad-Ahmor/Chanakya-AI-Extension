@@ -1026,6 +1026,22 @@ ${diff}`;
         break;
       }
 
+      case 'calculateBlastRadius': {
+        try {
+          const nodeId = message.payload?.nodeId;
+          if (nodeId) {
+            const result = await GraphifyService.getInstance().calculateBlastRadius(nodeId);
+            this.postMessage({
+              type: 'blastRadiusResult',
+              payload: { result }
+            });
+          }
+        } catch (err: any) {
+          this._logger.error('Failed to calculate blast radius', err);
+        }
+        break;
+      }
+
       case 'exportArchitectureMd': {
         try {
           const relativePath = await GraphifyService.getInstance().exportArchitectureToFile();

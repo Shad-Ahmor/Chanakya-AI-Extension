@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { GraphNode, GraphEdge, GraphifyData } from '../types/graphify';
+import { GraphNode, GraphEdge, GraphifyData, BlastRadiusResult, AffectedNode } from '../types/graphify';
 import { Logger } from '../utils/logger';
 
 const COMMUNITY_PALETTE = [
@@ -1272,5 +1272,65 @@ ${data.analytics?.suggestedQuestions && data.analytics.suggestedQuestions.length
     await vscode.window.showTextDocument(doc);
 
     return vscode.workspace.asRelativePath(archUri);
+  }
+
+  /**
+   * Blast-Radius & Impact Analysis: computes all upstream files and components affected if targetNode is modified.
+   */
+  public async calculateBlastRadius(targetNodeId: string, maxDepth = 3): Promise<BlastRadiusResult | null> {
+    const data = await this.generateGraphData(false);
+    const targetNode = data.nodes.find((n) => n.id === targetNodeId);
+    if (!targetNode) return null;
+
+    // Upstream adjacency: to -> list of { from, relation }
+    const upstreamAdj = new Map<string, { from: string; relation: string }[]>();
+    for (const edge of data.edges) {
+      if (!upstreamAdj.has(edge.to)) upstreamAdj.set(edge.to, []);
+      upstreamAdj.get(edge.to)!.push({ from: edge.from, relation: edge.relation || 'imports' });
+    }
+
+    const affectedNodes: AffectedNode[] = [];
+    const visited = new Set<string>([targetNodeId]);
+    const queue: { id: string; depth: number; via_relation: string }[] = [];
+
+    for (const up of upstreamAdj.get(targetNodeId) || []) {
+      if (!visited.has(up.from)) {
+        visited.add(up.from);
+        queue.push({ id: up.from, depth: 1, via_relation: up.relation });
+      }
+    }
+
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      const node = data.nodes.find((n) => n.id === current.id);
+      if (node) {
+        affectedNodes.push({
+          id: node.id,
+          label: node.label,
+          source_file: node.source_file,
+          depth: current.depth,
+          via_relation: current.via_relation,
+          isDirect: current.depth === 1
+        });
+      }
+
+      if (current.depth < maxDepth) {
+        for (const up of upstreamAdj.get(current.id) || []) {
+          if (!visited.has(up.from)) {
+            visited.add(up.from);
+            queue.push({ id: up.from, depth: current.depth + 1, via_relation: up.relation });
+          }
+        }
+      }
+    }
+
+    return {
+      targetNodeId: targetNode.id,
+      targetLabel: targetNode.label,
+      targetFile: targetNode.source_file,
+      affectedNodes,
+      totalAffected: affectedNodes.length,
+      maxDepth
+    };
   }
 }
