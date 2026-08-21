@@ -1049,9 +1049,11 @@ ${diff}`;
         break;
       }
 
-      case 'openFileInEditor': {
+      case 'openFileInEditor':
+      case 'openFile': {
         try {
           const filePath = message.payload.filePath;
+          if (!filePath) break;
           const wsFolders = vscode.workspace.workspaceFolders;
           const fullPath = path.isAbsolute(filePath)
             ? filePath

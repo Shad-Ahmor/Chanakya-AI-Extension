@@ -118,6 +118,7 @@ export type FromWebviewMessage =
   | { type: 'openSourceControl' }
   | { type: 'getGraphifyData'; payload?: { refresh?: boolean } }
   | { type: 'openFileInEditor'; payload: { filePath: string } }
+  | { type: 'openFile'; payload: { filePath: string } }
   | { type: 'answerUserPrompt'; payload: { id: string; answer: string } }
   | { type: 'setTaskStatus'; payload: { taskId: string; status: 'pending' | 'in_progress' | 'completed' | 'failed' } }
   | { type: 'exportArchitectureMd' };

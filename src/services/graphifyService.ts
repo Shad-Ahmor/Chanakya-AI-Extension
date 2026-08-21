@@ -4,25 +4,47 @@ import { GraphNode, GraphEdge, GraphifyData } from '../types/graphify';
 import { Logger } from '../utils/logger';
 
 const COMMUNITY_PALETTE = [
-  '#4E79A7', // Blue
-  '#F28E2B', // Orange
-  '#E15759', // Red
-  '#76B7B2', // Teal
-  '#59A14F', // Green
-  '#EDC948', // Yellow
-  '#B07AA1', // Purple
-  '#FF9DA7', // Pink
-  '#9C755F', // Brown
-  '#BAB0AC', // Gray
-  '#5499C7', // Sky Blue
-  '#48C9B0', // Mint
-  '#F5B041', // Amber
-  '#EB984E', // Coral
-  '#AF7AC5', // Lavender
-  '#5DADE2', // Cyan
-  '#45B39D', // Emerald
-  '#F4D03F'  // Gold
+  '#38BDF8', // Sky Blue
+  '#818CF8', // Indigo
+  '#F472B6', // Pink
+  '#34D399', // Emerald
+  '#FBBF24', // Amber
+  '#A78BFA', // Purple
+  '#2DD4BF', // Teal
+  '#FB923C', // Orange
+  '#4ADE80', // Green
+  '#F87171', // Red
+  '#C084FC', // Violet
+  '#22D3EE'  // Cyan
 ];
+
+const EXT_COLOR_MAP: Record<string, string> = {
+  '.tsx': '#06b6d4', // Cyan
+  '.jsx': '#38bdf8', // React Sky
+  '.ts': '#3b82f6',  // TS Blue
+  '.js': '#f59e0b',  // JS Amber
+  '.mjs': '#f59e0b',
+  '.cjs': '#f59e0b',
+  '.py': '#84cc16',  // Python Lime
+  '.css': '#ec4899', // Pink
+  '.scss': '#f43f5e',// Rose
+  '.sass': '#f43f5e',
+  '.less': '#ec4899',
+  '.html': '#f97316',// HTML Orange
+  '.htm': '#f97316',
+  '.json': '#10b981',// Config Emerald
+  '.yaml': '#10b981',
+  '.yml': '#10b981',
+  '.toml': '#10b981',
+  '.md': '#a855f7',  // Markdown Purple
+  '.markdown': '#a855f7',
+  '.rs': '#ef4444',  // Rust Red
+  '.go': '#06b6d4',  // Go Cyan
+  '.java': '#ea580c',// Java Orange
+  '.cpp': '#6366f1', // C++
+  '.c': '#6366f1',
+  '.h': '#6366f1'
+};
 
 export class GraphifyService {
   private static instance: GraphifyService;
@@ -65,11 +87,12 @@ export class GraphifyService {
 
     this.logger.log(`[GraphifyService] Scanning workspace for graph: ${rootPath}`);
 
-    const excludePattern = '{**/node_modules/**,**/dist/**,**/.git/**,**/.vscode/**,**/build/**,**/out/**,**/.next/**,**/venv/**,**/__pycache__/**}';
-    const uris = await vscode.workspace.findFiles('**/*', excludePattern, 1000);
+    const excludePattern = '{**/node_modules/**,**/dist/**,**/.git/**,**/.vscode/**,**/build/**,**/out/**,**/.next/**,**/venv/**,**/__pycache__/**,**/.chanakya/**}';
+    const uris = await vscode.workspace.findFiles('**/*', excludePattern, 1200);
 
     const nodesMap = new Map<string, GraphNode>();
     const edges: GraphEdge[] = [];
+    const edgeKeySet = new Set<string>();
     const communityMap = new Map<string, { id: number; name: string; color: string; count: number }>();
     let nextCommunityId = 1;
 
@@ -89,7 +112,22 @@ export class GraphifyService {
       return comm;
     };
 
-    // File path -> node id map
+    const addEdge = (from: string, to: string, relation: string, arrows = 'to') => {
+      if (!from || !to || from === to) return;
+      const key = `${from}->${to}:${relation}`;
+      if (!edgeKeySet.has(key)) {
+        edgeKeySet.add(key);
+        edges.push({
+          id: `edge_${edges.length + 1}`,
+          from,
+          to,
+          arrows,
+          relation
+        });
+      }
+    };
+
+    // File path -> node id map (multiple lookup keys for resilient matching)
     const fileToNodeId = new Map<string, string>();
     const symbolToNodeId = new Map<string, string>();
 
@@ -105,8 +143,12 @@ export class GraphifyService {
       const community = getCommunity(topDir);
 
       const nodeId = `file_${relPath.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+
+      // Map multiple path keys for resilient resolving
       fileToNodeId.set(relPath, nodeId);
+      fileToNodeId.set(relPath.toLowerCase(), nodeId);
       fileToNodeId.set(relPath.replace(/\.[^/.]+$/, ''), nodeId); // without ext
+      fileToNodeId.set(relPath.replace(/\.[^/.]+$/, '').toLowerCase(), nodeId);
 
       let fileType: GraphNode['file_type'] = 'file';
       if (['.ts', '.tsx', '.js', '.jsx', '.py', '.rs', '.go', '.java', '.cpp', '.c'].includes(ext)) {
@@ -117,176 +159,117 @@ export class GraphifyService {
         fileType = 'config';
       }
 
+      const nodeColor = EXT_COLOR_MAP[ext] || community.color;
+
       nodesMap.set(nodeId, {
         id: nodeId,
         label: fileName,
         title: `${relPath} (${fileType})`,
         color: {
-          background: community.color,
+          background: nodeColor,
           border: community.color,
-          highlight: { background: '#ffffff', border: community.color }
+          highlight: { background: '#ffffff', border: nodeColor }
         },
         size: 11,
         community: community.id,
         community_name: community.name,
         source_file: relPath,
         file_type: fileType,
-        degree: 0
+        degree: 0,
+        symbols: []
       });
     }
 
-    // Pass 2: Parse File Contents for Symbols & Imports
+    // Helper: resolve relative or aliased import path to target node ID
+    const resolveTargetNode = (sourceRelPath: string, importSpec: string): string | undefined => {
+      const cleaned = importSpec.trim().replace(/^['"]|['"]$/g, '');
+      if (!cleaned) return undefined;
+
+      const sourceDir = path.dirname(sourceRelPath);
+      const candidatePaths: string[] = [];
+
+      if (cleaned.startsWith('.')) {
+        // Relative import
+        const direct = path.normalize(path.join(sourceDir, cleaned)).replace(/\\/g, '/');
+        candidatePaths.push(direct);
+        candidatePaths.push(`${direct}.ts`);
+        candidatePaths.push(`${direct}.tsx`);
+        candidatePaths.push(`${direct}.js`);
+        candidatePaths.push(`${direct}.jsx`);
+        candidatePaths.push(`${direct}.d.ts`);
+        candidatePaths.push(`${direct}.css`);
+        candidatePaths.push(`${direct}.scss`);
+        candidatePaths.push(`${direct}.html`);
+        candidatePaths.push(`${direct}.json`);
+        candidatePaths.push(`${direct}.py`);
+        candidatePaths.push(`${direct}/index.ts`);
+        candidatePaths.push(`${direct}/index.tsx`);
+        candidatePaths.push(`${direct}/index.js`);
+        candidatePaths.push(`${direct}/index.jsx`);
+        candidatePaths.push(`${direct}/index.html`);
+        candidatePaths.push(`${direct}/index.css`);
+      } else if (cleaned.startsWith('@/') || cleaned.startsWith('~/')) {
+        // Alias import (e.g. @/components/...)
+        const noAlias = cleaned.replace(/^[@~]\//, '');
+        const direct = path.normalize(noAlias).replace(/\\/g, '/');
+        const inSrc = path.normalize(path.join('src', noAlias)).replace(/\\/g, '/');
+        const inWebview = path.normalize(path.join('webview-ui/src', noAlias)).replace(/\\/g, '/');
+
+        for (const base of [direct, inSrc, inWebview]) {
+          candidatePaths.push(base);
+          candidatePaths.push(`${base}.ts`);
+          candidatePaths.push(`${base}.tsx`);
+          candidatePaths.push(`${base}.js`);
+          candidatePaths.push(`${base}.jsx`);
+          candidatePaths.push(`${base}/index.ts`);
+          candidatePaths.push(`${base}/index.tsx`);
+          candidatePaths.push(`${base}/index.js`);
+        }
+      } else {
+        // Non-relative import check in src/ or webview-ui/src/
+        const inSrc = path.normalize(path.join('src', cleaned)).replace(/\\/g, '/');
+        const inWebview = path.normalize(path.join('webview-ui/src', cleaned)).replace(/\\/g, '/');
+        candidatePaths.push(cleaned);
+        candidatePaths.push(inSrc);
+        candidatePaths.push(`${inSrc}.ts`);
+        candidatePaths.push(`${inSrc}.tsx`);
+        candidatePaths.push(inWebview);
+        candidatePaths.push(`${inWebview}.tsx`);
+        candidatePaths.push(`${inWebview}.ts`);
+      }
+
+      for (const p of candidatePaths) {
+        const found = fileToNodeId.get(p) || fileToNodeId.get(p.toLowerCase());
+        if (found) return found;
+      }
+
+      return undefined;
+    };
+
+    // Pass 2: Deep parse contents for AST symbols and dependencies
     for (const uri of uris) {
       const relPath = vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
       const fileNodeId = fileToNodeId.get(relPath);
       if (!fileNodeId) continue;
 
+      const fileNode = nodesMap.get(fileNodeId);
       const ext = path.extname(relPath).toLowerCase();
-      if (!['.ts', '.tsx', '.js', '.jsx', '.py'].includes(ext)) continue;
+      const dir = path.dirname(relPath);
+      const topDir = dir === '.' ? 'Root' : (dir.split('/')[0] || dir);
+      const community = getCommunity(topDir);
 
       try {
         const fileBytes = await vscode.workspace.fs.readFile(uri);
         const content = Buffer.from(fileBytes).toString('utf-8');
-        const dir = path.dirname(relPath);
-        const topDir = dir === '.' ? 'Root' : (dir.split('/')[0] || dir);
-        const community = getCommunity(topDir);
 
-        // 2a. Symbol Extraction (Classes, Functions, Interfaces)
-        if (ext === '.ts' || ext === '.tsx' || ext === '.js' || ext === '.jsx') {
-          // Extract class
-          const classRegex = /(?:export\s+)?class\s+([A-Za-z0-9_]+)/g;
+        // 2a. JS / TS / JSX / TSX Parsing
+        if (['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'].includes(ext)) {
+          // 1. Classes
+          const classRegex = /(?:export\s+)?(?:default\s+)?class\s+([A-Za-z0-9_]+)/g;
           let match;
           while ((match = classRegex.exec(content)) !== null) {
             const symName = match[1];
-            const symNodeId = `sym_${fileNodeId}_${symName}`;
-            symbolToNodeId.set(symName, symNodeId);
-
-            if (!nodesMap.has(symNodeId)) {
-              nodesMap.set(symNodeId, {
-                id: symNodeId,
-                label: `${symName}`,
-                title: `Class ${symName} in ${relPath}`,
-                color: {
-                  background: community.color,
-                  border: community.color,
-                  highlight: { background: '#ffffff', border: community.color }
-                },
-                size: 13,
-                community: community.id,
-                community_name: community.name,
-                source_file: relPath,
-                file_type: 'class',
-                degree: 0
-              });
-              edges.push({
-                id: `edge_${fileNodeId}_${symNodeId}`,
-                from: fileNodeId,
-                to: symNodeId,
-                relation: 'declares'
-              });
-            }
-          }
-
-          // Extract interface
-          const ifaceRegex = /(?:export\s+)?interface\s+([A-Za-z0-9_]+)/g;
-          while ((match = ifaceRegex.exec(content)) !== null) {
-            const symName = match[1];
-            const symNodeId = `sym_${fileNodeId}_${symName}`;
-            symbolToNodeId.set(symName, symNodeId);
-
-            if (!nodesMap.has(symNodeId)) {
-              nodesMap.set(symNodeId, {
-                id: symNodeId,
-                label: `${symName}`,
-                title: `Interface ${symName} in ${relPath}`,
-                color: {
-                  background: community.color,
-                  border: community.color,
-                  highlight: { background: '#ffffff', border: community.color }
-                },
-                size: 11,
-                community: community.id,
-                community_name: community.name,
-                source_file: relPath,
-                file_type: 'interface',
-                degree: 0
-              });
-              edges.push({
-                id: `edge_${fileNodeId}_${symNodeId}`,
-                from: fileNodeId,
-                to: symNodeId,
-                relation: 'declares'
-              });
-            }
-          }
-
-          // Extract top functions
-          const fnRegex = /(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_]+)/g;
-          while ((match = fnRegex.exec(content)) !== null) {
-            const symName = match[1];
-            const symNodeId = `sym_${fileNodeId}_${symName}`;
-            symbolToNodeId.set(symName, symNodeId);
-
-            if (!nodesMap.has(symNodeId)) {
-              nodesMap.set(symNodeId, {
-                id: symNodeId,
-                label: `${symName}()`,
-                title: `Function ${symName}() in ${relPath}`,
-                color: {
-                  background: community.color,
-                  border: community.color,
-                  highlight: { background: '#ffffff', border: community.color }
-                },
-                size: 10,
-                community: community.id,
-                community_name: community.name,
-                source_file: relPath,
-                file_type: 'function',
-                degree: 0
-              });
-              edges.push({
-                id: `edge_${fileNodeId}_${symNodeId}`,
-                from: fileNodeId,
-                to: symNodeId,
-                relation: 'declares'
-              });
-            }
-          }
-
-          // 2b. Import Dependencies Extraction (TS/JS)
-          const importRegex = /import\s+(?:\{([^}]+)\}|([A-Za-z0-9_*$]+))?\s*(?:from\s+)?['"]([^'"]+)['"]/g;
-          while ((match = importRegex.exec(content)) !== null) {
-            const importPath = match[3];
-            if (importPath.startsWith('.')) {
-              // Resolve relative import
-              const resolvedRel = path.normalize(path.join(dir, importPath)).replace(/\\/g, '/');
-              const targetNodeId = fileToNodeId.get(resolvedRel) ||
-                fileToNodeId.get(`${resolvedRel}.ts`) ||
-                fileToNodeId.get(`${resolvedRel}.tsx`) ||
-                fileToNodeId.get(`${resolvedRel}.js`) ||
-                fileToNodeId.get(`${resolvedRel}/index.ts`) ||
-                fileToNodeId.get(`${resolvedRel}/index.tsx`);
-
-              if (targetNodeId && targetNodeId !== fileNodeId) {
-                const edgeId = `edge_imp_${fileNodeId}_${targetNodeId}`;
-                if (!edges.some(e => e.id === edgeId)) {
-                  edges.push({
-                    id: edgeId,
-                    from: fileNodeId,
-                    to: targetNodeId,
-                    arrows: 'to',
-                    relation: 'imports'
-                  });
-                }
-              }
-            }
-          }
-        } else if (ext === '.py') {
-          // Python AST extraction (class, def, router)
-          const pyClassRegex = /^class\s+([A-Za-z0-9_]+)/gm;
-          let match;
-          while ((match = pyClassRegex.exec(content)) !== null) {
-            const symName = match[1];
+            if (fileNode && fileNode.symbols) fileNode.symbols.push(symName);
             const symNodeId = `sym_${fileNodeId}_${symName}`;
             symbolToNodeId.set(symName, symNodeId);
 
@@ -296,23 +279,159 @@ export class GraphifyService {
                 label: symName,
                 title: `Class ${symName} in ${relPath}`,
                 color: {
-                  background: community.color,
+                  background: '#c084fc',
                   border: community.color,
-                  highlight: { background: '#ffffff', border: community.color }
+                  highlight: { background: '#ffffff', border: '#c084fc' }
                 },
                 size: 13,
                 community: community.id,
                 community_name: community.name,
                 source_file: relPath,
                 file_type: 'class',
-                degree: 0
+                degree: 0,
+                symbols: []
               });
-              edges.push({
-                id: `edge_${fileNodeId}_${symNodeId}`,
-                from: fileNodeId,
-                to: symNodeId,
-                relation: 'declares'
+              addEdge(fileNodeId, symNodeId, 'declares');
+            }
+          }
+
+          // 2. Interfaces
+          const ifaceRegex = /(?:export\s+)?interface\s+([A-Za-z0-9_]+)/g;
+          while ((match = ifaceRegex.exec(content)) !== null) {
+            const symName = match[1];
+            if (fileNode && fileNode.symbols) fileNode.symbols.push(symName);
+            const symNodeId = `sym_${fileNodeId}_${symName}`;
+            symbolToNodeId.set(symName, symNodeId);
+
+            if (!nodesMap.has(symNodeId)) {
+              nodesMap.set(symNodeId, {
+                id: symNodeId,
+                label: symName,
+                title: `Interface ${symName} in ${relPath}`,
+                color: {
+                  background: '#22d3ee',
+                  border: community.color,
+                  highlight: { background: '#ffffff', border: '#22d3ee' }
+                },
+                size: 11,
+                community: community.id,
+                community_name: community.name,
+                source_file: relPath,
+                file_type: 'interface',
+                degree: 0,
+                symbols: []
               });
+              addEdge(fileNodeId, symNodeId, 'declares');
+            }
+          }
+
+          // 3. Top functions & React components
+          const fnRegex = /(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+([A-Za-z0-9_]+)/g;
+          while ((match = fnRegex.exec(content)) !== null) {
+            const symName = match[1];
+            if (fileNode && fileNode.symbols) fileNode.symbols.push(symName);
+            const symNodeId = `sym_${fileNodeId}_${symName}`;
+            symbolToNodeId.set(symName, symNodeId);
+
+            if (!nodesMap.has(symNodeId)) {
+              nodesMap.set(symNodeId, {
+                id: symNodeId,
+                label: `${symName}()`,
+                title: `Function ${symName}() in ${relPath}`,
+                color: {
+                  background: '#fbbf24',
+                  border: community.color,
+                  highlight: { background: '#ffffff', border: '#fbbf24' }
+                },
+                size: 10,
+                community: community.id,
+                community_name: community.name,
+                source_file: relPath,
+                file_type: 'function',
+                degree: 0,
+                symbols: []
+              });
+              addEdge(fileNodeId, symNodeId, 'declares');
+            }
+          }
+
+          // 4. Imports (ESM import, export from, dynamic import, require)
+          const importRegex = /(?:import\s+(?:(?:\{[^}]*\}|[A-Za-z0-9_*$\s,]+)\s+from\s+)?['"]([^'"]+)['"]|export\s+(?:\{[^}]*\}|\*)\s+from\s+['"]([^'"]+)['"]|require\(\s*['"]([^'"]+)['"]\s*\)|import\(\s*['"]([^'"]+)['"]\s*\))/g;
+          while ((match = importRegex.exec(content)) !== null) {
+            const spec = match[1] || match[2] || match[3] || match[4];
+            if (spec) {
+              const targetNodeId = resolveTargetNode(relPath, spec);
+              if (targetNodeId && targetNodeId !== fileNodeId) {
+                addEdge(fileNodeId, targetNodeId, 'imports');
+              }
+            }
+          }
+        }
+
+        // 2b. HTML File Parsing (<script src="...">, <link href="...">)
+        else if (['.html', '.htm'].includes(ext)) {
+          const scriptRegex = /<script\s+[^>]*src=["']([^"']+)["']/gi;
+          let match;
+          while ((match = scriptRegex.exec(content)) !== null) {
+            const targetNodeId = resolveTargetNode(relPath, match[1]);
+            if (targetNodeId && targetNodeId !== fileNodeId) {
+              addEdge(fileNodeId, targetNodeId, 'includes_script');
+            }
+          }
+
+          const linkRegex = /<link\s+[^>]*href=["']([^"']+)["']/gi;
+          while ((match = linkRegex.exec(content)) !== null) {
+            const targetNodeId = resolveTargetNode(relPath, match[1]);
+            if (targetNodeId && targetNodeId !== fileNodeId) {
+              addEdge(fileNodeId, targetNodeId, 'links_stylesheet');
+            }
+          }
+        }
+
+        // 2c. CSS / SCSS File Parsing (@import "...")
+        else if (['.css', '.scss', '.sass', '.less'].includes(ext)) {
+          const cssImportRegex = /@import\s+(?:url\(['"]?([^"')]+)['"]?\)|['"]([^'"]+)['"])/g;
+          let match;
+          while ((match = cssImportRegex.exec(content)) !== null) {
+            const spec = match[1] || match[2];
+            if (spec) {
+              const targetNodeId = resolveTargetNode(relPath, spec);
+              if (targetNodeId && targetNodeId !== fileNodeId) {
+                addEdge(fileNodeId, targetNodeId, 'imports_style');
+              }
+            }
+          }
+        }
+
+        // 2d. Python Parsing (class, def, imports)
+        else if (ext === '.py') {
+          const pyClassRegex = /^class\s+([A-Za-z0-9_]+)/gm;
+          let match;
+          while ((match = pyClassRegex.exec(content)) !== null) {
+            const symName = match[1];
+            if (fileNode && fileNode.symbols) fileNode.symbols.push(symName);
+            const symNodeId = `sym_${fileNodeId}_${symName}`;
+            symbolToNodeId.set(symName, symNodeId);
+
+            if (!nodesMap.has(symNodeId)) {
+              nodesMap.set(symNodeId, {
+                id: symNodeId,
+                label: symName,
+                title: `Class ${symName} in ${relPath}`,
+                color: {
+                  background: '#84cc16',
+                  border: community.color,
+                  highlight: { background: '#ffffff', border: '#84cc16' }
+                },
+                size: 13,
+                community: community.id,
+                community_name: community.name,
+                source_file: relPath,
+                file_type: 'class',
+                degree: 0,
+                symbols: []
+              });
+              addEdge(fileNodeId, symNodeId, 'declares');
             }
           }
 
@@ -320,6 +439,7 @@ export class GraphifyService {
           while ((match = pyDefRegex.exec(content)) !== null) {
             const symName = match[1];
             if (symName.startsWith('__')) continue;
+            if (fileNode && fileNode.symbols) fileNode.symbols.push(symName);
             const symNodeId = `sym_${fileNodeId}_${symName}`;
             symbolToNodeId.set(symName, symNodeId);
 
@@ -329,43 +449,42 @@ export class GraphifyService {
                 label: `${symName}()`,
                 title: `def ${symName}() in ${relPath}`,
                 color: {
-                  background: community.color,
+                  background: '#a3e635',
                   border: community.color,
-                  highlight: { background: '#ffffff', border: community.color }
+                  highlight: { background: '#ffffff', border: '#a3e635' }
                 },
                 size: 10,
                 community: community.id,
                 community_name: community.name,
                 source_file: relPath,
                 file_type: 'function',
-                degree: 0
+                degree: 0,
+                symbols: []
               });
-              edges.push({
-                id: `edge_${fileNodeId}_${symNodeId}`,
-                from: fileNodeId,
-                to: symNodeId,
-                relation: 'declares'
-              });
+              addEdge(fileNodeId, symNodeId, 'declares');
             }
           }
 
-          // Python imports
           const pyImportRegex = /(?:from\s+([A-Za-z0-9_.]+)\s+import|import\s+([A-Za-z0-9_.]+))/g;
           while ((match = pyImportRegex.exec(content)) !== null) {
             const mod = match[1] || match[2];
-            const modPath = mod.replace(/\./g, '/');
-            const targetNodeId = fileToNodeId.get(modPath) || fileToNodeId.get(`${modPath}.py`);
-            if (targetNodeId && targetNodeId !== fileNodeId) {
-              const edgeId = `edge_py_${fileNodeId}_${targetNodeId}`;
-              if (!edges.some(e => e.id === edgeId)) {
-                edges.push({
-                  id: edgeId,
-                  from: fileNodeId,
-                  to: targetNodeId,
-                  arrows: 'to',
-                  relation: 'imports'
-                });
+            if (mod) {
+              const targetNodeId = resolveTargetNode(relPath, mod.replace(/\./g, '/'));
+              if (targetNodeId && targetNodeId !== fileNodeId) {
+                addEdge(fileNodeId, targetNodeId, 'imports');
               }
+            }
+          }
+        }
+
+        // 2e. Markdown Links ([label](./path))
+        else if (['.md', '.markdown'].includes(ext)) {
+          const mdLinkRegex = /\[[^\]]+\]\(((?:\.\/|\.\.\/|[A-Za-z0-9_-]+\/)[^)#\s]+)\)/g;
+          let match;
+          while ((match = mdLinkRegex.exec(content)) !== null) {
+            const targetNodeId = resolveTargetNode(relPath, match[1]);
+            if (targetNodeId && targetNodeId !== fileNodeId) {
+              addEdge(fileNodeId, targetNodeId, 'references');
             }
           }
         }
@@ -385,7 +504,7 @@ export class GraphifyService {
       const degree = degreeCount.get(node.id) || 0;
       node.degree = degree;
       // Scale node size smoothly based on connectivity
-      node.size = Math.min(26, Math.max(9, 9 + Math.sqrt(degree) * 3));
+      node.size = Math.min(28, Math.max(10, 10 + Math.sqrt(degree) * 3));
       return node;
     });
 

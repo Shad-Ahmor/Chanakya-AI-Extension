@@ -16,7 +16,9 @@ import {
   ZoomOut,
   FolderTree,
   FileText,
-  X
+  X,
+  Code,
+  Sparkles
 } from 'lucide-react';
 
 interface GraphifyViewProps {
@@ -30,22 +32,22 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
   const edgesDataSetRef = useRef<DataSet<any> | null>(null);
 
   const [data, setData] = useState<GraphifyData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState<boolean>(true);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
-  const [selectedCommunities, setSelectedCommunities] = useState<Set<number>>(new Set());
   const [activeNeighbors, setActiveNeighbors] = useState<GraphNode[]>([]);
-  const [isPhysicsEnabled, setIsPhysicsEnabled] = useState(true);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedCommunities, setSelectedCommunities] = useState<Set<number>>(new Set());
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
+  const [isPhysicsEnabled, setIsPhysicsEnabled] = useState<boolean>(true);
 
-  // Request initial data from VS Code extension host
+  // Request initial graph data from extension backend
   useEffect(() => {
     setLoading(true);
     vscode.postMessage({ type: 'getGraphifyData' });
 
     const timer = setTimeout(() => {
       setLoading(false);
-    }, 6000);
+    }, 15000);
 
     const handleMessage = (event: MessageEvent) => {
       const msg = event.data;
@@ -67,7 +69,7 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
     };
   }, []);
 
-  // Initialize and update Vis Network
+  // Initialize and configure interactive force-directed Vis Network
   useEffect(() => {
     if (!containerRef.current || !data || data.nodes.length === 0) return;
 
@@ -80,11 +82,11 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
       (e) => visibleNodeIds.has(e.from) && visibleNodeIds.has(e.to)
     );
 
-    // Format for Vis.js
+    // Format nodes for vis-network with glowing aesthetics
     const visNodes = visibleNodes.map((node) => ({
       id: node.id,
       label: node.label,
-      title: `${node.label} (${node.file_type})\nFile: ${node.source_file}\nDegree: ${node.degree}`,
+      title: `${node.label} (${node.file_type})\nPath: ${node.source_file}\nDegree: ${node.degree}`,
       value: node.size,
       color: {
         background: node.color.background,
@@ -95,37 +97,47 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
         },
         hover: {
           background: '#ffffff',
-          border: node.color.border
+          border: node.color.background
         }
       },
       font: {
-        color: '#e0e0e0',
+        color: '#f1f5f9',
         size: 11,
-        face: 'ui-monospace, SFMono-Regular, Menlo, monospace'
+        face: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+        strokeWidth: 2,
+        strokeColor: '#0a0a12'
       },
       shape: node.file_type === 'class' ? 'diamond' : node.file_type === 'function' ? 'triangle' : 'dot',
-      borderWidth: 1.5,
-      borderWidthSelected: 3
+      borderWidth: 2,
+      borderWidthSelected: 4,
+      shadow: {
+        enabled: true,
+        color: `${node.color.background}55`,
+        size: 10,
+        x: 0,
+        y: 0
+      }
     }));
 
+    // Format edges with animated smooth curves and arrows
     const visEdges = visibleEdges.map((edge) => ({
       id: edge.id,
       from: edge.from,
       to: edge.to,
-      arrows: edge.arrows ? { to: { enabled: true, scaleFactor: 0.5 } } : undefined,
+      arrows: edge.arrows ? { to: { enabled: true, scaleFactor: 0.6 } } : undefined,
       color: {
-        color: 'rgba(255, 255, 255, 0.15)',
+        color: 'rgba(255, 255, 255, 0.18)',
         highlight: '#38bdf8',
         hover: '#38bdf8',
-        opacity: 0.25
+        opacity: 0.3
       },
-      width: 1,
-      hoverWidth: 2,
-      selectionWidth: 2.5,
+      width: 1.2,
+      hoverWidth: 2.8,
+      selectionWidth: 3,
       smooth: {
         enabled: true,
         type: 'continuous',
-        roundness: 0.1
+        roundness: 0.15
       }
     }));
 
@@ -135,44 +147,37 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
     const options = {
       nodes: {
         scaling: {
-          min: 8,
-          max: 26
-        },
-        shadow: {
-          enabled: true,
-          color: 'rgba(0,0,0,0.5)',
-          size: 6,
-          x: 2,
-          y: 2
+          min: 9,
+          max: 28
         }
       },
       edges: {
         smooth: {
           enabled: true,
           type: 'continuous',
-          roundness: 0.1
+          roundness: 0.15
         }
       },
       physics: {
         enabled: isPhysicsEnabled,
         solver: 'forceAtlas2Based',
         forceAtlas2Based: {
-          gravitationalConstant: -40,
-          centralGravity: 0.01,
-          springLength: 80,
-          springConstant: 0.08,
-          damping: 0.4,
-          avoidOverlap: 0.8
+          gravitationalConstant: -45,
+          centralGravity: 0.012,
+          springLength: 90,
+          springConstant: 0.07,
+          damping: 0.45,
+          avoidOverlap: 0.85
         },
         stabilization: {
-          iterations: 120,
-          updateInterval: 25
+          iterations: 150,
+          updateInterval: 30
         }
       },
       interaction: {
         hover: true,
         hoverConnectedEdges: true,
-        tooltipDelay: 100,
+        tooltipDelay: 80,
         zoomView: true,
         dragView: true,
         navigationButtons: false,
@@ -191,7 +196,7 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
     );
     networkRef.current = network;
 
-    // Node click handler
+    // Single Click: Select node, open inspector, AND open file immediately in central editor
     network.on('click', (params) => {
       if (params.nodes.length > 0) {
         const nodeId = params.nodes[0];
@@ -201,7 +206,15 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
           const connectedIds = network.getConnectedNodes(nodeId) as string[];
           const neighbors = data.nodes.filter((n) => connectedIds.includes(n.id));
           setActiveNeighbors(neighbors);
-          setIsSidebarOpen(true); // Open inspector when clicking node
+          setIsSidebarOpen(true);
+
+          // Open file in central VS Code editor
+          if (found.source_file) {
+            vscode.postMessage({
+              type: 'openFile',
+              payload: { filePath: found.source_file }
+            });
+          }
         }
       } else {
         setSelectedNode(null);
@@ -209,18 +222,49 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
       }
     });
 
-    // Double click to open file in editor
+    // Double Click: Focus and re-trigger open file
     network.on('doubleClick', (params) => {
       if (params.nodes.length > 0) {
         const nodeId = params.nodes[0];
         const found = data.nodes.find((n) => n.id === nodeId);
         if (found && found.source_file) {
           vscode.postMessage({
-            type: 'openFileInEditor',
+            type: 'openFile',
             payload: { filePath: found.source_file }
+          });
+          network.focus(nodeId, {
+            scale: 1.3,
+            animation: { duration: 500, easingFunction: 'easeInOutQuad' }
           });
         }
       }
+    });
+
+    // Hover Node: Highlight connected edges and dim unrelated nodes
+    network.on('hoverNode', (params) => {
+      if (!nodesDataSetRef.current || !edgesDataSetRef.current) return;
+      const hoveredId = params.node;
+      const connectedNodeIds = new Set(network.getConnectedNodes(hoveredId) as string[]);
+      connectedNodeIds.add(hoveredId);
+
+      // Dim unrelated nodes
+      const allNodes = nodesDataSetRef.current.get();
+      const nodeUpdates = allNodes.map((n: any) => ({
+        id: n.id,
+        opacity: connectedNodeIds.has(n.id) ? 1.0 : 0.2
+      }));
+      nodesDataSetRef.current.update(nodeUpdates);
+    });
+
+    // Blur Node: Restore original opacity
+    network.on('blurNode', () => {
+      if (!nodesDataSetRef.current) return;
+      const allNodes = nodesDataSetRef.current.get();
+      const nodeUpdates = allNodes.map((n: any) => ({
+        id: n.id,
+        opacity: 1.0
+      }));
+      nodesDataSetRef.current.update(nodeUpdates);
     });
 
     return () => {
@@ -245,10 +289,18 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
     setSearchQuery('');
     if (networkRef.current) {
       networkRef.current.focus(node.id, {
-        scale: 1.2,
+        scale: 1.3,
         animation: { duration: 600, easingFunction: 'easeInOutQuad' }
       });
       networkRef.current.selectNodes([node.id]);
+
+      // Open in VS Code editor
+      if (node.source_file) {
+        vscode.postMessage({
+          type: 'openFile',
+          payload: { filePath: node.source_file }
+        });
+      }
     }
   };
 
@@ -316,7 +368,7 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
             </button>
           )}
           <div className="flex items-center gap-1.5 min-w-0 truncate">
-            <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shrink-0" />
+            <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse shrink-0 shadow-sm shadow-cyan-400/50" />
             <h1 className="text-xs sm:text-sm font-semibold text-white tracking-wide truncate">
               Graphify Architecture
             </h1>
@@ -429,9 +481,9 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
 
         {/* Loading Overlay */}
         {loading && (
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex flex-col items-center justify-center gap-3 z-30">
+          <div className="absolute inset-0 bg-black/75 backdrop-blur-sm flex flex-col items-center justify-center gap-3 z-30">
             <div className="w-8 h-8 border-3 border-cyan-400/20 border-t-cyan-400 rounded-full animate-spin" />
-            <div className="text-xs font-medium text-slate-300">Analyzing Project & Constructing Graphify...</div>
+            <div className="text-xs font-medium text-slate-300">Parsing AST & Building Interactive Graph...</div>
           </div>
         )}
 
@@ -457,9 +509,9 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
 
         {/* Stats Pill Overlay */}
         {data && data.stats.nodeCount > 0 && (
-          <div className="absolute bottom-2.5 left-2.5 px-2.5 py-1 rounded-md bg-black/80 backdrop-blur-md border border-white/10 text-[11px] text-slate-400 pointer-events-none z-10 flex items-center gap-2">
+          <div className="absolute bottom-2.5 left-2.5 px-3 py-1.5 rounded-lg bg-black/80 backdrop-blur-md border border-white/10 text-[11px] text-slate-400 pointer-events-none z-10 flex items-center gap-2.5 shadow-lg">
             <span>
-              <b className="text-white">{data.stats.nodeCount}</b> nodes · <b className="text-white">{data.stats.edgeCount}</b> edges · <b className="text-cyan-400">{data.stats.communityCount}</b> communities
+              <b className="text-white font-semibold">{data.stats.nodeCount}</b> nodes · <b className="text-white font-semibold">{data.stats.edgeCount}</b> dependencies · <b className="text-cyan-400 font-semibold">{data.stats.communityCount}</b> modules
             </span>
           </div>
         )}
@@ -472,7 +524,7 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
               <div className="flex items-center gap-1.5">
                 <Layers className="w-3.5 h-3.5 text-cyan-400" />
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
-                  Communities & Details
+                  Inspector & Layers
                 </span>
               </div>
               <button
@@ -485,7 +537,7 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
 
             {/* Node Inspector Card */}
             {selectedNode && (
-              <div className="p-3 border-b border-white/10 bg-[#141426] flex flex-col gap-1.5 shrink-0">
+              <div className="p-3 border-b border-white/10 bg-[#141426] flex flex-col gap-2 shrink-0">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-bold tracking-wider uppercase text-cyan-400 flex items-center gap-1">
                     <Info className="w-3 h-3" /> Selected Node
@@ -497,45 +549,61 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
                 <div className="text-xs font-bold text-white truncate" title={selectedNode.label}>
                   {selectedNode.label}
                 </div>
-                <div className="text-[11px] text-slate-400 flex items-center justify-between">
-                  <span className="truncate max-w-[170px]" title={selectedNode.source_file}>
+                <div className="text-[11px] text-slate-400 flex items-center justify-between gap-1">
+                  <span className="truncate" title={selectedNode.source_file}>
                     {selectedNode.source_file}
                   </span>
                   <button
                     onClick={() =>
                       vscode.postMessage({
-                        type: 'openFileInEditor',
+                        type: 'openFile',
                         payload: { filePath: selectedNode.source_file }
                       })
                     }
-                    className="text-cyan-400 hover:text-cyan-300 p-1 hover:bg-white/5 rounded"
-                    title="Open in VS Code"
+                    className="text-cyan-400 hover:text-cyan-300 p-1 hover:bg-white/5 rounded shrink-0"
+                    title="Open in VS Code Central Editor"
                   >
-                    <ExternalLink className="w-3 h-3" />
+                    <ExternalLink className="w-3.5 h-3.5" />
                   </button>
                 </div>
                 <div className="text-[10px] text-slate-400 flex items-center gap-2">
                   <span>Degree: <b className="text-slate-200">{selectedNode.degree}</b></span>
                   <span>·</span>
-                  <span>Community: <b className="text-slate-200">{selectedNode.community_name}</b></span>
+                  <span>Module: <b className="text-slate-200">{selectedNode.community_name}</b></span>
                 </div>
+
+                {/* Exported AST Symbols */}
+                {selectedNode.symbols && selectedNode.symbols.length > 0 && (
+                  <div className="mt-1">
+                    <div className="text-[10px] text-slate-400 uppercase font-semibold mb-1 flex items-center gap-1">
+                      <Code className="w-3 h-3 text-purple-400" /> Exported Symbols ({selectedNode.symbols.length})
+                    </div>
+                    <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto pr-1">
+                      {selectedNode.symbols.slice(0, 10).map((sym, idx) => (
+                        <span key={idx} className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-200 font-mono border border-purple-500/30 truncate max-w-full">
+                          {sym}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Neighbors List */}
                 {activeNeighbors.length > 0 && (
                   <div className="mt-1">
-                    <div className="text-[10px] text-slate-400 uppercase font-semibold mb-1">
-                      Connected ({activeNeighbors.length})
+                    <div className="text-[10px] text-slate-400 uppercase font-semibold mb-1 flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-cyan-400" /> Connected Files ({activeNeighbors.length})
                     </div>
-                    <div className="max-h-24 overflow-y-auto flex flex-col gap-1 pr-1">
+                    <div className="max-h-28 overflow-y-auto flex flex-col gap-1 pr-1">
                       {activeNeighbors.map((neighbor) => (
                         <div
                           key={neighbor.id}
                           onClick={() => handleSelectSearchResult(neighbor)}
-                          className="flex items-center justify-between px-2 py-0.5 rounded text-[11px] bg-black/40 hover:bg-cyan-500/20 cursor-pointer transition border border-white/5"
+                          className="flex items-center justify-between px-2 py-1 rounded text-[11px] bg-black/40 hover:bg-cyan-500/20 cursor-pointer transition border border-white/5"
                         >
                           <span className="truncate max-w-[150px] text-slate-300">{neighbor.label}</span>
                           <div
-                            className="w-2 h-2 rounded-full shrink-0"
+                            className="w-2.5 h-2.5 rounded-full shrink-0"
                             style={{ backgroundColor: neighbor.color.background }}
                           />
                         </div>
