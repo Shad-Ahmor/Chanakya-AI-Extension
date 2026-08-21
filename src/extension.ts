@@ -150,6 +150,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('aiEnhancer.openModelsHub', (args?: { tab?: string }) => {
       dashboardProvider.show(args);
     }),
+    vscode.commands.registerCommand('aiEnhancer.openGraphify', () => {
+      dashboardProvider.show({ tab: 'graphify' });
+    }),
     vscode.commands.registerCommand('aiEnhancer.generateArchitecture', async () => {
       try {
         const outPath = await WorkspaceIndexer.getInstance().generateArchitectureMap();

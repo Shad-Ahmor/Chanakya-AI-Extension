@@ -77,6 +77,12 @@
 				"icon": "$(hub)"
 			},
 			{
+				"command": "aiEnhancer.openGraphify",
+				"title": "Chanakya AI Enhancer: Open Graphify Architecture Visualizer",
+				"category": "Chanakya AI Enhancer",
+				"icon": "$(graph)"
+			},
+			{
 				"command": "aiEnhancer.generateArchitecture",
 				"title": "Chanakya AI Enhancer: Generate Workspace Architecture",
 				"category": "Chanakya AI Enhancer",

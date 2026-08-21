@@ -9,6 +9,7 @@ import { MentionHubModal } from './components/Chat/MentionHubModal';
 import { GoalHubModal } from './components/Chat/GoalHubModal';
 import { ArtifactModal } from './components/Chat/ArtifactModal';
 import ModelHubView from './components/ModelHub/ModelHubView';
+import GraphifyView from './components/Graphify/GraphifyView';
 import {
   Sparkles,
   Send,
@@ -41,7 +42,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [contextItems, setContextItems] = useState<ContextItem[]>([]);
   const initialViewMode = (window as any).CHANAKYA_VIEW_MODE === 'dashboard' ? 'dashboard' : 'chat';
-  const [viewMode, setViewMode] = useState<'chat' | 'modelhub' | 'dashboard'>(initialViewMode);
+  const [viewMode, setViewMode] = useState<'chat' | 'modelhub' | 'dashboard' | 'graphify'>(initialViewMode);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [rawYaml, setRawYaml] = useState<string>('');
   const [initialDashboardTab, setInitialDashboardTab] = useState<'visual' | 'yaml' | 'settings' | 'token_optimizer' | 'analytics'>('visual');
@@ -288,6 +289,11 @@ export default function App() {
           });
           break;
         }
+
+        case 'openGraphifyView': {
+          setViewMode('graphify');
+          break;
+        }
       }
     });
 
@@ -416,6 +422,10 @@ export default function App() {
 
   const isEnterprise = activeModel?.requestOptions?.headers && Object.keys(activeModel.requestOptions.headers).length > 0;
 
+  if (viewMode === 'graphify') {
+    return <GraphifyView onBack={() => setViewMode('chat')} />;
+  }
+
   if ((viewMode === 'modelhub' || viewMode === 'dashboard') && config) {
     return (
       <ModelHubView
@@ -479,6 +489,13 @@ export default function App() {
             className={`p-1.5 rounded-lg transition border ${isHistoryDrawerOpen ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' : 'hover:bg-purple-500/20 text-purple-400/80 hover:text-purple-400 border-transparent hover:border-purple-500/30'}`}
           >
             <History className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => setViewMode('graphify')}
+            title="Open Graphify Architecture Visualizer"
+            className="p-1.5 hover:bg-rose-500/20 rounded-lg transition text-rose-400/80 hover:text-rose-400 border border-transparent hover:border-rose-500/30"
+          >
+            <Network className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => setViewMode('dashboard')}

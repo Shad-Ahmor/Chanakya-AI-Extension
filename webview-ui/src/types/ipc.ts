@@ -1,4 +1,5 @@
 import { AppConfig, ModelConfig } from './config';
+import { GraphifyData } from './graphify';
 
 export interface ContextItem {
   readonly id: string;
@@ -103,7 +104,9 @@ export type FromWebviewMessage =
   | { type: 'openFilePicker' }
   | { type: 'showInformationMessage'; payload: { message: string } }
   | { type: 'submitProceed' }
-  | { type: 'openSourceControl' };
+  | { type: 'openSourceControl' }
+  | { type: 'getGraphifyData'; payload?: { refresh?: boolean } }
+  | { type: 'openFileInEditor'; payload: { filePath: string } };
 
 /**
  * Messages sent FROM Extension Host TO React Webview
@@ -131,4 +134,6 @@ export type ToWebviewMessage =
   | { type: 'activeConversationChanged'; payload: { conversation: Conversation } }
   | { type: 'fileAttached'; payload: { name: string; path: string; content: string } }
   | { type: 'artifactUpdated'; payload: { name: string; content: string } }
-  | { type: 'fileChanged'; payload: { path: string; changeType: 'create' | 'modify' | 'delete' } };
+  | { type: 'fileChanged'; payload: { path: string; changeType: 'create' | 'modify' | 'delete' } }
+  | { type: 'graphifyDataResult'; payload: { data: GraphifyData } }
+  | { type: 'openGraphifyView' };

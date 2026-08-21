@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { ConfigManager } from '../services/configManager';
 import { LLMEngine } from '../services/llmEngine';
 import { LLMGateway } from '../services/llmGateway';
@@ -9,6 +10,7 @@ import { ConversationManager } from '../services/ConversationManager';
 import { WorkspaceIndexer } from '../services/workspaceIndexer';
 import { DocumentParserService } from '../services/documentParserService';
 import { ContextProvider } from '../services/contextProvider';
+import { GraphifyService } from '../services/graphifyService';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'chanakya-ai-launcher';
@@ -965,6 +967,39 @@ ${diff}`;
           vscode.window.showInformationMessage('Chanakya AI: Reverted successfully to previous snapshot.');
         } catch (e: any) {
           vscode.window.showErrorMessage(`Failed to revert: ${e.message}`);
+        }
+        break;
+      }
+
+      case 'getGraphifyData': {
+        try {
+          const forceRefresh = !!message.payload?.refresh;
+          const graphData = await GraphifyService.getInstance().generateGraphData(forceRefresh);
+          this.postMessage({
+            type: 'graphifyDataResult',
+            payload: { data: graphData }
+          });
+        } catch (err: any) {
+          this._logger.error('Failed to generate graphify data', err);
+          vscode.window.showErrorMessage(`Failed to generate graph: ${err.message}`);
+        }
+        break;
+      }
+
+      case 'openFileInEditor': {
+        try {
+          const filePath = message.payload.filePath;
+          const wsFolders = vscode.workspace.workspaceFolders;
+          const fullPath = path.isAbsolute(filePath)
+            ? filePath
+            : wsFolders && wsFolders.length > 0
+            ? path.join(wsFolders[0].uri.fsPath, filePath)
+            : filePath;
+
+          const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(fullPath));
+          await vscode.window.showTextDocument(doc, { preview: false });
+        } catch (err: any) {
+          vscode.window.showErrorMessage(`Could not open file: ${err.message}`);
         }
         break;
       }

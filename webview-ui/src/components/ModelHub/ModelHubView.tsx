@@ -6,6 +6,7 @@ import YAML from 'yaml';
 import SettingsView from '../Settings/SettingsView';
 import TokenOptimizerView from '../TokenOptimizer/TokenOptimizerView';
 import AnalyticsDashboard from '../Analytics/AnalyticsDashboard';
+import GraphifyView from '../Graphify/GraphifyView';
 import {
   Cpu,
   Globe,
@@ -23,6 +24,7 @@ import {
   Settings,
   TrendingDown,
   BarChart2,
+  Network,
 } from 'lucide-react';
 
 interface Props {
@@ -31,11 +33,11 @@ interface Props {
   onUpdateConfig: (newConfig: AppConfig, rawYaml?: string) => void;
   onClose: () => void;
   isDashboard?: boolean;
-  initialDashboardTab?: 'visual' | 'yaml' | 'settings' | 'token_optimizer' | 'analytics';
+  initialDashboardTab?: 'visual' | 'yaml' | 'settings' | 'token_optimizer' | 'analytics' | 'graphify';
 }
 
 export default function ModelHubView({ config, rawYaml, onUpdateConfig, onClose, isDashboard, initialDashboardTab }: Props) {
-  const [activeTab, setActiveTab] = useState<'visual' | 'yaml' | 'settings' | 'token_optimizer' | 'analytics'>(initialDashboardTab || 'visual');
+  const [activeTab, setActiveTab] = useState<'visual' | 'yaml' | 'settings' | 'token_optimizer' | 'analytics' | 'graphify'>(initialDashboardTab || 'visual');
   const [filter, setFilter] = useState<'all' | 'local' | 'online' | 'chat' | 'autocomplete'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [editingModel, setEditingModel] = useState<ModelConfig | null>(null);
@@ -231,6 +233,9 @@ export default function ModelHubView({ config, rawYaml, onUpdateConfig, onClose,
               <button onClick={() => setActiveTab('analytics')} className={`pb-3 font-bold text-sm tracking-wide transition-colors ${activeTab === 'analytics' ? 'text-[var(--vscode-textLink-foreground)] border-b-2 border-[var(--vscode-textLink-foreground)]' : 'text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)]'}`}>
                 <div className="flex items-center gap-2"><BarChart2 className="w-4 h-4" /> Dashboard</div>
               </button>
+              <button onClick={() => setActiveTab('graphify')} className={`pb-3 font-bold text-sm tracking-wide transition-colors ${activeTab === 'graphify' ? 'text-[var(--vscode-textLink-foreground)] border-b-2 border-[var(--vscode-textLink-foreground)]' : 'text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)]'}`}>
+                <div className="flex items-center gap-2"><Network className="w-4 h-4 text-cyan-400" /> Graphify Architecture</div>
+              </button>
               <button onClick={() => setActiveTab('visual')} className={`pb-3 font-bold text-sm tracking-wide transition-colors ${activeTab === 'visual' ? 'text-[var(--vscode-textLink-foreground)] border-b-2 border-[var(--vscode-textLink-foreground)]' : 'text-[var(--vscode-descriptionForeground)] hover:opacity-80'}`} style={activeTab !== 'visual' ? { color: 'var(--vscode-descriptionForeground)' } : {}}>
                 <div className="flex items-center gap-2"><Zap className="w-4 h-4" /> Models Hub <span className="bg-[var(--vscode-badge-background)] text-[var(--vscode-badge-foreground)] px-2 py-0.5 rounded-full text-[10px] ml-1">{config.models.length}</span></div>
               </button>
@@ -263,7 +268,11 @@ export default function ModelHubView({ config, rawYaml, onUpdateConfig, onClose,
       {/* Main Content Area */}
       <div className={`flex-1 overflow-hidden flex flex-col ${isDashboard ? 'p-10' : 'p-3'}`}>
 
-        {activeTab === 'settings' ? (
+        {activeTab === 'graphify' ? (
+          <div className="flex-1 -m-10 h-[calc(100%+80px)] overflow-hidden">
+            <GraphifyView />
+          </div>
+        ) : activeTab === 'settings' ? (
           <SettingsView />
         ) : activeTab === 'token_optimizer' ? (
           <TokenOptimizerView config={config} />

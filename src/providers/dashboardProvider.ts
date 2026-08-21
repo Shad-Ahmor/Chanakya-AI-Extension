@@ -1,8 +1,10 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { ConfigManager } from '../services/configManager';
 import { FromWebviewMessage, ToWebviewMessage } from '../types/ipc';
 import { Logger } from '../utils/logger';
 import { SecurityUtils } from '../utils/security';
+import { GraphifyService } from '../services/graphifyService';
 
 export class DashboardProvider {
   public static readonly viewType = 'chanakya-models-hub';
@@ -29,6 +31,8 @@ export class DashboardProvider {
       this._panel.reveal(column);
       if (args?.tab === 'settings') {
         this.postMessage({ type: 'openSettingsTab' });
+      } else if (args?.tab === 'graphify') {
+        this.postMessage({ type: 'openGraphifyView' });
       }
       return;
     }
@@ -37,16 +41,26 @@ export class DashboardProvider {
 
     this._panel = vscode.window.createWebviewPanel(
       DashboardProvider.viewType,
-      'Models Hub',
+      'Chanakya Architecture & Models Hub',
       column || vscode.ViewColumn.One,
       {
         enableScripts: true,
-        localResourceRoots: [vscode.Uri.joinPath(this._extensionUri, 'dist')],
-        retainContextWhenHidden: true
+        retainContextWhenHidden: true,
+        localResourceRoots: [this._extensionUri]
       }
     );
 
     this._panel.webview.html = this._getHtmlForWebview(this._panel.webview);
+
+    if (args?.tab === 'settings') {
+      setTimeout(() => {
+        this.postMessage({ type: 'openSettingsTab' });
+      }, 500);
+    } else if (args?.tab === 'graphify') {
+      setTimeout(() => {
+        this.postMessage({ type: 'openGraphifyView' });
+      }, 500);
+    }
 
     this._panel.onDidDispose(
       () => {
@@ -216,6 +230,39 @@ export class DashboardProvider {
 
       case 'saveTokenOptimizerConfig': {
         await this._context.globalState.update('chanakya.tokenOptimizerConfig', message.payload);
+        break;
+      }
+
+      case 'getGraphifyData': {
+        try {
+          const forceRefresh = !!message.payload?.refresh;
+          const graphData = await GraphifyService.getInstance().generateGraphData(forceRefresh);
+          this.postMessage({
+            type: 'graphifyDataResult',
+            payload: { data: graphData }
+          });
+        } catch (err: any) {
+          this._logger.error('Failed to generate graphify data in dashboard', err);
+          vscode.window.showErrorMessage(`Failed to generate graph: ${err.message}`);
+        }
+        break;
+      }
+
+      case 'openFileInEditor': {
+        try {
+          const filePath = message.payload.filePath;
+          const wsFolders = vscode.workspace.workspaceFolders;
+          const fullPath = path.isAbsolute(filePath)
+            ? filePath
+            : wsFolders && wsFolders.length > 0
+            ? path.join(wsFolders[0].uri.fsPath, filePath)
+            : filePath;
+
+          const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(fullPath));
+          await vscode.window.showTextDocument(doc, { preview: false });
+        } catch (err: any) {
+          vscode.window.showErrorMessage(`Could not open file: ${err.message}`);
+        }
         break;
       }
     }
