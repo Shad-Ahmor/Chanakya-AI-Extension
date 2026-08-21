@@ -119,27 +119,50 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
       }
     }));
 
-    // Format edges with animated smooth curves and arrows
-    const visEdges = visibleEdges.map((edge) => ({
-      id: edge.id,
-      from: edge.from,
-      to: edge.to,
-      arrows: edge.arrows ? { to: { enabled: true, scaleFactor: 0.6 } } : undefined,
-      color: {
-        color: 'rgba(255, 255, 255, 0.18)',
-        highlight: '#38bdf8',
-        hover: '#38bdf8',
-        opacity: 0.3
-      },
-      width: 1.2,
-      hoverWidth: 2.8,
-      selectionWidth: 3,
-      smooth: {
-        enabled: true,
-        type: 'continuous',
-        roundness: 0.15
-      }
-    }));
+    // Format edges with animated smooth curves, arrows, and API network dashed differentiation
+    const visEdges = visibleEdges.map((edge) => {
+      const isApi = edge.type === 'api-network' || edge.relation === 'api-network';
+      return {
+        id: edge.id,
+        from: edge.from,
+        to: edge.to,
+        arrows: edge.arrows ? { to: { enabled: true, scaleFactor: isApi ? 0.8 : 0.6 } } : undefined,
+        dashes: isApi ? [6, 4] : undefined,
+        label: isApi ? edge.label : undefined,
+        title: edge.title || (edge.label ? `🌐 API Call: ${edge.label}` : undefined),
+        font: isApi
+          ? {
+              color: '#f43f5e',
+              size: 10,
+              face: 'ui-monospace, monospace',
+              strokeWidth: 3,
+              strokeColor: '#0a0a12',
+              align: 'top'
+            }
+          : undefined,
+        color: isApi
+          ? {
+              color: '#f43f5e',
+              highlight: '#fb7185',
+              hover: '#38bdf8',
+              opacity: 0.95
+            }
+          : {
+              color: 'rgba(255, 255, 255, 0.18)',
+              highlight: '#38bdf8',
+              hover: '#38bdf8',
+              opacity: 0.35
+            },
+        width: isApi ? 2.4 : 1.2,
+        hoverWidth: isApi ? 3.5 : 2.5,
+        selectionWidth: isApi ? 3.5 : 3,
+        smooth: {
+          enabled: true,
+          type: 'continuous',
+          roundness: 0.18
+        }
+      };
+    });
 
     nodesDataSetRef.current = new DataSet(visNodes);
     edgesDataSetRef.current = new DataSet(visEdges);
@@ -507,12 +530,24 @@ export default function GraphifyView({ onBack }: GraphifyViewProps) {
           </div>
         )}
 
-        {/* Stats Pill Overlay */}
+        {/* Stats & Visual Legend Overlay */}
         {data && data.stats.nodeCount > 0 && (
-          <div className="absolute bottom-2.5 left-2.5 px-3 py-1.5 rounded-lg bg-black/80 backdrop-blur-md border border-white/10 text-[11px] text-slate-400 pointer-events-none z-10 flex items-center gap-2.5 shadow-lg">
-            <span>
-              <b className="text-white font-semibold">{data.stats.nodeCount}</b> nodes · <b className="text-white font-semibold">{data.stats.edgeCount}</b> dependencies · <b className="text-cyan-400 font-semibold">{data.stats.communityCount}</b> modules
-            </span>
+          <div className="absolute bottom-2.5 left-2.5 px-3 py-2 rounded-xl bg-black/85 backdrop-blur-md border border-white/10 text-[11px] text-slate-300 pointer-events-none z-10 flex flex-col gap-1.5 shadow-2xl">
+            <div className="flex items-center gap-2">
+              <span>
+                <b className="text-white font-semibold">{data.stats.nodeCount}</b> files · <b className="text-white font-semibold">{data.stats.edgeCount}</b> links · <b className="text-cyan-400 font-semibold">{data.stats.communityCount}</b> modules
+              </span>
+            </div>
+            <div className="flex items-center gap-3 pt-1 border-t border-white/10 text-[10px] text-slate-400">
+              <div className="flex items-center gap-1.5">
+                <span className="w-3 h-0.5 bg-white/40 inline-block rounded" />
+                <span>Static Import</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-3.5 h-0.5 border-b-2 border-dashed border-rose-500 inline-block" />
+                <span className="text-rose-300 font-medium">API Network (FE ⇄ BE)</span>
+              </div>
+            </div>
           </div>
         )}
 

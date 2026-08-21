@@ -19,7 +19,7 @@ const COMMUNITY_PALETTE = [
 ];
 
 const EXT_COLOR_MAP: Record<string, string> = {
-  '.tsx': '#06b6d4', // Cyan
+  '.tsx': '#06b6d4', // React Cyan
   '.jsx': '#38bdf8', // React Sky
   '.ts': '#3b82f6',  // TS Blue
   '.js': '#f59e0b',  // JS Amber
@@ -46,6 +46,29 @@ const EXT_COLOR_MAP: Record<string, string> = {
   '.h': '#6366f1'
 };
 
+interface BackendRoute {
+  fileNodeId: string;
+  sourceRelPath: string;
+  method: string;
+  rawRoute: string;
+  normalizedRoute: string;
+}
+
+interface FrontendApiCall {
+  fileNodeId: string;
+  sourceRelPath: string;
+  method: string;
+  rawEndpoint: string;
+  normalizedRoute: string;
+  port?: string | undefined;
+}
+
+interface ServerListeningPort {
+  fileNodeId: string;
+  sourceRelPath: string;
+  port: string;
+}
+
 export class GraphifyService {
   private static instance: GraphifyService;
   private readonly logger = Logger.getInstance();
@@ -59,7 +82,7 @@ export class GraphifyService {
   }
 
   /**
-   * Scans workspace, analyzes files, dependencies, AST symbols, and constructs Graphify graph data.
+   * Scans workspace, analyzes files, dependencies, cross-boundary API routes, AST symbols, and constructs Graphify graph data.
    */
   public async generateGraphData(forceRefresh = false): Promise<GraphifyData> {
     if (this.cachedData && !forceRefresh) {
@@ -88,13 +111,19 @@ export class GraphifyService {
     this.logger.log(`[GraphifyService] Scanning workspace for graph: ${rootPath}`);
 
     const excludePattern = '{**/node_modules/**,**/dist/**,**/.git/**,**/.vscode/**,**/build/**,**/out/**,**/.next/**,**/venv/**,**/__pycache__/**,**/.chanakya/**}';
-    const uris = await vscode.workspace.findFiles('**/*', excludePattern, 1200);
+    const uris = await vscode.workspace.findFiles('**/*', excludePattern, 2000);
 
     const nodesMap = new Map<string, GraphNode>();
     const edges: GraphEdge[] = [];
     const edgeKeySet = new Set<string>();
     const communityMap = new Map<string, { id: number; name: string; color: string; count: number }>();
     let nextCommunityId = 1;
+
+    // Cross-boundary registries
+    const backendRoutes: BackendRoute[] = [];
+    const frontendApiCalls: FrontendApiCall[] = [];
+    const serverListeningPorts: ServerListeningPort[] = [];
+    const backendServerEntrypoints = new Set<string>();
 
     const getCommunity = (dirName: string) => {
       const normalized = dirName === '.' || dirName === '' ? 'Root' : dirName;
@@ -112,17 +141,37 @@ export class GraphifyService {
       return comm;
     };
 
-    const addEdge = (from: string, to: string, relation: string, arrows = 'to') => {
+    const addEdge = (
+      from: string,
+      to: string,
+      relation: string,
+      type: GraphEdge['type'] = 'import',
+      label?: string,
+      title?: string,
+      dashes?: boolean | number[],
+      arrows = 'to'
+    ) => {
       if (!from || !to || from === to) return;
-      const key = `${from}->${to}:${relation}`;
+      const key = `${from}->${to}:${relation}:${label || ''}`;
       if (!edgeKeySet.has(key)) {
         edgeKeySet.add(key);
         edges.push({
           id: `edge_${edges.length + 1}`,
           from,
           to,
+          type,
+          relation,
+          label,
+          title: title || (label ? `🌐 ${label}` : undefined),
+          dashes,
           arrows,
-          relation
+          color: type === 'api-network' ? {
+            color: '#f43f5e',
+            highlight: '#fb7185',
+            hover: '#fb7185',
+            opacity: 0.95
+          } : undefined,
+          width: type === 'api-network' ? 2.2 : 1.2
         });
       }
     };
@@ -138,13 +187,13 @@ export class GraphifyService {
       const fileName = path.basename(relPath);
       const ext = path.extname(relPath).toLowerCase();
 
-      // Top level folder or component community
+      // Top level folder or component community (e.g. frontend, backend, src, server)
       const topDir = dir === '.' ? 'Root' : (dir.split('/')[0] || dir);
       const community = getCommunity(topDir);
 
       const nodeId = `file_${relPath.replace(/[^a-zA-Z0-9_]/g, '_')}`;
 
-      // Map multiple path keys for resilient resolving
+      // Register multiple path keys for resilient resolving
       fileToNodeId.set(relPath, nodeId);
       fileToNodeId.set(relPath.toLowerCase(), nodeId);
       fileToNodeId.set(relPath.replace(/\.[^/.]+$/, ''), nodeId); // without ext
@@ -179,6 +228,17 @@ export class GraphifyService {
         symbols: []
       });
     }
+
+    // Helper: normalize route path (e.g. "/api/users/:id" -> "/api/users")
+    const normalizeRoute = (raw: string): string => {
+      let r = raw.trim().replace(/^https?:\/\/[^/]+/i, ''); // Strip http://localhost:5000
+      r = r.split('?')[0]; // Strip query params
+      r = r.replace(/\$\{[^}]+\}/g, '*'); // Replace ${id} with *
+      r = r.replace(/:[a-zA-Z0-9_]+/g, '*'); // Replace :id with *
+      r = r.replace(/\/+$/, ''); // Strip trailing slash
+      if (!r.startsWith('/')) r = '/' + r;
+      return r.toLowerCase();
+    };
 
     // Helper: resolve relative or aliased import path to target node ID
     const resolveTargetNode = (sourceRelPath: string, importSpec: string): string | undefined => {
@@ -226,16 +286,20 @@ export class GraphifyService {
           candidatePaths.push(`${base}/index.js`);
         }
       } else {
-        // Non-relative import check in src/ or webview-ui/src/
+        // Monorepo cross-directory lookup (e.g. backend/server, frontend/App)
         const inSrc = path.normalize(path.join('src', cleaned)).replace(/\\/g, '/');
         const inWebview = path.normalize(path.join('webview-ui/src', cleaned)).replace(/\\/g, '/');
+        const inBackend = path.normalize(path.join('backend', cleaned)).replace(/\\/g, '/');
+        const inServer = path.normalize(path.join('server', cleaned)).replace(/\\/g, '/');
+
         candidatePaths.push(cleaned);
         candidatePaths.push(inSrc);
         candidatePaths.push(`${inSrc}.ts`);
         candidatePaths.push(`${inSrc}.tsx`);
         candidatePaths.push(inWebview);
-        candidatePaths.push(`${inWebview}.tsx`);
-        candidatePaths.push(`${inWebview}.ts`);
+        candidatePaths.push(inBackend);
+        candidatePaths.push(`${inBackend}.js`);
+        candidatePaths.push(inServer);
       }
 
       for (const p of candidatePaths) {
@@ -246,7 +310,7 @@ export class GraphifyService {
       return undefined;
     };
 
-    // Pass 2: Deep parse contents for AST symbols and dependencies
+    // Pass 2: Deep parse contents for AST symbols, imports, AND cross-boundary API endpoints
     for (const uri of uris) {
       const relPath = vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
       const fileNodeId = fileToNodeId.get(relPath);
@@ -255,8 +319,24 @@ export class GraphifyService {
       const fileNode = nodesMap.get(fileNodeId);
       const ext = path.extname(relPath).toLowerCase();
       const dir = path.dirname(relPath);
+      const fileName = path.basename(relPath).toLowerCase();
       const topDir = dir === '.' ? 'Root' : (dir.split('/')[0] || dir);
       const community = getCommunity(topDir);
+
+      // Identify backend server entrypoints
+      if (
+        fileName.includes('server') ||
+        fileName.includes('app') ||
+        fileName.includes('main') ||
+        fileName.includes('index') ||
+        dir.includes('backend') ||
+        dir.includes('server') ||
+        dir.includes('api')
+      ) {
+        if (['.js', '.ts', '.py', '.go', '.rs'].includes(ext)) {
+          backendServerEntrypoints.add(fileNodeId);
+        }
+      }
 
       try {
         const fileBytes = await vscode.workspace.fs.readFile(uri);
@@ -291,7 +371,7 @@ export class GraphifyService {
                 degree: 0,
                 symbols: []
               });
-              addEdge(fileNodeId, symNodeId, 'declares');
+              addEdge(fileNodeId, symNodeId, 'declares', 'declares');
             }
           }
 
@@ -321,7 +401,7 @@ export class GraphifyService {
                 degree: 0,
                 symbols: []
               });
-              addEdge(fileNodeId, symNodeId, 'declares');
+              addEdge(fileNodeId, symNodeId, 'declares', 'declares');
             }
           }
 
@@ -351,20 +431,92 @@ export class GraphifyService {
                 degree: 0,
                 symbols: []
               });
-              addEdge(fileNodeId, symNodeId, 'declares');
+              addEdge(fileNodeId, symNodeId, 'declares', 'declares');
             }
           }
 
-          // 4. Imports (ESM import, export from, dynamic import, require)
+          // 4. Static Imports (ESM import, export from, dynamic import, require)
           const importRegex = /(?:import\s+(?:(?:\{[^}]*\}|[A-Za-z0-9_*$\s,]+)\s+from\s+)?['"]([^'"]+)['"]|export\s+(?:\{[^}]*\}|\*)\s+from\s+['"]([^'"]+)['"]|require\(\s*['"]([^'"]+)['"]\s*\)|import\(\s*['"]([^'"]+)['"]\s*\))/g;
           while ((match = importRegex.exec(content)) !== null) {
             const spec = match[1] || match[2] || match[3] || match[4];
             if (spec) {
               const targetNodeId = resolveTargetNode(relPath, spec);
               if (targetNodeId && targetNodeId !== fileNodeId) {
-                addEdge(fileNodeId, targetNodeId, 'imports');
+                addEdge(fileNodeId, targetNodeId, 'imports', 'import');
               }
             }
+          }
+
+          // 5. Backend Server Routes & Listening Ports (Express, Fastify, Nest, Koa, Hono)
+          const expressRouteRegex = /(?:app|router|server|fastify|hono)\.(get|post|put|delete|patch|all|use)\s*\(\s*['"`]([^'"`]+)['"`]/g;
+          while ((match = expressRouteRegex.exec(content)) !== null) {
+            const method = (match[1] || 'GET').toUpperCase();
+            const rawRoute = match[2];
+            backendRoutes.push({
+              fileNodeId,
+              sourceRelPath: relPath,
+              method,
+              rawRoute,
+              normalizedRoute: normalizeRoute(rawRoute)
+            });
+            backendServerEntrypoints.add(fileNodeId);
+          }
+
+          const listenPortRegex = /\.(?:listen|run|serve)\s*\(\s*(\d{2,5})/g;
+          while ((match = listenPortRegex.exec(content)) !== null) {
+            serverListeningPorts.push({
+              fileNodeId,
+              sourceRelPath: relPath,
+              port: match[1]
+            });
+            backendServerEntrypoints.add(fileNodeId);
+          }
+
+          // 6. Frontend Network API Calls (fetch, axios, ky, custom client)
+          const fetchRegex = /fetch\s*\(\s*(?:['"`]([^'"`]+)['"`]|(?:API_URL|BASE_URL|API|VITE_API_URL|process\.env\.[A-Z0-9_]+)\s*\+\s*['"`]([^'"`]+)['"`])/g;
+          while ((match = fetchRegex.exec(content)) !== null) {
+            const rawEndpoint = match[1] || match[2];
+            if (rawEndpoint) {
+              const portMatch = rawEndpoint.match(/localhost:(\d+)|127\.0\.0\.1:(\d+)/);
+              frontendApiCalls.push({
+                fileNodeId,
+                sourceRelPath: relPath,
+                method: 'FETCH',
+                rawEndpoint,
+                normalizedRoute: normalizeRoute(rawEndpoint),
+                port: portMatch ? (portMatch[1] || portMatch[2]) : undefined
+              });
+            }
+          }
+
+          const axiosRegex = /(?:axios|apiClient|client|api|instance|http)\.(get|post|put|delete|patch)\s*(?:<[^>]+>)?\s*\(\s*['"`]([^'"`]+)['"`]/g;
+          while ((match = axiosRegex.exec(content)) !== null) {
+            const method = match[1].toUpperCase();
+            const rawEndpoint = match[2];
+            const portMatch = rawEndpoint.match(/localhost:(\d+)|127\.0\.0\.1:(\d+)/);
+            frontendApiCalls.push({
+              fileNodeId,
+              sourceRelPath: relPath,
+              method,
+              rawEndpoint,
+              normalizedRoute: normalizeRoute(rawEndpoint),
+              port: portMatch ? (portMatch[1] || portMatch[2]) : undefined
+            });
+          }
+
+          const genericUrlRegex = /['"`](https?:\/\/(?:localhost|127\.0\.0\.1):(\d+)(\/[^'"`?]*)?)['"`]/g;
+          while ((match = genericUrlRegex.exec(content)) !== null) {
+            const rawEndpoint = match[1];
+            const port = match[2];
+            const routePart = match[3] || '/';
+            frontendApiCalls.push({
+              fileNodeId,
+              sourceRelPath: relPath,
+              method: 'API',
+              rawEndpoint,
+              normalizedRoute: normalizeRoute(routePart),
+              port
+            });
           }
         }
 
@@ -375,7 +527,7 @@ export class GraphifyService {
           while ((match = scriptRegex.exec(content)) !== null) {
             const targetNodeId = resolveTargetNode(relPath, match[1]);
             if (targetNodeId && targetNodeId !== fileNodeId) {
-              addEdge(fileNodeId, targetNodeId, 'includes_script');
+              addEdge(fileNodeId, targetNodeId, 'includes_script', 'import');
             }
           }
 
@@ -383,7 +535,7 @@ export class GraphifyService {
           while ((match = linkRegex.exec(content)) !== null) {
             const targetNodeId = resolveTargetNode(relPath, match[1]);
             if (targetNodeId && targetNodeId !== fileNodeId) {
-              addEdge(fileNodeId, targetNodeId, 'links_stylesheet');
+              addEdge(fileNodeId, targetNodeId, 'links_stylesheet', 'style');
             }
           }
         }
@@ -397,13 +549,13 @@ export class GraphifyService {
             if (spec) {
               const targetNodeId = resolveTargetNode(relPath, spec);
               if (targetNodeId && targetNodeId !== fileNodeId) {
-                addEdge(fileNodeId, targetNodeId, 'imports_style');
+                addEdge(fileNodeId, targetNodeId, 'imports_style', 'style');
               }
             }
           }
         }
 
-        // 2d. Python Parsing (class, def, imports)
+        // 2d. Python Parsing (class, def, routes, imports)
         else if (ext === '.py') {
           const pyClassRegex = /^class\s+([A-Za-z0-9_]+)/gm;
           let match;
@@ -431,7 +583,7 @@ export class GraphifyService {
                 degree: 0,
                 symbols: []
               });
-              addEdge(fileNodeId, symNodeId, 'declares');
+              addEdge(fileNodeId, symNodeId, 'declares', 'declares');
             }
           }
 
@@ -461,7 +613,35 @@ export class GraphifyService {
                 degree: 0,
                 symbols: []
               });
-              addEdge(fileNodeId, symNodeId, 'declares');
+              addEdge(fileNodeId, symNodeId, 'declares', 'declares');
+            }
+          }
+
+          // FastAPI / Flask / Django route decorators
+          const pyRouteRegex = /@(?:app|router|api|blueprint|bp)\.(get|post|put|delete|patch|route)\s*\(\s*['"`]([^'"`]+)['"`]/g;
+          while ((match = pyRouteRegex.exec(content)) !== null) {
+            const method = (match[1] || 'GET').toUpperCase();
+            const rawRoute = match[2];
+            backendRoutes.push({
+              fileNodeId,
+              sourceRelPath: relPath,
+              method,
+              rawRoute,
+              normalizedRoute: normalizeRoute(rawRoute)
+            });
+            backendServerEntrypoints.add(fileNodeId);
+          }
+
+          const pyPortRegex = /(?:uvicorn\.run\([^)]*port\s*=\s*(\d{2,5})|app\.run\([^)]*port\s*=\s*(\d{2,5}))/g;
+          while ((match = pyPortRegex.exec(content)) !== null) {
+            const p = match[1] || match[2];
+            if (p) {
+              serverListeningPorts.push({
+                fileNodeId,
+                sourceRelPath: relPath,
+                port: p
+              });
+              backendServerEntrypoints.add(fileNodeId);
             }
           }
 
@@ -471,7 +651,7 @@ export class GraphifyService {
             if (mod) {
               const targetNodeId = resolveTargetNode(relPath, mod.replace(/\./g, '/'));
               if (targetNodeId && targetNodeId !== fileNodeId) {
-                addEdge(fileNodeId, targetNodeId, 'imports');
+                addEdge(fileNodeId, targetNodeId, 'imports', 'import');
               }
             }
           }
@@ -484,7 +664,7 @@ export class GraphifyService {
           while ((match = mdLinkRegex.exec(content)) !== null) {
             const targetNodeId = resolveTargetNode(relPath, match[1]);
             if (targetNodeId && targetNodeId !== fileNodeId) {
-              addEdge(fileNodeId, targetNodeId, 'references');
+              addEdge(fileNodeId, targetNodeId, 'references', 'references');
             }
           }
         }
@@ -493,7 +673,58 @@ export class GraphifyService {
       }
     }
 
-    // Pass 3: Calculate degrees & node sizing
+    // Pass 3: Cross-Boundary API Edge Matching (The Bridge)
+    this.logger.log(`[GraphifyService] Bridging cross-boundary APIs: ${frontendApiCalls.length} frontend calls, ${backendRoutes.length} backend routes`);
+
+    for (const call of frontendApiCalls) {
+      let matched = false;
+
+      // 1. Exact or Prefix Route Matching
+      for (const route of backendRoutes) {
+        if (call.fileNodeId === route.fileNodeId) continue;
+
+        const isExactMatch = call.normalizedRoute === route.normalizedRoute;
+        const isPrefixMatch =
+          call.normalizedRoute.startsWith(route.normalizedRoute) &&
+          route.normalizedRoute !== '/' &&
+          route.normalizedRoute.length > 2;
+
+        if (isExactMatch || isPrefixMatch) {
+          const label = `${call.method} ${call.rawEndpoint.split('?')[0]}`;
+          const title = `🌐 Cross-Boundary API: ${call.method} ${call.rawEndpoint} ➔ ${route.sourceRelPath}`;
+          addEdge(call.fileNodeId, route.fileNodeId, 'api-network', 'api-network', label, title, [6, 4]);
+          matched = true;
+        }
+      }
+
+      // 2. Port Matching (e.g. Frontend calls port 5000 -> backend file listens on 5000)
+      if (!matched && call.port) {
+        for (const lp of serverListeningPorts) {
+          if (call.fileNodeId === lp.fileNodeId) continue;
+          if (call.port === lp.port) {
+            const label = `API (port ${call.port})`;
+            const title = `🌐 Port Connection: ${call.sourceRelPath} ➔ ${lp.sourceRelPath} (Port ${call.port})`;
+            addEdge(call.fileNodeId, lp.fileNodeId, 'api-network', 'api-network', label, title, [6, 4]);
+            matched = true;
+          }
+        }
+      }
+
+      // 3. Fallback: If frontend calls '/api/...' and backend server entrypoints exist, connect to primary server entrypoint
+      if (!matched && call.normalizedRoute.startsWith('/api') && backendServerEntrypoints.size > 0) {
+        for (const srvNodeId of backendServerEntrypoints) {
+          if (call.fileNodeId === srvNodeId) continue;
+          const srvNode = nodesMap.get(srvNodeId);
+          const label = `${call.method} ${call.normalizedRoute}`;
+          const title = `🌐 API Endpoint Call: ${call.method} ${call.rawEndpoint} ➔ ${srvNode?.source_file || 'Server'}`;
+          addEdge(call.fileNodeId, srvNodeId, 'api-network', 'api-network', label, title, [6, 4]);
+          matched = true;
+          break; // connect to primary server
+        }
+      }
+    }
+
+    // Pass 4: Calculate degrees & node sizing
     const degreeCount = new Map<string, number>();
     for (const edge of edges) {
       degreeCount.set(edge.from, (degreeCount.get(edge.from) || 0) + 1);
@@ -521,7 +752,7 @@ export class GraphifyService {
       }
     };
 
-    this.logger.log(`[GraphifyService] Generated graph: ${nodes.length} nodes, ${edges.length} edges, ${communities.length} communities`);
+    this.logger.log(`[GraphifyService] Generated graph: ${nodes.length} nodes, ${edges.length} edges (${edges.filter(e => e.type === 'api-network').length} API bridges), ${communities.length} communities`);
     return this.cachedData;
   }
 
@@ -532,6 +763,9 @@ export class GraphifyService {
     const data = await this.generateGraphData(false);
     const now = new Date().toISOString().split('T')[0];
 
+    const apiEdges = data.edges.filter(e => e.type === 'api-network');
+    const importEdges = data.edges.filter(e => e.type !== 'api-network');
+
     let md = `# Project Architecture & Codebase Map
 
 > Generated automatically by **Chanakya AI Enhancer Graphify Engine** on ${now}.
@@ -541,8 +775,21 @@ export class GraphifyService {
 ## 📊 Overview & Metrics
 
 - **Total Files / Symbols Indexed**: ${data.stats.nodeCount}
-- **Dependency Connections**: ${data.stats.edgeCount}
-- **Functional Communities**: ${data.stats.communityCount}
+- **Static Dependencies**: ${importEdges.length}
+- **Cross-Boundary API Bridges (Frontend ⇄ Backend)**: ${apiEdges.length}
+- **Functional Communities / Modules**: ${data.stats.communityCount}
+
+---
+
+## 🌐 Cross-Boundary API Network Connections (Frontend ⇄ Backend)
+
+${apiEdges.length > 0 ? `| Frontend Caller | HTTP Endpoint / Label | Backend Server Definition |
+|---|---|---|
+${apiEdges.map(e => {
+  const fromNode = data.nodes.find(n => n.id === e.from);
+  const toNode = data.nodes.find(n => n.id === e.to);
+  return `| \`${fromNode?.source_file || e.from}\` | \`${e.label || 'API Call'}\` | \`${toNode?.source_file || e.to}\` |`;
+}).join('\n')}` : `*No direct HTTP API calls detected.*`}
 
 ---
 
@@ -572,7 +819,7 @@ export class GraphifyService {
 |---|---|---|
 `;
 
-    for (const edge of data.edges.slice(0, 50)) {
+    for (const edge of importEdges.slice(0, 50)) {
       const fromNode = data.nodes.find((n) => n.id === edge.from);
       const toNode = data.nodes.find((n) => n.id === edge.to);
       if (fromNode && toNode) {
