@@ -194,19 +194,4 @@ export class SkillRegistry {
         }
     }
 
-    public rollbackSkill(category: string, versionToRollbackTo: number): void {
-        const metadata = this.loadMetadata(category);
-        if (!metadata) return;
-
-        const versionInfo = metadata.versions.find(v => v.version === versionToRollbackTo);
-        if (versionInfo) {
-            if (metadata.bestVersion) {
-                const prevBest = metadata.versions.find(v => v.version === metadata.bestVersion);
-                if (prevBest) prevBest.status = 'archived';
-            }
-            versionInfo.status = 'best';
-            metadata.bestVersion = versionToRollbackTo;
-            this.saveMetadata(category, metadata);
-        }
-    }
 }

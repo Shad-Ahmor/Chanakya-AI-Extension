@@ -139,9 +139,9 @@ export class UnifiedContextBuilder {
                 if (item.type === 'selection') {
                     userContent += `[Code Selection: ${item.name}]\n\`\`\`\n${item.content}\n\`\`\`\n\n`;
                 } else if (item.type === 'file') {
-                    userContent += `[File Reference: ${item.name} (${item.path || ''})]\n\`\`\`\n${item.content}\n\`\`\`\n\n`;
-                } else if (item.type === 'text') {
-                    userContent += `[Context: ${item.title || 'Instruction'}]\n${item.content}\n\n`;
+                    userContent += `[File Reference: ${item.name} (${(item as any).path || ''})]\n\`\`\`\n${item.content}\n\`\`\`\n\n`;
+                } else if ((item as any).type === 'text') {
+                    userContent += `[Context: ${(item as any).title || 'Instruction'}]\n${item.content}\n\n`;
                 } else {
                     userContent += `[Context Item: ${item.name || 'Unknown'}]\n${item.content}\n\n`;
                 }
