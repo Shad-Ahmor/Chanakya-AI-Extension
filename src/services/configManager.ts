@@ -123,6 +123,7 @@ export class ConfigManager {
         enableGitSnapshots: parsed.enableGitSnapshots ?? true,
         activeChatModelId: parsed.activeChatModelId || validatedModels[0]?.id,
         activeAutocompleteModelId: parsed.activeAutocompleteModelId || validatedModels[0]?.id,
+        activeOptimizerModelId: parsed.activeOptimizerModelId || parsed.activeChatModelId || validatedModels[0]?.id,
         models: validatedModels
       };
 
@@ -260,6 +261,7 @@ export class ConfigManager {
             enableGitSnapshots: parsed.enableGitSnapshots ?? true,
             activeChatModelId: parsed.activeChatModelId || models[0]?.id,
             activeAutocompleteModelId: parsed.activeAutocompleteModelId || models[0]?.id,
+            activeOptimizerModelId: parsed.activeOptimizerModelId || parsed.activeChatModelId || models[0]?.id,
             models
           };
         }
@@ -342,6 +344,7 @@ export class ConfigManager {
       enableGitSnapshots: true,
       activeChatModelId: 'ril-ai-foundry-qwen-27b',
       activeAutocompleteModelId: 'local-ollama-qwen',
+      activeOptimizerModelId: 'openai-gpt-4-1',
       models: defaultModels
     };
 

@@ -1,50 +1,58 @@
-import { AIService } from './aiService';
+import { LLMGateway } from './llmGateway';
+import { ConfigManager } from './configManager';
+import { SkillRegistry } from './skillOpt/skillRegistry';
 
 export interface TaskRoutingInfo {
     needsRAG: boolean;
     needsMCP: boolean;
-    needsSkillOps: boolean;
+    relevantSkills: string[];
     needsRules: boolean;
 }
 
 export class TaskUnderstander {
     private static instance: TaskUnderstander;
-    private aiService = AIService.getInstance();
+    private llmGateway = LLMGateway.getInstance();
+    private workspaceRoot: string;
 
-    private constructor() {}
+    private constructor(workspaceRoot: string) {
+        this.workspaceRoot = workspaceRoot;
+    }
 
-    public static getInstance(): TaskUnderstander {
+    public static getInstance(workspaceRoot: string): TaskUnderstander {
         if (!TaskUnderstander.instance) {
-            TaskUnderstander.instance = new TaskUnderstander();
+            TaskUnderstander.instance = new TaskUnderstander(workspaceRoot);
         }
         return TaskUnderstander.instance;
     }
 
     public async understandTask(prompt: string): Promise<TaskRoutingInfo> {
+        const registry = SkillRegistry.getInstance(this.workspaceRoot);
+        const activeSkills = registry.listSkills().filter(s => {
+            const meta = registry.getSkillCategoryMetadata(s);
+            return meta && meta.enabled !== false && !meta.userDeleted;
+        });
+
+        const skillDescriptions = activeSkills.map(s => {
+            const meta = registry.getSkillCategoryMetadata(s);
+            return `- ${s}: ${meta?.description || 'No description'}`;
+        }).join('\n');
+
         const sysPrompt = `You are the Task Routing Understander for an autonomous AI agent.
-Analyze the user's prompt and determine which of the following 4 independent subsystems are relevant to fulfilling it.
-You may select multiple subsystems. Do not force exactly one child.
+Analyze the user's prompt and determine which subsystems and specific skills are relevant to fulfilling it.
 
-Rules should normally be considered for every task if the project architecture requires global safety rules (e.g. constraints, security).
-SkillOps should provide behavioral guidance.
-RAG should provide knowledge.
-MCP should provide actions/tools.
-
-Examples:
-- Question about project documentation: RAG=true, MCP=false, SkillOps=false/true, Rules=true
-- File modification: RAG=true/false, MCP=true, SkillOps=true, Rules=true
-- General question: RAG=false, MCP=false, SkillOps=false/true, Rules=true
+Available Skills:
+${skillDescriptions}
 
 1. needsRAG: True if the user asks to search the codebase, read documentation, look up existing code, or needs project knowledge.
 2. needsMCP: True if the user asks to interact with external tools, APIs, modify files, run terminal commands, or perform actions.
-3. needsSkillOps: True if the task requires specific behavioral workflows, automation, or complex procedural guidance.
+3. relevantSkills: An array of skill names (from the Available Skills list) that provide relevant behavioral guidance for this task.
 4. needsRules: True for almost all tasks, as it enforces global safety and architectural constraints.
 
 Return your analysis as ONLY a JSON object matching exactly this schema, with no markdown formatting or extra text:
 {
   "needsRAG": boolean,
   "needsMCP": boolean,
-  "needsSkillOps": boolean,
+  "relevantSkills": string[],
   "needsRules": boolean
 }
 
@@ -55,9 +63,14 @@ ${prompt}
         return new Promise<TaskRoutingInfo>((resolve, reject) => {
             let fullText = '';
             
-            this.aiService.streamCompletion({
+            const config = ConfigManager.getInstance().getConfig();
+            
+            this.llmGateway.streamChat({
                 prompt: sysPrompt,
-                systemInstruction: 'You are a JSON-only API. Respond only with valid JSON. Do not use markdown blocks.',
+                contextItems: [],
+                existingMessages: [{ role: 'system', content: 'You are a JSON-only API. Respond only with valid JSON. Do not use markdown blocks.' }],
+                targetModelId: config.activeChatModelId,
+                optimizerConfig: { taskType: 'chat' }, // Use fast model for routing
                 callbacks: {
                     onChunk: (chunk: string) => {
                         fullText += chunk;
@@ -66,14 +79,17 @@ ${prompt}
                         try {
                             const cleanedText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
                             const result = JSON.parse(cleanedText) as TaskRoutingInfo;
+                            
+                            const filteredSkills = (result.relevantSkills || []).filter(s => activeSkills.includes(s));
+                            
                             resolve({
                                 needsRAG: !!result.needsRAG,
                                 needsMCP: !!result.needsMCP,
-                                needsSkillOps: !!result.needsSkillOps,
+                                relevantSkills: filteredSkills,
                                 needsRules: !!result.needsRules
                             });
                         } catch (e) {
-                            reject(new Error('Failed to parse TaskUnderstander JSON: ' + (e as Error).message));
+                            resolve({ needsRAG: false, needsMCP: true, relevantSkills: ['react'], needsRules: true });
                         }
                     },
                     onError: (error: Error) => {

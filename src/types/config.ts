@@ -64,5 +64,6 @@ export interface AppConfig {
   readonly enableGitSnapshots?: boolean | undefined;
   readonly activeChatModelId?: string | undefined;
   readonly activeAutocompleteModelId?: string | undefined;
+  readonly activeOptimizerModelId?: string | undefined;
   readonly models: readonly ModelConfig[];
 }

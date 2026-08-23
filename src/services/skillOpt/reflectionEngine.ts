@@ -1,23 +1,27 @@
 import { Trajectory } from './trajectoryRecorder';
-import { AIService } from '../aiService';
+import { LLMGateway } from '../llmGateway';
+import { ConfigManager } from '../configManager';
 
 export interface Observation {
     problem: string;
     evidenceCount: number;
 }
 
-export interface Improvement {
-    instruction: string;
+export interface ProceduralRule {
+    whatWorked: string;
+    whatFailed: string;
+    causeOfFailure: string;
+    proceduralRule: string;
 }
 
 export interface ReflectionResult {
     observations: Observation[];
-    improvements: Improvement[];
+    improvements: ProceduralRule[];
 }
 
 export class ReflectionEngine {
     private static instance: ReflectionEngine;
-    private aiService = AIService.getInstance();
+    private llmGateway = LLMGateway.getInstance();
 
     private constructor() {}
 
@@ -47,7 +51,10 @@ Return your analysis as ONLY a JSON object matching exactly this schema, with no
   ],
   "improvements": [
     {
-      "instruction": "A clear, actionable instruction for the agent to prevent this in the future."
+      "whatWorked": "Description of actions that succeeded.",
+      "whatFailed": "Description of the specific failure.",
+      "causeOfFailure": "Root cause of why the failure occurred.",
+      "proceduralRule": "A generalized, reusable behavioral rule to prevent this failure. Do not just summarize."
     }
   ]
 }
@@ -59,9 +66,13 @@ ${JSON.stringify(trajectories, null, 2)}
         return new Promise<ReflectionResult>((resolve, reject) => {
             let fullText = '';
             
-            this.aiService.streamCompletion({
+            const activeOptimizerModelId = ConfigManager.getInstance().getConfig().activeOptimizerModelId;
+
+            this.llmGateway.streamChat({
                 prompt: prompt,
-                systemInstruction: 'You are a JSON-only API. Respond only with valid JSON. Do not use markdown blocks.',
+                contextItems: [],
+                existingMessages: [{ role: 'system', content: 'You are a JSON-only API. Respond only with valid JSON. Do not use markdown blocks.' }],
+                targetModelId: activeOptimizerModelId,
                 callbacks: {
                     onChunk: (chunk: string) => {
                         fullText += chunk;

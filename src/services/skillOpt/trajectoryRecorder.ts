@@ -27,9 +27,20 @@ export class TrajectoryRecorder {
     private currentTrajectories: Map<string, Trajectory> = new Map();
 
     private constructor(workspaceRoot: string) {
-        this.trajectoriesDir = path.join(workspaceRoot, '.agents', 'trajectories');
-        if (!fs.existsSync(this.trajectoriesDir)) {
-            fs.mkdirSync(this.trajectoriesDir, { recursive: true });
+        if (!workspaceRoot) {
+            // Fallback to a temporary directory if no workspace is open
+            const os = require('os');
+            this.trajectoriesDir = path.join(os.tmpdir(), 'chanakya-agents', 'trajectories');
+        } else {
+            this.trajectoriesDir = path.join(workspaceRoot, '.agents', 'trajectories');
+        }
+        
+        try {
+            if (!fs.existsSync(this.trajectoriesDir)) {
+                fs.mkdirSync(this.trajectoriesDir, { recursive: true });
+            }
+        } catch (e) {
+            console.error('Failed to create trajectories dir:', e);
         }
     }
 
@@ -101,7 +112,11 @@ export class TrajectoryRecorder {
 
     private persistTrajectory(trajectory: Trajectory): void {
         const filePath = path.join(this.trajectoriesDir, `${trajectory.taskId}.json`);
-        fs.writeFileSync(filePath, JSON.stringify(trajectory, null, 2), 'utf8');
+        try {
+            fs.writeFileSync(filePath, JSON.stringify(trajectory, null, 2), 'utf8');
+        } catch (e) {
+            console.error('Failed to write trajectory to disk:', e);
+        }
     }
 
     public getTrajectory(taskId: string): Trajectory | null {

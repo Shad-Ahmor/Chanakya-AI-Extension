@@ -77,12 +77,18 @@ export class LLMGateway {
     callbacks: StreamCallbacks;
     cancellationToken?: vscode.CancellationToken;
     existingMessages?: any[];
+    targetModelId?: string | undefined;
+    taskId?: string;
+    skillName?: string;
+    skillVersion?: number;
+    customWorkspace?: string;
   }): Promise<void> {
-    const { prompt, contextItems, optimizerConfig, callbacks, cancellationToken, existingMessages } = params;
+    const { prompt, contextItems, optimizerConfig, callbacks, cancellationToken, existingMessages, targetModelId, taskId, skillName, skillVersion, customWorkspace } = params;
     const config = ConfigManager.getInstance().getConfig();
     const allModels = config.models || [];
     
-    let requestedModel = config.models.find((m) => m.id === config.activeChatModelId) || config.models[0];
+    const modelIdToUse = targetModelId || config.activeChatModelId;
+    let requestedModel = config.models.find((m) => m.id === modelIdToUse) || config.models[0];
     if (!requestedModel) {
       callbacks.onError(new Error('No model configured. Please add a model in Model Hub.'));
       return;
@@ -195,7 +201,12 @@ export class LLMGateway {
           ...(optimizerConfig ? { optimizerConfig } : {}),
           callbacks: interceptedCallbacks,
           ...(cancellationToken ? { cancellationToken } : {}),
-          ...(optimizedMessages ? { existingMessages: optimizedMessages } : {})
+          ...(optimizedMessages ? { existingMessages: optimizedMessages } : {}),
+          targetModelId: currentModel.id,
+          ...(taskId ? { taskId } : {}),
+          ...(skillName ? { skillName } : {}),
+          ...(skillVersion !== undefined ? { skillVersion } : {}),
+          ...(customWorkspace ? { customWorkspace } : {})
         });
         
         // If it successfully completes, we exit

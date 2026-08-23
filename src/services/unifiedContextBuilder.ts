@@ -24,6 +24,8 @@ export interface ContextBuilderParams {
     optimizerConfig?: TaskRoutingInfo | any;
     contextItems: ContextItem[];
     existingMessages?: any[];
+    skillVersion?: number;
+    skillName?: string;
 }
 
 export class UnifiedContextBuilder {
@@ -75,15 +77,16 @@ export class UnifiedContextBuilder {
             }
         }
 
-        // 3. SkillOps
-        if (params.optimizerConfig?.needsSkillOps) {
+        // 3. SkillOps (Only injecting dynamically routed relevant skills)
+        if (params.optimizerConfig?.relevantSkills && params.optimizerConfig.relevantSkills.length > 0) {
             try {
                 const registry = SkillRegistry.getInstance(params.workspaceRoot);
-                const allCategories = registry.listSkills();
                 let skillOpsText = '';
                 
-                for (const category of allCategories) {
-                    const best = registry.getBestSkill(category);
+                for (const category of params.optimizerConfig.relevantSkills) {
+                    const best = (params.skillVersion !== undefined && params.skillName === category) 
+                        ? registry.loadSkill(category, params.skillVersion) 
+                        : registry.getBestSkill(category);
                     if (best) {
                         const newSkillText = `[ACTIVE SKILL: ${category} v${best.metadata.version}]\n${best.content}\n[/ACTIVE SKILL]\n\n`;
                         // Prevent Skill context explosion

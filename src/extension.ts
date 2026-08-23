@@ -13,6 +13,9 @@ import { ConversationManager } from './services/ConversationManager';
 import { EvaluationService } from './services/evaluationService';
 import { WorkspaceIndexer } from './services/workspaceIndexer';
 import { GraphifyService } from './services/graphifyService';
+import { runReactPilot } from './commands/runReactPilot';
+import { BuiltInSkillSeeder } from './services/skillOpt/builtInSkillSeeder';
+import { SkillRegistry } from './services/skillOpt/skillRegistry';
 /**
  * Chanakya AI Enhancer Extension Activation Entrypoint (Phases 1-5 Complete)
  */
@@ -42,6 +45,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // 1.9 Register Graphify Incremental Watcher
   GraphifyService.getInstance().registerIncrementalWatcher(context);
+
+  // 1.10 Seed Built-In Skills
+  if (wsFolders && wsFolders.length > 0) {
+    const registry = SkillRegistry.getInstance(wsFolders[0].uri.fsPath);
+    BuiltInSkillSeeder.seedSkills(registry);
+  }
 
   // 2. Register Sidebar Provider (Replaces Full Screen Dashboard)
   const sidebarProvider = new SidebarProvider(context.extensionUri, context);
@@ -153,6 +162,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(
     vscode.commands.registerCommand('aiEnhancer.openModelsHub', (args?: { tab?: string }) => {
       dashboardProvider.show(args);
+    }),
+    vscode.commands.registerCommand('aiEnhancer.runReactPilot', () => {
+      runReactPilot();
     }),
     vscode.commands.registerCommand('aiEnhancer.openGraphify', () => {
       dashboardProvider.show({ tab: 'graphify' });

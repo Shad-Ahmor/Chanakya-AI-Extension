@@ -104,8 +104,10 @@ export type FromWebviewMessage =
   | { type: 'skillOps:deleteSkill'; payload: { category: string } }
   | { type: 'skillOps:importSkill' }
   | { type: 'skillOps:exportSkill'; payload: { category: string } }
-  | { type: 'skillOps:runOptimization'; payload: { skillName: string } }
+  | { type: 'skillOps:runOptimization'; payload: { skillName: string; epochs?: number } }
   | { type: 'skillOps:rollbackSkill'; payload: { skillName: string; version: number } }
+  | { type: 'skillOps:restoreBuiltIn'; payload: { category: string } }
+  | { type: 'skillOps:getSkillContent'; payload: { category: string; version: number } }
   | { type: 'updateVscodeSetting'; payload: { key: string; value: any } }
   | { type: 'saveConfig'; payload: { config: AppConfig; rawYaml?: string | undefined } }
   | { type: 'testModelConnection'; payload: { modelConfig: ModelConfig } }
@@ -162,6 +164,7 @@ export type ToWebviewMessage =
   | { type: 'skillOps:historyResult'; payload: { skillName: string; history: any[] } }
   | { type: 'skillOps:optimizationResult'; payload: { result: any; error?: string } }
   | { type: 'skillOps:rollbackResult'; payload: { success: boolean; error?: string } }
+  | { type: 'skillOps:skillContentResult'; payload: { category: string; version: number; content: string | null } }
   | { type: 'vscodeSettingsResult'; payload: { settings: Record<string, any> } }
   | { type: 'testModelResult'; payload: { modelId: string; success: boolean; latencyMs?: number | undefined; error?: string | undefined } }
   | { type: 'updateTaskStatus'; payload: { messageId: string; task: TaskStatus } }

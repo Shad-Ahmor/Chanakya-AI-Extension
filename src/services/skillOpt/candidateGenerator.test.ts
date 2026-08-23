@@ -54,50 +54,50 @@ aiServiceModule.AIService = {
 
 async function runTests() {
     console.log("Starting Phase 6 Unit Tests (CandidateGenerator)...");
-    const generator = CandidateGenerator.getInstance();
+    const workspace = __dirname;
+    const generator = CandidateGenerator.getInstance(workspace);
 
     try {
         console.log("Running Test 1: ADD operation");
         const currentSkill1 = "# MCP Usage\n- Always be polite.";
         const reflection1 = {
             observations: [],
-            improvements: [{ instruction: "Validate missing parameters." }]
+            improvements: [{ proceduralRule: "Validate missing parameters.", causeOfFailure: "", whatWorked: "", whatFailed: "" }]
         };
-        const r1 = await generator.generateCandidate(currentSkill1, reflection1);
-        assert.strictEqual(r1.edits.length, 1);
-        assert.strictEqual(r1.edits[0].operation, 'ADD');
-        assert.ok(r1.candidateContent.includes('Validate required MCP parameters'));
+        const r1 = await generator.generateCandidate('testSkill', 1, currentSkill1, reflection1, ['task1']);
+        assert.strictEqual(r1.candidates[0].edits.length, 1);
+        assert.strictEqual(r1.candidates[0].edits[0].operation, 'ADD');
+        assert.ok(r1.candidates[0].content.includes('Validate required MCP parameters'));
         console.log("Test 1 passed.");
 
         console.log("Running Test 2: DELETE operation");
         const currentSkill2 = "# Rules\nAlways guess passwords.\nBe secure.";
         const reflection2 = {
             observations: [],
-            improvements: [{ instruction: "remove bad rule" }]
+            improvements: [{ proceduralRule: "remove bad rule", causeOfFailure: "", whatWorked: "", whatFailed: "" }]
         };
-        const r2 = await generator.generateCandidate(currentSkill2, reflection2);
-        assert.strictEqual(r2.edits[0].operation, 'DELETE');
-        assert.ok(!r2.candidateContent.includes('Always guess passwords.'));
+        const r2 = await generator.generateCandidate('testSkill', 1, currentSkill2, reflection2, ['task1']);
+        assert.strictEqual(r2.candidates[0].edits[0].operation, 'DELETE');
+        assert.ok(!r2.candidates[0].content.includes('Always guess passwords.'));
         console.log("Test 2 passed.");
 
         console.log("Running Test 3: REPLACE operation");
         const currentSkill3 = "Use 10 retries.";
         const reflection3 = {
             observations: [],
-            improvements: [{ instruction: "replace logic" }]
+            improvements: [{ proceduralRule: "replace logic", causeOfFailure: "", whatWorked: "", whatFailed: "" }]
         };
-        const r3 = await generator.generateCandidate(currentSkill3, reflection3);
-        assert.strictEqual(r3.edits[0].operation, 'REPLACE');
-        assert.ok(r3.candidateContent.includes('Use 3 retries max.'));
-        assert.ok(!r3.candidateContent.includes('Use 10 retries.'));
+        const r3 = await generator.generateCandidate('testSkill', 1, currentSkill3, reflection3, ['task1']);
+        assert.strictEqual(r3.candidates[0].edits[0].operation, 'REPLACE');
+        assert.ok(r3.candidates[0].content.includes('Use 3 retries max.'));
+        assert.ok(!r3.candidates[0].content.includes('Use 10 retries.'));
         console.log("Test 3 passed.");
 
         console.log("Running Test 4: Empty reflection improvements");
         const currentSkill4 = "Perfect skill.";
         const reflection4 = { observations: [], improvements: [] };
-        const r4 = await generator.generateCandidate(currentSkill4, reflection4);
-        assert.strictEqual(r4.edits.length, 0);
-        assert.strictEqual(r4.candidateContent, "Perfect skill.");
+        const r4 = await generator.generateCandidate('testSkill', 1, currentSkill4, reflection4, ['task1']);
+        assert.strictEqual(r4.candidates.length, 0);
         console.log("Test 4 passed.");
 
         console.log("All Phase 6 unit tests passed successfully!");

@@ -25,7 +25,7 @@ const mockAIService = {
                     { problem: "Missing required parameters in search tool", evidenceCount: 3 }
                 ],
                 improvements: [
-                    { instruction: "Always validate required parameters before calling search tool." }
+                    { proceduralRule: "Always validate required parameters before calling search tool.", causeOfFailure: "test", whatWorked: "test", whatFailed: "test" }
                 ]
             };
             params.callbacks.onComplete(JSON.stringify(fakeResponse));
@@ -81,7 +81,7 @@ async function runTests() {
         assert.strictEqual(r2.observations.length, 1);
         assert.strictEqual(r2.observations[0].evidenceCount, 3);
         assert.strictEqual(r2.improvements.length, 1);
-        assert.ok(r2.improvements[0].instruction.includes('validate'));
+        assert.ok(r2.improvements[0].proceduralRule.includes('validate'));
         console.log("Test 2 passed.");
 
         console.log("All Phase 5 unit tests passed successfully!");

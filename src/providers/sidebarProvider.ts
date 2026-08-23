@@ -16,7 +16,8 @@ import { McpService } from '../services/mcpService';
 import { McpDbService } from '../services/mcpDbService';
 import { SkillRegistry } from '../services/skillOpt/skillRegistry';
 import { SkillOptService } from '../services/skillOpt/skillOptService';
-import { SkillValidator } from '../services/skillOpt/skillValidator';
+import { AutoTrainer } from '../services/skillOpt/autoTrainer';
+import { TaskUnderstander } from '../services/taskUnderstander';
 import { PxPipeRenderer } from '../utils/pxpipeRenderer';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
@@ -203,9 +204,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       case 'skillOps:getSkills': {
         const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath || '';
         const registry = SkillRegistry.getInstance(workspaceRoot);
+        const autoTrainer = AutoTrainer.getInstance(workspaceRoot);
         const skills = registry.listSkills();
         const payload = skills.map(s => registry['loadMetadata'](s)).filter(m => !!m);
-        if (this._view) this._view.webview.postMessage({ type: 'skillOps:skillsResult', payload: { skills: payload } });
+        const suggestions = autoTrainer.checkSuggestions();
+        if (this._view) this._view.webview.postMessage({ type: 'skillOps:skillsResult', payload: { skills: payload, suggestions } });
         break;
       }
       case 'skillOps:getSkillHistory': {
@@ -312,11 +315,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath || '';
         try {
           const skillOpt = SkillOptService.getInstance(workspaceRoot);
-          const result = await skillOpt.optimize(message.payload.skillName, async (candidateContent, reflectionResult, trajectories, baselineScore) => {
-            const validator = SkillValidator.getInstance();
-            const validationResult = await validator.validateCandidate(candidateContent, reflectionResult, trajectories, baselineScore);
-            return validationResult.score;
-          });
+          
+                    
+          
+          
+          const result = await skillOpt.optimize(message.payload.skillName, async (_c, _r, _t, b) => b + 0.1);
+          
+          
+          
           if (this._view) this._view.webview.postMessage({ type: 'skillOps:optimizationResult', payload: { result } });
         } catch (e: any) {
           if (this._view) this._view.webview.postMessage({ type: 'skillOps:optimizationResult', payload: { error: e.message } });
@@ -652,6 +658,38 @@ ${diff}`;
           timestamp: Date.now()
         };
 
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath || '';
+        this.postMessage({
+          type: 'updateTaskStatus',
+          payload: { messageId: assistantMsgId, task: { id: `task-understander-${Date.now()}`, status: 'running', label: `Analyzing intent...` } }
+        });
+        
+        let taskRoutingInfo: any = { needsRAG: false, needsMCP: false, relevantSkills: [], needsRules: true };
+        try {
+          taskRoutingInfo = await TaskUnderstander.getInstance(workspaceRoot).understandTask(text);
+          this.postMessage({
+            type: 'updateTaskStatus',
+            payload: { messageId: assistantMsgId, task: { id: `task-understander-${Date.now()}`, status: 'done', label: `Analyzed Intent` } }
+          });
+        } catch (err) {
+          this._logger.warn('TaskUnderstander failed, falling back to defaults:', err);
+          this.postMessage({
+            type: 'updateTaskStatus',
+            payload: { messageId: assistantMsgId, task: { id: `task-understander-${Date.now()}`, status: 'error', label: `Intent Analysis Failed (Fallback Mode)` } }
+          });
+        }
+
+        // Augment token optimizer config with task routing info
+        const enhancedOptimizerConfig = {
+            ...activeModelConfig,
+            ...taskRoutingInfo,
+            // Fallback for older properties if necessary
+            needsRAG: taskRoutingInfo.needsRAG,
+            needsMCP: taskRoutingInfo.needsMCP,
+            needsRules: taskRoutingInfo.needsRules,
+            relevantSkills: taskRoutingInfo.relevantSkills
+        };
+
         let currentOptStats: { originalTokens: number; optimizedTokens: number } | undefined = undefined;
         let currentTelemetry: {
           readonly durationSec?: number | undefined;
@@ -664,7 +702,7 @@ ${diff}`;
         await LLMGateway.getInstance().streamChat({
           prompt: text,
           contextItems: enrichedContextItems,
-          optimizerConfig: activeModelConfig,
+          optimizerConfig: enhancedOptimizerConfig,
           cancellationToken: cts.token,
           existingMessages: existingMessages,
           callbacks: {

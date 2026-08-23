@@ -8,10 +8,16 @@ export default function SkillOpsView() {
   const [history, setHistory] = useState<any[]>([]);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [optResult, setOptResult] = useState<any>(null);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
 
   // Modal States
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showOptimizeModal, setShowOptimizeModal] = useState(false);
+  
+  // Optimization States
+  const [optEpochs, setOptEpochs] = useState(3);
+  const [optProgress, setOptProgress] = useState<any>(null);
   
   // Form States
   const [formName, setFormName] = useState('');
@@ -26,6 +32,7 @@ export default function SkillOpsView() {
       switch (message.type) {
         case 'skillOps:skillsResult':
           setSkills(message.payload.skills);
+          setSuggestions(message.payload.suggestions || []);
           if (message.payload.skills.length > 0 && !activeSkillName) {
             setActiveSkillName(message.payload.skills[0].skillName);
           } else if (message.payload.skills.length === 0) {
@@ -37,9 +44,13 @@ export default function SkillOpsView() {
             setHistory(message.payload.history);
           }
           break;
+        case 'skillOps:optimizationProgress':
+          setOptProgress(message.payload);
+          break;
         case 'skillOps:optimizationResult':
           setIsOptimizing(false);
           setOptResult(message.payload.result || { error: message.payload.error });
+          setOptProgress(null);
           vscode.postMessage({ type: 'skillOps:getSkills' });
           vscode.postMessage({ type: 'skillOps:getSkillHistory', payload: { skillName: activeSkillName } });
           break;
@@ -63,7 +74,8 @@ export default function SkillOpsView() {
   const runOptimization = () => {
     setIsOptimizing(true);
     setOptResult(null);
-    vscode.postMessage({ type: 'skillOps:runOptimization', payload: { skillName: activeSkillName } });
+    setOptProgress(null);
+    vscode.postMessage({ type: 'skillOps:runOptimization', payload: { skillName: activeSkillName, epochs: optEpochs } });
   };
 
   const rollbackSkill = (version: number) => {
@@ -191,12 +203,22 @@ export default function SkillOpsView() {
                 className={`p-2 rounded cursor-pointer transition border ${activeSkillName === s.skillName ? 'bg-[var(--vscode-list-activeSelectionBackground)] text-[var(--vscode-list-activeSelectionForeground)] border-[var(--vscode-list-activeSelectionBackground)]' : 'hover:bg-[var(--vscode-list-hoverBackground)] border-transparent'}`}
               >
                 <div className="flex justify-between items-center mb-1">
-                  <div className="font-bold text-sm truncate">{s.skillName}</div>
+                  <div className={`font-bold text-sm truncate flex items-center gap-1 ${s.userDeleted ? 'opacity-50 line-through text-red-400' : ''}`}>
+                    {s.skillName}
+                    {suggestions.some(sg => sg.skillName === s.skillName) && (
+                      <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse ml-1" title="Training suggested"></div>
+                    )}
+                  </div>
                   <div className="flex items-center gap-1">
                     <span className="text-[10px] px-1.5 py-0.5 bg-black/20 rounded font-mono">v{s.bestVersion}</span>
                     <button 
-                      onClick={(e) => { e.stopPropagation(); handleToggle(s.skillName, s.enabled !== false); }}
-                      className="opacity-70 hover:opacity-100"
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        if (!s.userDeleted) {
+                          handleToggle(s.skillName, s.enabled !== false); 
+                        }
+                      }}
+                      className={`opacity-70 hover:opacity-100 ${s.userDeleted ? 'cursor-not-allowed opacity-30' : ''}`}
                     >
                       {s.enabled !== false ? <ToggleRight className="w-4 h-4 text-emerald-400" /> : <ToggleLeft className="w-4 h-4 text-gray-500" />}
                     </button>
@@ -219,26 +241,47 @@ export default function SkillOpsView() {
                 <div>
                   <h3 className="text-xl font-extrabold flex items-center gap-2">
                     {activeSkill.skillName}
-                    <span className="text-xs bg-sky-500/20 text-sky-400 px-2 py-0.5 rounded-full border border-sky-500/30">
-                      v{activeSkill.bestVersion}
-                    </span>
-                    {activeSkill.enabled === false && (
-                      <span className="text-xs bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full border border-red-500/30">
-                        Disabled
-                      </span>
-                    )}
                   </h3>
                   {activeSkill.description && <p className="text-[var(--vscode-descriptionForeground)] mt-1 text-sm">{activeSkill.description}</p>}
+                  
+                  <div className="flex gap-4 text-xs mt-3 text-[var(--vscode-descriptionForeground)] font-medium">
+                    <div className="flex items-center gap-1">
+                      <span className="opacity-70">Source:</span> 
+                      <span className="text-[var(--vscode-foreground)]">{activeSkill.source === 'SkillOps' ? 'SkillOps' : activeSkill.builtIn ? 'Built-in' : 'User Created'}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="opacity-70">Version:</span> 
+                      <span className="text-[var(--vscode-foreground)]">v{activeSkill.bestVersion}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="opacity-70">Score:</span> 
+                      <span className="text-[var(--vscode-foreground)]">
+                        {activeSkill.versions?.find((v: any) => v.version === activeSkill.bestVersion)?.score ? `${(activeSkill.versions.find((v: any) => v.version === activeSkill.bestVersion).score * 100).toFixed(0)}%` : 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-2 text-xs mt-2 font-medium">
+                    <span className="text-[var(--vscode-descriptionForeground)] opacity-70">Status:</span>
+                    {activeSkill.userDeleted ? (
+                      <span className="flex items-center gap-1 text-red-400"><div className="w-2 h-2 rounded-full bg-red-400"></div> Deleted</span>
+                    ) : activeSkill.enabled === false ? (
+                      <span className="flex items-center gap-1 text-yellow-400"><div className="w-2 h-2 rounded-full bg-yellow-400"></div> Disabled</span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-emerald-400"><div className="w-2 h-2 rounded-full bg-emerald-400"></div> Active</span>
+                    )}
+                  </div>
                 </div>
                 
                 <div className="flex items-center gap-1 bg-[var(--vscode-editor-background)] p-1 rounded-md border border-[var(--vscode-widget-border)]">
                    <button 
                     onClick={() => {
                       setFormDescription(activeSkill.description || '');
-                      setFormContent('');
+                      setFormContent(activeSkill.content || '');
                       setShowEditModal(true);
                     }}
-                    className="p-1.5 hover:bg-sky-500/20 hover:text-sky-400 rounded transition" title="Edit New Version"
+                    disabled={activeSkill.userDeleted}
+                    className="p-1.5 hover:bg-sky-500/20 hover:text-sky-400 rounded transition disabled:opacity-30 disabled:cursor-not-allowed" title="Edit New Version"
                   >
                     <Edit className="w-3.5 h-3.5" />
                   </button>
@@ -250,26 +293,68 @@ export default function SkillOpsView() {
                   </button>
                   <button 
                     onClick={() => {
-                      if (confirm('Delete this skill entirely?')) {
+                      if (confirm(activeSkill.builtIn ? 'Soft-delete this built-in skill? (It can be restored later)' : 'Delete this skill entirely?')) {
                         handleDelete(activeSkill.skillName);
                       }
                     }}
-                    className="p-1.5 hover:bg-red-500/20 hover:text-red-400 rounded transition" title="Delete Skill"
+                    disabled={activeSkill.userDeleted}
+                    className="p-1.5 hover:bg-red-500/20 hover:text-red-400 rounded transition disabled:opacity-30 disabled:cursor-not-allowed" title="Delete Skill"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
 
+              {suggestions.find(sg => sg.skillName === activeSkill.skillName) && (
+                <div className="mb-4 p-3 bg-purple-500/10 border border-purple-500/30 rounded-md flex items-start gap-3 text-sm">
+                  <Activity className="w-5 h-5 text-purple-400 mt-0.5 shrink-0 animate-pulse" />
+                  <div>
+                    <h4 className="font-bold text-purple-300">Optimization Recommended</h4>
+                    <p className="text-[var(--vscode-descriptionForeground)] mt-1">
+                      This skill has failed {suggestions.find(sg => sg.skillName === activeSkill.skillName)?.failedTasksCount} recent tasks. Consider running the optimizer.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div className="flex gap-2">
-                <button 
-                  onClick={runOptimization}
-                  disabled={isOptimizing || activeSkill.enabled === false}
-                  className="flex items-center space-x-1 px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-400 hover:to-indigo-400 text-white rounded-md font-medium disabled:opacity-50 transition shadow-md"
-                >
-                  <Play className="w-4 h-4" />
-                  <span>{isOptimizing ? 'Optimizing...' : 'Optimize Skill'}</span>
-                </button>
+                {activeSkill.userDeleted ? (
+                  <button 
+                    onClick={() => {
+                      if (confirm('Restore this deleted built-in skill?')) {
+                        vscode.postMessage({ type: 'skillOps:restoreBuiltIn', payload: { category: activeSkill.skillName } });
+                      }
+                    }}
+                    className="flex items-center space-x-1 px-4 py-2 bg-[var(--vscode-button-background)] hover:bg-[var(--vscode-button-hoverBackground)] text-[var(--vscode-button-foreground)] rounded-md font-medium transition shadow-md"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    <span>Restore</span>
+                  </button>
+                ) : (
+                  <>
+                    <button 
+                      onClick={() => setShowOptimizeModal(true)}
+                      disabled={isOptimizing || activeSkill.enabled === false}
+                      className="flex items-center space-x-1 px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-400 hover:to-indigo-400 text-white rounded-md font-medium disabled:opacity-50 transition shadow-md"
+                    >
+                      <Play className="w-4 h-4" />
+                      <span>{isOptimizing ? 'Optimizing...' : 'Optimize Skill'}</span>
+                    </button>
+                    {activeSkill.builtIn && activeSkill.userModified && (
+                      <button 
+                        onClick={() => {
+                          if (confirm('Restore the original built-in skill? Your current modifications will be kept in version history.')) {
+                            vscode.postMessage({ type: 'skillOps:restoreBuiltIn', payload: { category: activeSkill.skillName } });
+                          }
+                        }}
+                        className="flex items-center space-x-1 px-4 py-2 bg-[var(--vscode-button-secondaryBackground)] hover:bg-[var(--vscode-button-secondaryHoverBackground)] text-[var(--vscode-foreground)] rounded-md font-medium transition shadow-sm"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                        <span>Restore Built-in</span>
+                      </button>
+                    )}
+                  </>
+                )}
               </div>
 
               {optResult && (
@@ -410,6 +495,126 @@ export default function SkillOpsView() {
               >
                 Save Skill
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Optimize Modal */}
+      {showOptimizeModal && (
+        <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[var(--vscode-editor-background)] border border-[var(--vscode-widget-border)] rounded-xl w-full max-w-lg shadow-2xl flex flex-col overflow-hidden">
+            <div className="px-4 py-3 border-b border-[var(--vscode-widget-border)] bg-black/20 flex justify-between items-center">
+              <h3 className="font-bold text-base flex items-center gap-2">
+                <Play className="w-4 h-4 text-purple-400" />
+                Train Skill: {activeSkill?.skillName}
+              </h3>
+              {!isOptimizing && (
+                <button onClick={() => setShowOptimizeModal(false)} className="hover:text-red-400 transition">
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            
+            <div className="p-5 space-y-4">
+              {!isOptimizing ? (
+                <>
+                  <div className="flex justify-between items-center bg-black/20 p-3 rounded border border-white/5">
+                    <div>
+                      <div className="text-xs text-[var(--vscode-descriptionForeground)] uppercase tracking-wider font-semibold">Current Version</div>
+                      <div className="text-lg font-bold">v{activeSkill?.bestVersion}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs text-[var(--vscode-descriptionForeground)] uppercase tracking-wider font-semibold">Base Score</div>
+                      <div className="text-lg font-bold text-emerald-400">
+                        {activeSkill?.versions?.find((v: any) => v.version === activeSkill?.bestVersion)?.score ? `${(activeSkill.versions.find((v: any) => v.version === activeSkill.bestVersion).score * 100).toFixed(0)}%` : 'N/A'}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-xs font-bold mb-2">Training Epochs</label>
+                    <input 
+                      type="number" 
+                      min="1" max="10"
+                      value={optEpochs}
+                      onChange={e => setOptEpochs(parseInt(e.target.value) || 1)}
+                      className="w-full bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] rounded px-3 py-2 text-sm outline-none focus:border-[var(--vscode-focusBorder)]"
+                    />
+                    <p className="text-[10px] text-[var(--vscode-descriptionForeground)] mt-1">
+                      More epochs take longer but allow the optimizer more attempts to find a robust improvement.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-center py-4">
+                    <Activity className="w-12 h-12 text-purple-400 animate-pulse" />
+                  </div>
+                  
+                  {optProgress ? (
+                    <div className="bg-black/20 p-4 rounded-lg border border-purple-500/30">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="font-bold text-sm text-purple-300">Epoch {optProgress.epoch} / {optProgress.maxEpochs}</span>
+                        <span className="text-xs px-2 py-0.5 rounded bg-purple-500/20 text-purple-400 font-medium">
+                          {optProgress.stage}
+                        </span>
+                      </div>
+                      
+                      {optProgress.scoreBefore !== undefined && optProgress.scoreAfter !== undefined && (
+                        <div className="mt-4 pt-3 border-t border-white/10 flex justify-between items-center">
+                          <div className="text-center">
+                            <div className="text-[10px] text-[var(--vscode-descriptionForeground)] uppercase">Old Score</div>
+                            <div className="font-mono text-sm">{(optProgress.scoreBefore * 100).toFixed(1)}%</div>
+                          </div>
+                          <div className="text-[var(--vscode-descriptionForeground)]">→</div>
+                          <div className="text-center">
+                            <div className="text-[10px] text-[var(--vscode-descriptionForeground)] uppercase">New Score</div>
+                            <div className={`font-mono text-sm font-bold ${optProgress.scoreAfter > optProgress.scoreBefore ? 'text-emerald-400' : 'text-red-400'}`}>
+                              {(optProgress.scoreAfter * 100).toFixed(1)}%
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center text-sm text-[var(--vscode-descriptionForeground)]">
+                      Initializing optimizer...
+                    </div>
+                  )}
+                  
+                  {optResult && (
+                    <div className="mt-2 text-center text-sm font-bold text-emerald-400">
+                      Optimization Complete!
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="px-4 py-3 border-t border-[var(--vscode-widget-border)] bg-black/20 flex justify-end gap-2">
+              {!isOptimizing ? (
+                <>
+                  <button 
+                    onClick={() => setShowOptimizeModal(false)}
+                    className="px-4 py-1.5 text-sm font-medium hover:bg-white/10 rounded transition"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={runOptimization}
+                    className="px-4 py-1.5 text-sm font-medium bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-400 hover:to-indigo-400 text-white rounded transition shadow-md flex items-center"
+                  >
+                    <Play className="w-3.5 h-3.5 mr-1.5" /> Start Training
+                  </button>
+                </>
+              ) : optResult ? (
+                <button 
+                  onClick={() => { setShowOptimizeModal(false); setOptResult(null); }}
+                  className="px-4 py-1.5 text-sm font-medium bg-[var(--vscode-button-background)] hover:bg-[var(--vscode-button-hoverBackground)] text-[var(--vscode-button-foreground)] rounded transition"
+                >
+                  Close
+                </button>
+              ) : null}
             </div>
           </div>
         </div>

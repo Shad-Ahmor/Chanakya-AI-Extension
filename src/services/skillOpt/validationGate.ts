@@ -18,33 +18,25 @@ export class ValidationGate {
         return ValidationGate.instance;
     }
 
-    public evaluateDecision(currentScore: number, candidateScore: number, minimumImprovement: number = 0.02): ValidationDecision {
-        const improvement = candidateScore - currentScore;
-        const normalizedImprovement = Number(improvement.toFixed(4));
-        
-        if (normalizedImprovement >= minimumImprovement) {
+    public evaluateDecision(currentScore: number, candidateScore: number): ValidationDecision {
+        // Strict improvement check
+        if (candidateScore > currentScore) {
+            const improvement = candidateScore - currentScore;
             return {
                 decision: 'accepted',
                 currentScore,
                 candidateScore,
-                improvement: normalizedImprovement,
-                reason: `Candidate accepted. Improvement of ${normalizedImprovement} meets or exceeds the minimum threshold of ${minimumImprovement}.`
-            };
-        } else if (normalizedImprovement > 0) {
-            return {
-                decision: 'rejected',
-                currentScore,
-                candidateScore,
-                improvement: normalizedImprovement,
-                reason: `Candidate rejected. Improvement of ${normalizedImprovement} is below the minimum threshold of ${minimumImprovement}.`
+                improvement: Number(improvement.toFixed(4)),
+                reason: `Candidate accepted. Strictly improved from ${currentScore} to ${candidateScore}.`
             };
         } else {
+            const regression = currentScore - candidateScore;
             return {
                 decision: 'rejected',
                 currentScore,
                 candidateScore,
-                improvement: normalizedImprovement,
-                reason: `Candidate rejected. Score regressed or showed zero improvement (${normalizedImprovement}).`
+                improvement: regression === 0 ? 0 : -Number(regression.toFixed(4)),
+                reason: `Candidate rejected. Score did not strictly improve (Candidate: ${candidateScore}, Current: ${currentScore}).`
             };
         }
     }

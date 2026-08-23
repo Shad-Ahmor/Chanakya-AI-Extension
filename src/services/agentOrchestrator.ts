@@ -339,14 +339,15 @@ Only one tool call per response is supported. Do not output anything else if you
     return instructions;
   }
 
-  private resolvePath(reqPath: string): string {
+  private resolvePath(reqPath: string, customWorkspace?: string): string {
     if (path.isAbsolute(reqPath)) return reqPath;
+    if (customWorkspace) return require('path').join(customWorkspace, reqPath);
     const ws = vscode.workspace.workspaceFolders;
     if (!ws || ws.length === 0) return reqPath;
     return path.join(ws[0].uri.fsPath, reqPath);
   }
 
-  public async executeTool(name: string, args: any): Promise<string> {
+  public async executeTool(name: string, args: any, customWorkspace?: string): Promise<string> {
     this.logger.log(`[Agent] Executing tool: ${name}`);
 
     // 1. Guard check for loop hygiene
@@ -361,31 +362,31 @@ Only one tool call per response is supported. Do not output anything else if you
 
       switch (name) {
         case 'run_terminal_command':
-          rawResult = await this.runTerminalCommand(args.command, args.cwd);
+          rawResult = await this.runTerminalCommand(args.command, args.cwd, customWorkspace);
           break;
         case 'view_file':
-          rawResult = await this.viewFile(targetPath);
+          rawResult = await this.viewFile(targetPath, customWorkspace);
           break;
         case 'search_code':
-          rawResult = await this.searchCode(args.query);
+          rawResult = await this.searchCode(args.query, customWorkspace);
           break;
         case 'list_directory':
-          rawResult = await this.listDirectory(targetPath);
+          rawResult = await this.listDirectory(targetPath, customWorkspace);
           break;
         case 'edit_file':
-          rawResult = await this.editFile(targetPath, args.content);
+          rawResult = await this.editFile(targetPath, args.content, customWorkspace);
           break;
         case 'replace_in_file':
-          rawResult = await this.replaceInFile(targetPath, args.targetContent, args.replacementContent);
+          rawResult = await this.replaceInFile(targetPath, args.targetContent, args.replacementContent, customWorkspace);
           break;
         case 'create_file':
-          rawResult = await this.createFile(targetPath, args.content);
+          rawResult = await this.createFile(targetPath, args.content, customWorkspace);
           break;
         case 'delete_file':
-          rawResult = await this.deleteFile(targetPath);
+          rawResult = await this.deleteFile(targetPath, customWorkspace);
           break;
         case 'delete_directory':
-          rawResult = await this.deleteDirectory(targetPath);
+          rawResult = await this.deleteDirectory(targetPath, customWorkspace);
           break;
         case 'lsp_goto_definition': {
           const results = await LspService.getInstance().goToDefinition(args.filePath, Number(args.line || 0), Number(args.character || 0));
@@ -444,9 +445,9 @@ Only one tool call per response is supported. Do not output anything else if you
     }
   }
 
-  private async runTerminalCommand(command: string, cwd?: string): Promise<string> {
+  private async runTerminalCommand(command: string, cwd?: string, customWorkspace?: string): Promise<string> {
     return new Promise((resolve) => {
-      const execCwd = cwd ? this.resolvePath(cwd) : (vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd());
+      const execCwd = cwd ? this.resolvePath(cwd, customWorkspace) : (customWorkspace || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd());
       
       this.logger.log(`[Terminal] Running: ${command} in ${execCwd}`);
       
@@ -495,9 +496,9 @@ Only one tool call per response is supported. Do not output anything else if you
     });
   }
 
-  private async searchCode(query: string): Promise<string> {
+  private async searchCode(query: string, customWorkspace?: string): Promise<string> {
     return new Promise((resolve) => {
-      const execCwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
+      const execCwd = customWorkspace || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
       // Using simple grep -rn
       cp.exec(`grep -rn "${query.replace(/"/g, '\\"')}" .`, { cwd: execCwd, maxBuffer: 1024 * 1024 * 10 }, (_error, stdout) => {
         if (!stdout || stdout.trim().length === 0) {
@@ -513,14 +514,14 @@ Only one tool call per response is supported. Do not output anything else if you
     });
   }
 
-  private async viewFile(filePath: string): Promise<string> {
-    const fullPath = this.resolvePath(filePath);
+  private async viewFile(filePath: string, customWorkspace?: string): Promise<string> {
+    const fullPath = this.resolvePath(filePath, customWorkspace);
     const content = await fs.readFile(fullPath, 'utf8');
     return content;
   }
 
-  private async listDirectory(dirPath: string): Promise<string> {
-    const fullPath = this.resolvePath(dirPath);
+  private async listDirectory(dirPath: string, customWorkspace?: string): Promise<string> {
+    const fullPath = this.resolvePath(dirPath, customWorkspace);
     const entries = await fs.readdir(fullPath, { withFileTypes: true });
     
     let result = `Contents of ${dirPath}:\n`;
@@ -530,8 +531,8 @@ Only one tool call per response is supported. Do not output anything else if you
     return result;
   }
 
-  private async editFile(filePath: string, content: string): Promise<string> {
-    const fullPath = this.resolvePath(filePath);
+  private async editFile(filePath: string, content: string, customWorkspace?: string): Promise<string> {
+    const fullPath = this.resolvePath(filePath, customWorkspace);
     await fs.writeFile(fullPath, content, 'utf8');
     
     // Open in UI
@@ -550,8 +551,8 @@ Only one tool call per response is supported. Do not output anything else if you
     return `Successfully modified file: ${filePath}`;
   }
 
-  private async replaceInFile(filePath: string, targetContent: string, replacementContent: string): Promise<string> {
-    const fullPath = this.resolvePath(filePath);
+  private async replaceInFile(filePath: string, targetContent: string, replacementContent: string, customWorkspace?: string): Promise<string> {
+    const fullPath = this.resolvePath(filePath, customWorkspace);
     try {
       let content = await fs.readFile(fullPath, 'utf8');
       
@@ -581,8 +582,8 @@ Only one tool call per response is supported. Do not output anything else if you
     }
   }
 
-  private async createFile(filePath: string, content: string): Promise<string> {
-    const fullPath = this.resolvePath(filePath);
+  private async createFile(filePath: string, content: string, customWorkspace?: string): Promise<string> {
+    const fullPath = this.resolvePath(filePath, customWorkspace);
     const dir = path.dirname(fullPath);
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(fullPath, content, 'utf8');
@@ -603,8 +604,8 @@ Only one tool call per response is supported. Do not output anything else if you
     return `Successfully created file: ${filePath}`;
   }
 
-  private async deleteFile(filePath: string): Promise<string> {
-    const fullPath = this.resolvePath(filePath);
+  private async deleteFile(filePath: string, customWorkspace?: string): Promise<string> {
+    const fullPath = this.resolvePath(filePath, customWorkspace);
     try {
       await fs.unlink(fullPath);
       this.events.emit('fileChanged', { path: fullPath, changeType: 'delete' });
@@ -614,8 +615,8 @@ Only one tool call per response is supported. Do not output anything else if you
     }
   }
 
-  private async deleteDirectory(dirPath: string): Promise<string> {
-    const fullPath = this.resolvePath(dirPath);
+  private async deleteDirectory(dirPath: string, customWorkspace?: string): Promise<string> {
+    const fullPath = this.resolvePath(dirPath, customWorkspace);
     try {
       await fs.rm(fullPath, { recursive: true, force: true });
       return `Successfully deleted directory: ${dirPath}`;

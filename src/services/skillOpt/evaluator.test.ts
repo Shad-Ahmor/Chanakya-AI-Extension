@@ -31,7 +31,7 @@ async function runTests() {
                 { toolName: 'run', args: {}, success: true }
             ]
         });
-        const r1 = evaluator.evaluate(t1);
+        const r1 = await evaluator.evaluate(t1);
         assert.strictEqual(r1.success, true);
         assert.strictEqual(r1.score, 1.0);
         console.log("Test 1 passed.");
@@ -42,7 +42,7 @@ async function runTests() {
             success: false,
             toolCalls: []
         });
-        const r2 = evaluator.evaluate(t2);
+        const r2 = await evaluator.evaluate(t2);
         assert.strictEqual(r2.success, false);
         assert.strictEqual(r2.score, 0.0);
         console.log("Test 2 passed.");
@@ -56,7 +56,7 @@ async function runTests() {
                 { toolName: 'run', args: {}, success: false, error: 'not found' }
             ]
         });
-        const r3 = evaluator.evaluate(t3);
+        const r3 = await evaluator.evaluate(t3);
         assert.strictEqual(r3.success, true); // Still true because 0.7 score (50 + (25-5) = 70/100)
         assert.strictEqual(r3.score, 0.70);
         assert.ok(r3.reason.includes('MCP tool call(s) failed'));
@@ -71,7 +71,7 @@ async function runTests() {
                 { toolName: 'search', args: {}, success: true }
             ]
         });
-        const r4 = evaluator.evaluate(t4);
+        const r4 = await evaluator.evaluate(t4);
         assert.strictEqual(r4.success, true); // 50 + (50 - 30) = 70/100
         assert.strictEqual(r4.score, 0.70);
         assert.ok(r4.reason.includes('Required 3 retries'));
@@ -87,7 +87,7 @@ async function runTests() {
                 { toolName: 'search', args: {}, success: false }
             ]
         });
-        const r5 = evaluator.evaluate(t5);
+        const r5 = await evaluator.evaluate(t5);
         assert.strictEqual(r5.success, false);
         assert.strictEqual(r5.score, 0.0); // should not drop below 0
         console.log("Test 5 passed.");

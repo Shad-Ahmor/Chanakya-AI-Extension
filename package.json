@@ -93,6 +93,12 @@
 				"title": "Chanakya AI Enhancer: Setup MCP Configuration",
 				"category": "Chanakya AI Enhancer",
 				"icon": "$(gear)"
+			},
+			{
+				"command": "aiEnhancer.runReactPilot",
+				"title": "Chanakya AI Enhancer: Run React JS SkillOpt Pilot",
+				"category": "Chanakya AI Enhancer",
+				"icon": "$(beaker)"
 			}
 		],
 		"keybindings": [
@@ -177,6 +183,11 @@
 					"default": "gpt-4-turbo",
 					"description": "Default chat model to use."
 				},
+				"aiEnhancer.optimizerModelId": {
+					"type": "string",
+					"default": "",
+					"description": "Specific model to use for heavy background tasks like Skill Optimization and Validation."
+				},
 				"aiEnhancer.maxTokens": {
 					"type": "number",
 					"default": 4096,
@@ -233,16 +244,25 @@
 		"build:webview": "npm run --prefix webview-ui build",
 		"watch:webview": "npm run --prefix webview-ui watch",
 		"build": "npm run build:webview && npm run build:extension",
-		"lint": "eslint src --ext ts"
+		"lint": "eslint src --ext ts",
+		"test": "npx tsc -p ./ && node ./out/test/runTest.js"
 	},
 	"devDependencies": {
+		"@types/chai": "^5.2.3",
+		"@types/glob": "^8.1.0",
+		"@types/mocha": "^10.0.10",
 		"@types/node": "20.x",
 		"@types/uuid": "^10.0.0",
 		"@types/vscode": "^1.90.0",
 		"@typescript-eslint/eslint-plugin": "^7.14.1",
 		"@typescript-eslint/parser": "^7.14.1",
+		"@vscode/test-electron": "^3.1.0",
+		"chai": "^4.3.7",
 		"eslint": "^8.57.0",
+		"glob": "^8.1.0",
+		"mocha": "^11.8.0",
 		"ts-loader": "^9.5.1",
+		"ts-node": "^10.9.2",
 		"typescript": "^5.4.5",
 		"webpack": "^5.92.1",
 		"webpack-cli": "^5.1.4"
@@ -250,7 +270,6 @@
 	"dependencies": {
 		"@huggingface/transformers": "^4.2.0",
 		"@modelcontextprotocol/sdk": "^1.30.0",
-		"glob": "^13.0.6",
 		"js-tiktoken": "^1.0.21",
 		"mammoth": "^1.12.1",
 		"pdf-parse": "^2.4.5",

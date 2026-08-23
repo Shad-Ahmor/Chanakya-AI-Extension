@@ -52,23 +52,29 @@ export class LLMEngine {
     callbacks: StreamCallbacks;
     cancellationToken?: vscode.CancellationToken;
     existingMessages?: any[];
+    targetModelId?: string | undefined;
+    taskId?: string;
+    skillName?: string;
+    skillVersion?: number;
+    customWorkspace?: string;
   }): Promise<void> {
-    const { prompt, contextItems, optimizerConfig, callbacks, cancellationToken, existingMessages } = params;
+    const { prompt, contextItems, optimizerConfig, callbacks, cancellationToken, existingMessages, targetModelId, taskId: providedTaskId, skillName, skillVersion, customWorkspace } = params;
     const config = this.configManager.getConfig();
+    const modelIdToUse = targetModelId || config.activeChatModelId;
     const activeModel =
-      config.models.find((m) => m.id === config.activeChatModelId || m.name === config.activeChatModelId) || config.models[0];
+      config.models.find((m) => m.id === modelIdToUse || m.name === modelIdToUse) || config.models[0];
 
     if (!activeModel) {
       callbacks.onError(new Error('No model configured. Please add a model in Model Hub.'));
       return;
     }
 
-    const taskId = 'task-' + Date.now().toString() + '-' + Math.floor(Math.random() * 1000).toString();
+    const taskId = providedTaskId || 'task-' + Date.now().toString() + '-' + Math.floor(Math.random() * 1000).toString();
     const workspaceFolders = vscode.workspace.workspaceFolders;
     const workspaceRoot = workspaceFolders ? workspaceFolders[0].uri.fsPath : '';
 
-    let activeSkill = 'multi';
-    let bestVersion = 1;
+    let activeSkill = skillName || 'multi';
+    let bestVersion = skillVersion || 1;
 
     // Rules and SkillOps are now handled by UnifiedContextBuilder
 
@@ -146,12 +152,15 @@ export class LLMEngine {
           recorder.endTask(taskId, true);
           const trajectory = recorder.getTrajectory(taskId);
           if (trajectory) {
-             const evaluator = EvaluatorFactory.getEvaluator();
-             const result = evaluator.evaluate(trajectory);
-             this.logger.log(`SkillOps [Task ${taskId}] evaluated: Score ${result.score}, Success: ${result.success}. Reason: ${result.reason}`);
+            const evaluator = EvaluatorFactory.getEvaluator();
+            evaluator.evaluate(trajectory, { ...(customWorkspace ? { customWorkspace } : {}) }).then(result => {
+              this.logger.log(`SkillOps [Task ${taskId}] evaluated: Score ${result.score}, Success: ${result.success}. Reason: ${result.reason}`);
+            }).catch(e => {
+              this.logger.warn('SkillOps evaluation failed, ignoring: ' + e);
+            });
           }
         } catch (e) {
-          this.logger.warn('SkillOps evaluation failed, ignoring: ' + e);
+          this.logger.warn('SkillOps evaluation block failed, ignoring: ' + e);
         }
         callbacks.onComplete(cleanText || fullText);
       },
@@ -160,12 +169,15 @@ export class LLMEngine {
           recorder.endTask(taskId, false);
           const trajectory = recorder.getTrajectory(taskId);
           if (trajectory) {
-             const evaluator = EvaluatorFactory.getEvaluator();
-             const result = evaluator.evaluate(trajectory);
-             this.logger.log(`SkillOps [Task ${taskId}] evaluated on error: Score ${result.score}, Success: ${result.success}`);
+            const evaluator = EvaluatorFactory.getEvaluator();
+            evaluator.evaluate(trajectory, { ...(customWorkspace ? { customWorkspace } : {}) }).then(result => {
+              this.logger.log(`SkillOps [Task ${taskId}] evaluated on error: Score ${result.score}, Success: ${result.success}`);
+            }).catch(e => {
+              this.logger.warn('SkillOps error evaluation failed, ignoring: ' + e);
+            });
           }
         } catch (e) {
-          this.logger.warn('SkillOps error evaluation failed, ignoring: ' + e);
+          this.logger.warn('SkillOps error evaluation block failed, ignoring: ' + e);
         }
         callbacks.onError(error);
       },
@@ -173,7 +185,7 @@ export class LLMEngine {
         const endTime = Date.now();
         const durationMs = (endTime - startTime) / 1000;
         const ttftMs = firstChunkTime ? (firstChunkTime - startTime) / 1000 : durationMs;
-        
+
         if (callbacks.onTokensUsed) {
           callbacks.onTokensUsed(modelId, promptTokens, completionTokens, durationMs, ttftMs, isError, originalTokens, optimizedTokens);
         }
@@ -184,7 +196,7 @@ export class LLMEngine {
       // 1. Optimize Context Items based on optimizerConfig
       let optimizedContextItems = contextItems.map(item => {
         originalTokens += estimateTokens(item.content);
-        
+
         let content = item.content;
         if (optimizerConfig) {
           if (optimizerConfig.skipComments) {
@@ -206,7 +218,7 @@ export class LLMEngine {
             content = content.replace(/print\(.*$/gm, ''); // Python
           }
         }
-        
+
         const optimizedContent = content.trim();
         optimizedTokens += estimateTokens(optimizedContent);
         return { ...item, content: optimizedContent };
@@ -221,7 +233,7 @@ export class LLMEngine {
       let promptTokens = estimateTokens(prompt);
       let messagesTokens = estimateTokens(JSON.stringify(existingMessages || []));
       let contextItemsTokens = optimizedTokens;
-      
+
       let totalTokens = promptTokens + messagesTokens + contextItemsTokens;
       let finalMessages = existingMessages ? [...existingMessages] : [];
 
@@ -236,14 +248,14 @@ export class LLMEngine {
 
       // If STILL too big even after removing all history except latest
       if (totalTokens > MAX_TOKENS) {
-         throw new Error(`Token Limit Exceeded! Your prompt and attachments (${totalTokens} tokens) exceed the model's maximum context length of ${MAX_TOKENS} tokens. Please try clearing the chat or attaching smaller files.`);
+        throw new Error(`Token Limit Exceeded! Your prompt and attachments (${totalTokens} tokens) exceed the model's maximum context length of ${MAX_TOKENS} tokens. Please try clearing the chat or attaching smaller files.`);
       }
 
       if (activeModel.provider === 'gemini' && !activeModel.apiBase?.includes('/v1')) {
-        await this.streamGemini(activeModel, prompt, optimizedContextItems, optimizerConfig, wrappedCallbacks, abortController.signal, finalMessages);
+        await this.streamGemini(activeModel, prompt, optimizedContextItems, optimizerConfig, wrappedCallbacks, abortController.signal, finalMessages, [], skillName, skillVersion, customWorkspace);
       } else {
         // OpenAI-compatible / Ollama / LM Studio / Enterprise AI Foundry
-        await this.streamOpenAICompatible(activeModel, prompt, optimizedContextItems, optimizerConfig, wrappedCallbacks, abortController.signal, finalMessages, taskId, recorder);
+        await this.streamOpenAICompatible(activeModel, prompt, optimizedContextItems, optimizerConfig, wrappedCallbacks, abortController.signal, finalMessages, taskId, recorder, [], skillName, skillVersion, customWorkspace);
       }
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') {
@@ -255,7 +267,7 @@ export class LLMEngine {
       this.logger.error('Error during LLM streaming completion', error);
       recorder.endTask(taskId, false);
       wrappedCallbacks.onError(error);
-      
+
       // If error happens before tokens are counted, we might still want to log an error request.
       // Usually the provider might not call onTokensUsed if it fails early. 
       // We can manually trigger it here if it hasn't been triggered. (Simplified for now).
@@ -275,7 +287,10 @@ export class LLMEngine {
     existingMessages?: any[],
     taskId?: string,
     recorder?: TrajectoryRecorder,
-    accumulatedNewMessages: any[] = []
+    accumulatedNewMessages: any[] = [],
+    skillName?: string,
+    skillVersion?: number,
+    customWorkspace?: string
   ): Promise<void> {
     if (signal?.aborted) {
       this.logger.warn('Generation aborted before starting streamOpenAICompatible.');
@@ -319,7 +334,7 @@ export class LLMEngine {
       } else if (optimizerConfig.responseConciseness === 'concise') {
         systemContent += ' Keep explanations extremely short and to the point.';
       }
-      
+
       if (optimizerConfig.rules && optimizerConfig.rules.length > 0) {
         systemContent += '\n\nCoding Rules to Strictly Follow:\n' + optimizerConfig.rules.map((r: string) => '- ' + r).join('\n');
       }
@@ -343,16 +358,18 @@ export class LLMEngine {
 
     const contextResult = await UnifiedContextBuilder.getInstance().buildContext({
       prompt: prompt,
-      workspaceRoot: vscode.workspace.workspaceFolders?.[0].uri.fsPath || '',
+      workspaceRoot: customWorkspace || vscode.workspace.workspaceFolders?.[0].uri.fsPath || '',
       baseSystemPrompt: systemContent,
       optimizerConfig: optimizerConfig,
       contextItems: contextItems,
-      existingMessages: existingMessages || []
+      existingMessages: existingMessages || [],
+      ...(skillName ? { skillName } : {}),
+      ...(skillVersion ? { skillVersion } : {})
     });
 
     systemContent = contextResult.systemPrompt;
     let formattedUserPrompt = contextResult.userPrompt;
-    
+
     callbacks.onChunk(`> 🧠 **Context Diagnostics:** [Rules: ${contextResult.diagnostics.rulesCount} | Skills: ${contextResult.diagnostics.skillsCount} | RAG Chunks: ${contextResult.diagnostics.ragChunksCount} | MCP Results: ${contextResult.diagnostics.mcpResultsCount}] (Est ${contextResult.diagnostics.estimatedTokens} context tokens)\n\n`);
 
     // Retrieve and Inject RAG Memories
@@ -369,7 +386,7 @@ export class LLMEngine {
     }
 
     let messages: any[] = [{ role: 'system', content: systemContent }];
-    
+
     if (existingMessages && existingMessages.length > 0) {
       // Transform existing messages into standard format
       const history = existingMessages
@@ -381,10 +398,10 @@ export class LLMEngine {
           if (m.name) formatted.name = m.name;
           return formatted;
         });
-      
+
       messages.push(...history);
     }
-    
+
     messages.push({ role: 'user', content: formattedUserPrompt });
 
     // Enforce a strict max token limit for the entire conversation payload
@@ -432,14 +449,14 @@ export class LLMEngine {
         this.logger.log('Local LLM does not support auto tool choice without flags. Switching to XML Tool Parser.');
         delete payload.tools;
         useXmlTools = true; // Dynamically switch to XML parsing
-        
+
         // Inject XML instructions into the system prompt for the retry
         if (messages && messages.length > 0 && messages[0].role === 'system') {
-        if (!optimizerConfig || optimizerConfig.needsMCP !== false) {
-          messages[0].content += '\n\n' + await orchestrator.getXMLToolInstructions();
+          if (!optimizerConfig || optimizerConfig.needsMCP !== false) {
+            messages[0].content += '\n\n' + await orchestrator.getXMLToolInstructions();
+          }
         }
-        }
-        
+
         res = await fetch(endpoint, {
           method: 'POST',
           headers,
@@ -482,7 +499,7 @@ export class LLMEngine {
         try {
           const json = JSON.parse(trimmed.substring(6));
           const delta = json.choices?.[0]?.delta;
-          
+
           if (delta?.content) {
             fullText += delta.content;
             callbacks.onChunk(delta.content);
@@ -527,7 +544,7 @@ export class LLMEngine {
             // Strip markdown backticks if LLM mistakenly wrapped it
             let jsonString = xmlMatch[1].trim();
             jsonString = jsonString.replace(/^```[a-z]*\n/i, '').replace(/\n```$/, '');
-            
+
             const parsed = JSON.parse(jsonString);
             if (parsed.name && parsed.arguments) {
               toolCalls.push({
@@ -573,12 +590,12 @@ export class LLMEngine {
           let cleanArgs = toolCall.function.arguments.trim();
           cleanArgs = cleanArgs.replace(/^```[a-z]*\n/i, '').replace(/\n```$/, '');
           const args = JSON.parse(cleanArgs);
-          const result = await orchestrator.executeTool(toolCall.function.name, args);
-          
+          const result = await orchestrator.executeTool(toolCall.function.name, args, customWorkspace);
+
           if (taskId && recorder) {
             recorder.recordToolCall(taskId, toolCall.function.name, args, result);
           }
-          
+
           if (!useXmlTools) {
             const toolMsg = {
               role: 'tool',
@@ -663,7 +680,10 @@ export class LLMEngine {
     callbacks: StreamCallbacks,
     signal: AbortSignal,
     existingMessages?: any[],
-    accumulatedNewMessages: any[] = []
+    accumulatedNewMessages: any[] = [],
+    skillName?: string,
+    skillVersion?: number,
+    customWorkspace?: string
   ): Promise<void> {
     const apiKey = model.apiKey || '';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model.model}:streamGenerateContent?alt=sse&key=${apiKey}`;
@@ -684,7 +704,7 @@ export class LLMEngine {
       '  Phase 2: Once approved, write a `task.md` file (or `plan.md`) using `create_file` containing a checklist of all files to be created/edited/deleted, their paths, and specific actions (e.g. `- [ ] create src/App.tsx - Add main component`).\n' +
       '  Phase 3: Execute the tasks one by one autonomously from the work plan. After completing each file, you MUST use `replace_in_file` to update `task.md` by checking off the completed task (`- [x]`).\n' +
       '  Phase 4: Continue this loop until all tasks are marked `[x]`. If disconnected, you can read `task.md` to resume exactly where you left off.';
-      
+
     if (!optimizerConfig || optimizerConfig.needsMCP !== false) {
       systemInstruction += '\n\n' + await AgentOrchestrator.getInstance().getXMLToolInstructions();
     }
@@ -715,16 +735,18 @@ export class LLMEngine {
 
     const contextResult = await UnifiedContextBuilder.getInstance().buildContext({
       prompt: prompt,
-      workspaceRoot: vscode.workspace.workspaceFolders?.[0].uri.fsPath || '',
+      workspaceRoot: customWorkspace || vscode.workspace.workspaceFolders?.[0].uri.fsPath || '',
       baseSystemPrompt: systemInstruction,
       optimizerConfig: optimizerConfig,
       contextItems: contextItems,
-      existingMessages: existingMessages || []
+      existingMessages: existingMessages || [],
+      ...(skillName ? { skillName } : {}),
+      ...(skillVersion ? { skillVersion } : {})
     });
 
     systemInstruction = contextResult.systemPrompt;
     let fullPrompt = contextResult.userPrompt;
-    
+
     callbacks.onChunk(`> 🧠 **Context Diagnostics:** [Rules: ${contextResult.diagnostics.rulesCount} | Skills: ${contextResult.diagnostics.skillsCount} | RAG Chunks: ${contextResult.diagnostics.ragChunksCount} | MCP Results: ${contextResult.diagnostics.mcpResultsCount}] (Est ${contextResult.diagnostics.estimatedTokens} context tokens)\n\n`);
 
     // Retrieve and Inject RAG Memories
@@ -750,7 +772,7 @@ export class LLMEngine {
           parts: [{ text: m.content }]
         }));
     }
-    
+
     contents.push({ role: 'user', parts: [{ text: fullPrompt }] });
 
     const generationConfig: Record<string, unknown> = {
@@ -819,7 +841,7 @@ export class LLMEngine {
         try {
           let jsonString = xmlMatch[1].trim();
           jsonString = jsonString.replace(/^```[a-z]*\n/i, '').replace(/\n```$/, '');
-          
+
           const parsed = JSON.parse(jsonString);
           if (parsed.name && parsed.arguments) {
             toolCalls.push({
@@ -835,7 +857,7 @@ export class LLMEngine {
     }
 
     let messages = existingMessages ? [...existingMessages] : [];
-    
+
     if (toolCalls.length > 0) {
       const orchestrator = AgentOrchestrator.getInstance();
       const assistantMsg = { role: 'assistant', content: fullText || null };
@@ -852,8 +874,8 @@ export class LLMEngine {
           let cleanArgs = toolCall.function.arguments.trim();
           cleanArgs = cleanArgs.replace(/^```[a-z]*\n/i, '').replace(/\n```$/, '');
           const args = JSON.parse(cleanArgs);
-          const result = await orchestrator.executeTool(toolCall.function.name, args);
-          
+          const result = await orchestrator.executeTool(toolCall.function.name, args, customWorkspace);
+
           const toolMsg = {
             role: 'user',
             content: `Tool '${toolCall.function.name}' executed successfully.\nResult:\n${result}`
