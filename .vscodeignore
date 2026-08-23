@@ -8,3 +8,4 @@ webview-ui/**
 *.log
 tsconfig.json
 webpack.config.js
+!builtInSkills/**
