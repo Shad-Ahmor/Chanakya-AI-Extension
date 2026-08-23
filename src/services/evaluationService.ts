@@ -66,8 +66,12 @@ export class EvaluationService {
         }
       });
 
-      // Clean up markdown wrapping if any
+      // Clean up markdown wrapping if any and extract JSON
       evalResultText = evalResultText.replace(/```json/gi, '').replace(/```/gi, '').trim();
+      const jsonMatch = evalResultText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+          evalResultText = jsonMatch[0];
+      }
       
       try {
         const result: EvaluationResult = JSON.parse(evalResultText);

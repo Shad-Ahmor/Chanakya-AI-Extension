@@ -56,7 +56,8 @@ export class EmbeddingService {
         });
 
         if (!res.ok) {
-          throw new Error(`Embedding API error: ${res.statusText}`);
+          this.logger.warn(`Embedding API not available or error: ${res.statusText}. Using fallback empty embeddings.`);
+          return [];
         }
 
         const data = await res.json() as any;
