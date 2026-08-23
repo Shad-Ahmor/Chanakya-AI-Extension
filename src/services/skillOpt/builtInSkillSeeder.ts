@@ -87,7 +87,7 @@ const SKILL_CATALOGUE: Record<string, SkillMeta> = {
 export class BuiltInSkillSeeder {
 
     /** Absolute path to the directory containing *.md skill files. */
-    private static readonly SKILLS_DIR = '/Users/shadahmor/Documents/Projects/VS_Extension/AI Enhancer/src/services/skillOpt/builtInSkills';
+    private static readonly SKILLS_DIR = path.join(__dirname, '..', 'src', 'services', 'skillOpt', 'builtInSkills');
 
     // ──────────────────────────────────────────────────────────────────────────
     // Public API

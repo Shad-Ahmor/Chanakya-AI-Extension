@@ -6,6 +6,7 @@ const path = require('path');
 /**@type {import('webpack').Configuration}*/
 const config = {
   target: 'node', // VS Code extensions run in Node.js environment
+  node: { __dirname: false, __filename: false },
   mode: 'none',
 
   entry: './src/extension.ts',
