@@ -14,7 +14,7 @@ export class MetaOptimizer {
     private static instance: MetaOptimizer;
     private llmGateway = LLMGateway.getInstance();
 
-    private constructor(private workspaceRoot: string) {}
+    private constructor(private workspaceRoot: string) { }
 
     public static getInstance(workspaceRoot: string): MetaOptimizer {
         if (!MetaOptimizer.instance) {
@@ -56,8 +56,8 @@ ${JSON.stringify(rejectedEdits.slice(-5).map(r => ({ reason: r.rejectionReason, 
 
 Output your findings ONLY as a JSON object matching this schema:
 {
-  "proceduralLessons": ["lesson 1", "lesson 2"],
-  "redundantBehaviors": ["behavior 1", "behavior 2"]
+  "proceduralLessons": ["lesson 1", "lesson 2"],
+  "redundantBehaviors": ["behavior 1", "behavior 2"]
 }
 No markdown, no explanation. Just the JSON object.`;
 
@@ -73,7 +73,9 @@ No markdown, no explanation. Just the JSON object.`;
                     onChunk: (chunk: string) => fullText += chunk,
                     onComplete: (text: string) => {
                         try {
-                            const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+                            let cleaned = (text.includes('</think>') ? text.split('</think>')[1] : text);
+                            const match = cleaned.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+                            cleaned = match ? match[0] : cleaned;
                             const result = JSON.parse(cleaned);
                             resolve({
                                 skillId,

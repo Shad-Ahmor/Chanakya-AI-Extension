@@ -37,6 +37,11 @@ export class ReflectionEngine {
             return { observations: [], improvements: [] };
         }
 
+        let trajStr = JSON.stringify(trajectories, null, 2);
+        if (trajStr.length > 6000) {
+            trajStr = trajStr.substring(0, 6000) + '\n... (truncated due to length)';
+        }
+
         const prompt = `You are an expert AI agent behavior analyst.
 Analyze the following JSON array of task execution trajectories.
 Identify repeated behavioral problems, tool misuse, retries, and recurring mistakes.
@@ -60,7 +65,7 @@ Return your analysis as ONLY a JSON object matching exactly this schema, with no
 }
 
 Trajectories:
-${JSON.stringify(trajectories, null, 2)}
+${trajStr}
 `;
 
         return new Promise<ReflectionResult>((resolve, reject) => {

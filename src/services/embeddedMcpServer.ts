@@ -28,6 +28,7 @@ export class EmbeddedMcpServer {
           type: 'object',
           properties: {
             filePath: { type: 'string', description: 'Relative or absolute file path' },
+            path: { type: 'string', description: 'Alias for filePath' },
             startLine: { type: 'number', description: 'Optional 1-indexed start line' },
             endLine: { type: 'number', description: 'Optional 1-indexed end line' }
           },
@@ -42,6 +43,7 @@ export class EmbeddedMcpServer {
           type: 'object',
           properties: {
             filePath: { type: 'string', description: 'Relative or absolute file path' },
+            path: { type: 'string', description: 'Alias for filePath' },
             content: { type: 'string', description: 'File contents to write' }
           },
           required: ['filePath', 'content']
@@ -195,9 +197,11 @@ export class EmbeddedMcpServer {
 
     switch (toolName) {
       case 'chanakya_fs_read': {
-        const filePath = path.isAbsolute(args.filePath) ? args.filePath : path.join(rootPath, args.filePath);
+        const targetPath = args.filePath || args.path;
+        if (!targetPath) throw new Error("filePath or path argument is required");
+        const filePath = path.isAbsolute(targetPath) ? targetPath : path.join(rootPath, targetPath);
         if (!fs.existsSync(filePath)) {
-          throw new Error(`File not found: ${args.filePath}`);
+          throw new Error(`File not found: ${targetPath}`);
         }
         const content = fs.readFileSync(filePath, 'utf-8');
         const lines = content.split('\n');
@@ -207,11 +211,13 @@ export class EmbeddedMcpServer {
       }
 
       case 'chanakya_fs_write': {
-        const filePath = path.isAbsolute(args.filePath) ? args.filePath : path.join(rootPath, args.filePath);
+        const targetPath = args.filePath || args.path;
+        if (!targetPath) throw new Error("filePath or path argument is required");
+        const filePath = path.isAbsolute(targetPath) ? targetPath : path.join(rootPath, targetPath);
         const dir = path.dirname(filePath);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
         fs.writeFileSync(filePath, args.content, 'utf-8');
-        return `Successfully wrote ${args.content.length} characters to ${args.filePath}`;
+        return `Successfully wrote ${args.content.length} characters to ${targetPath}`;
       }
 
       case 'chanakya_workspace_search': {

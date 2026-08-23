@@ -78,9 +78,8 @@ export class VectorStore {
   }
 
   public async search(vector: number[], topK: number = 5): Promise<MemoryRecord[]> {
-    if (!this.isInitialized) return [];
+    if (!this.isInitialized || !vector || vector.length === 0) return [];
     try {
-      this.validateVector(vector);
       const results = await this.index.queryItems(vector, '', topK);
       return results.map(r => r.item.metadata as unknown as MemoryRecord);
     } catch (error) {
@@ -90,9 +89,8 @@ export class VectorStore {
   }
 
   public async searchChunks(vector: number[], topK: number = 5): Promise<{ chunk: DocumentChunk; score: number }[]> {
-    if (!this.isInitialized) return [];
+    if (!this.isInitialized || !vector || vector.length === 0) return [];
     try {
-      this.validateVector(vector);
       // Query items returns { item: LocalIndexItem, score: number }
       // The score is the cosine similarity (or distance based on vectra internals).
       // According to vectra, it returns items sorted by similarity.

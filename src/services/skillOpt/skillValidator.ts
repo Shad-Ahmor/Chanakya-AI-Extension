@@ -12,7 +12,7 @@ export class SkillValidator {
     private static instance: SkillValidator;
     private llmGateway = LLMGateway.getInstance();
 
-    private constructor() {}
+    private constructor() { }
 
     public static getInstance(): SkillValidator {
         if (!SkillValidator.instance) {
@@ -31,19 +31,19 @@ export class SkillValidator {
      * @returns A simulated score (0.0 to 1.0) and reasoning.
      */
     public async validateCandidate(
-        candidateContent: string, 
-        reflection: ReflectionResult, 
+        candidateContent: string,
+        reflection: ReflectionResult,
         trajectories: Trajectory[],
         baselineScore: number
     ): Promise<ValidationScoreResult> {
-        
+
         if (reflection.improvements.length === 0) {
             return { score: baselineScore, reasoning: 'No improvements proposed by reflection.' };
         }
 
         // --- HARD SAFETY GUARDRAILS (Phase 27) ---
         const lowerCandidate = candidateContent.toLowerCase();
-        
+
         // 1. Block System Prompt Overrides
         const unsafePrompts = [
             'you are now', 'ignore previous', 'forget previous',
@@ -91,13 +91,13 @@ Evaluate the Candidate Skill:
 
 Output ONLY a valid JSON object matching this schema, with NO markdown formatting:
 {
-  "score": <number between 0.0 and 1.0>,
-  "reasoning": "A brief explanation of why this score was assigned."
+  "score": <number between 0.0 and 1.0>,
+  "reasoning": "A brief explanation of why this score was assigned."
 }`;
 
         return new Promise<ValidationScoreResult>((resolve, reject) => {
             let fullText = '';
-            
+
             const activeOptimizerModelId = ConfigManager.getInstance().getConfig().activeOptimizerModelId;
 
             this.llmGateway.streamChat({
@@ -111,9 +111,11 @@ Output ONLY a valid JSON object matching this schema, with NO markdown formattin
                     },
                     onComplete: (text: string) => {
                         try {
-                            const cleanedText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+                            let cleanedText = (text.includes('</think>') ? text.split('</think>')[1] : text);
+                            const match = cleanedText.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+                            cleanedText = match ? match[0] : cleanedText;
                             const result = JSON.parse(cleanedText) as ValidationScoreResult;
-                            
+
                             if (result.score < 0) result.score = 0;
                             if (result.score > 1) result.score = 1;
 

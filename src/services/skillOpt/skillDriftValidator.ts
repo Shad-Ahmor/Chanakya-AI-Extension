@@ -11,7 +11,7 @@ export class SkillDriftValidator {
     private static instance: SkillDriftValidator;
     private llmGateway = LLMGateway.getInstance();
 
-    private constructor() {}
+    private constructor() { }
 
     public static getInstance(): SkillDriftValidator {
         if (!SkillDriftValidator.instance) {
@@ -50,8 +50,8 @@ ${JSON.stringify(candidateEdits, null, 2)}
 
 Output ONLY a JSON object with this schema:
 {
-  "passed": boolean, // true if it passes ALL checks, false if it violates ANY
-  "reason": "Detailed explanation of why it passed or failed"
+  "passed": boolean, // true if it passes ALL checks, false if it violates ANY
+  "reason": "Detailed explanation of why it passed or failed"
 }
 No markdown, no other text.`;
 
@@ -67,7 +67,9 @@ No markdown, no other text.`;
                     onChunk: (c) => fullText += c,
                     onComplete: (t) => {
                         try {
-                            const cleaned = t.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+                            let cleaned = (t.includes('</think>') ? t.split('</think>')[1] : t);
+                            const match = cleaned.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+                            cleaned = match ? match[0] : cleaned;
                             const result = JSON.parse(cleaned) as DriftValidationResult;
                             resolve(result);
                         } catch (e) {

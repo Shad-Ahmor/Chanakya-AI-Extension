@@ -23,7 +23,7 @@ export interface StreamCallbacks {
 
 /** Simple token estimator: ~4 chars per token (GPT-family heuristic) */
 function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
+  return Math.ceil((text?.length || 0) / 2.8);
 }
 
 /**
@@ -102,50 +102,80 @@ export class LLMEngine {
     let thoughtStartTime: number | null = null;
     let thoughtDurationMs = 0;
 
+    let streamBuffer = '';
+
     const wrappedCallbacks: StreamCallbacks = {
       onChunk: (chunk) => {
         if (!firstChunkTime) firstChunkTime = Date.now();
 
-        if (!isInsideThink && chunk.includes('<think>')) {
-          isInsideThink = true;
-          thoughtStartTime = Date.now();
-          const parts = chunk.split('<think>');
-          if (parts[0]) callbacks.onChunk(parts[0]);
-          const remainder = parts.slice(1).join('<think>');
-          if (remainder.includes('</think>')) {
-            const tParts = remainder.split('</think>');
-            thoughtBuffer += tParts[0];
-            thoughtDurationMs = Date.now() - (thoughtStartTime || startTime);
-            if (callbacks.onThoughtChunk) callbacks.onThoughtChunk(tParts[0]);
-            if (callbacks.onThoughtComplete) callbacks.onThoughtComplete(thoughtBuffer, thoughtDurationMs);
-            isInsideThink = false;
-            if (tParts[1]) callbacks.onChunk(tParts[1]);
-          } else {
-            thoughtBuffer += remainder;
-            if (callbacks.onThoughtChunk) callbacks.onThoughtChunk(remainder);
-          }
-          return;
-        }
+        streamBuffer += chunk;
+        let processing = true;
 
-        if (isInsideThink) {
-          if (chunk.includes('</think>')) {
-            const parts = chunk.split('</think>');
-            thoughtBuffer += parts[0];
-            thoughtDurationMs = Date.now() - (thoughtStartTime || startTime);
-            if (callbacks.onThoughtChunk) callbacks.onThoughtChunk(parts[0]);
-            if (callbacks.onThoughtComplete) callbacks.onThoughtComplete(thoughtBuffer, thoughtDurationMs);
-            isInsideThink = false;
-            if (parts[1]) callbacks.onChunk(parts[1]);
+        while (processing && streamBuffer.length > 0) {
+          if (!isInsideThink) {
+            const idx = streamBuffer.indexOf('<think>');
+            if (idx !== -1) {
+              const before = streamBuffer.substring(0, idx);
+              if (before) callbacks.onChunk(before);
+              isInsideThink = true;
+              thoughtStartTime = Date.now();
+              streamBuffer = streamBuffer.substring(idx + 7);
+            } else {
+              let splitIdx = streamBuffer.length;
+              const lastIdx = streamBuffer.lastIndexOf('<');
+              if (lastIdx !== -1) {
+                const partial = streamBuffer.substring(lastIdx);
+                if ('<think>'.startsWith(partial)) {
+                  splitIdx = lastIdx;
+                }
+              }
+              const safeToFlush = streamBuffer.substring(0, splitIdx);
+              if (safeToFlush) callbacks.onChunk(safeToFlush);
+              streamBuffer = streamBuffer.substring(splitIdx);
+              processing = false;
+            }
           } else {
-            thoughtBuffer += chunk;
-            if (callbacks.onThoughtChunk) callbacks.onThoughtChunk(chunk);
+            const idx = streamBuffer.indexOf('</think>');
+            if (idx !== -1) {
+              const thoughtChunk = streamBuffer.substring(0, idx);
+              thoughtBuffer += thoughtChunk;
+              if (callbacks.onThoughtChunk) callbacks.onThoughtChunk(thoughtChunk);
+              thoughtDurationMs = Date.now() - (thoughtStartTime || startTime);
+              if (callbacks.onThoughtComplete) callbacks.onThoughtComplete(thoughtBuffer, thoughtDurationMs);
+              isInsideThink = false;
+              streamBuffer = streamBuffer.substring(idx + 8);
+            } else {
+              let splitIdx = streamBuffer.length;
+              const lastIdx = streamBuffer.lastIndexOf('<');
+              if (lastIdx !== -1) {
+                const partial = streamBuffer.substring(lastIdx);
+                if ('</think>'.startsWith(partial)) {
+                  splitIdx = lastIdx;
+                }
+              }
+              const safeThought = streamBuffer.substring(0, splitIdx);
+              if (safeThought) {
+                thoughtBuffer += safeThought;
+                if (callbacks.onThoughtChunk) callbacks.onThoughtChunk(safeThought);
+              }
+              streamBuffer = streamBuffer.substring(splitIdx);
+              processing = false;
+            }
           }
-          return;
         }
-
-        callbacks.onChunk(chunk);
       },
       onComplete: (fullText) => {
+        if (streamBuffer.length > 0) {
+          if (isInsideThink) {
+            thoughtBuffer += streamBuffer;
+            if (callbacks.onThoughtChunk) callbacks.onThoughtChunk(streamBuffer);
+            thoughtDurationMs = Date.now() - (thoughtStartTime || startTime);
+            if (callbacks.onThoughtComplete) callbacks.onThoughtComplete(thoughtBuffer, thoughtDurationMs);
+          } else {
+            callbacks.onChunk(streamBuffer);
+          }
+        }
+        streamBuffer = '';
         // Clean out any raw <think> tags from final text if lingering
         const cleanText = fullText.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
         try {
@@ -229,7 +259,7 @@ export class LLMEngine {
       }
 
       // Sliding Window & Token Limiter Logic
-      const MAX_TOKENS = activeModel.defaultCompletionOptions?.contextLength || 8192;
+      const MAX_TOKENS = activeModel.defaultCompletionOptions?.contextLength || (activeModel.isLocal ? 4000 : 8192);
       let promptTokens = estimateTokens(prompt);
       let messagesTokens = estimateTokens(JSON.stringify(existingMessages || []));
       let contextItemsTokens = optimizedTokens;
@@ -317,10 +347,10 @@ export class LLMEngine {
       '6. PROACTIVE RECOMMENDATIONS: When faced with design choices or implementations, propose 2-3 high-level recommendations with pros/cons and ask the user to select one (just like Antigravity does). Do not just blindly code sub-optimal solutions.\n' +
       '7. PLANNING MODE (For Complex Tasks or Very Long Prompts):\n' +
       'When asked to build a project, do a complex task, OR if the user provides a very long requirements document (e.g., 25-30+ pages), YOU MUST follow this strict workflow:\n' +
-      '  Phase 1: DO NOT start coding immediately. Take time to think, optimize, and deeply understand the text. Write an `implementation_plan.md` using `create_file` detailing your approach and architecture. Then STOP and ask the user to type "Proceed" to approve it.\n' +
-      '  Phase 2: Once approved, write a `task.md` file (or `plan.md`) using `create_file` containing a checklist of all files to be created/edited/deleted, their paths, and specific actions (e.g. `- [ ] create src/App.tsx - Add main component`).\n' +
-      '  Phase 3: Execute the tasks one by one autonomously from the work plan. After completing each file, you MUST use `replace_in_file` to update `task.md` by checking off the completed task (`- [x]`).\n' +
-      '  Phase 4: Continue this loop until all tasks are marked `[x]`.';
+      '  Phase 1: DO NOT start coding immediately. Take time to think, optimize, and deeply understand the text. Write an `implementation_plan.md` using `create_file` detailing your approach and architecture. Then STOP and ask the user to type "Proceed" to approve it.\n' +
+      '  Phase 2: Once approved, write a `task.md` file (or `plan.md`) using `create_file` containing a checklist of all files to be created/edited/deleted, their paths, and specific actions (e.g. `- [ ] create src/App.tsx - Add main component`).\n' +
+      '  Phase 3: Execute the tasks one by one autonomously from the work plan. After completing each file, you MUST use `replace_in_file` to update `task.md` by checking off the completed task (`- [x]`).\n' +
+      '  Phase 4: Continue this loop until all tasks are marked `[x]`.';
 
     if (useXmlTools) {
       if (!optimizerConfig || optimizerConfig.needsMCP !== false) {
@@ -370,7 +400,7 @@ export class LLMEngine {
     systemContent = contextResult.systemPrompt;
     let formattedUserPrompt = contextResult.userPrompt;
 
-    callbacks.onChunk(`> 🧠 **Context Diagnostics:** [Rules: ${contextResult.diagnostics.rulesCount} | Skills: ${contextResult.diagnostics.skillsCount} | RAG Chunks: ${contextResult.diagnostics.ragChunksCount} | MCP Results: ${contextResult.diagnostics.mcpResultsCount}] (Est ${contextResult.diagnostics.estimatedTokens} context tokens)\n\n`);
+    this.logger.log(`> 🧠 **Context Diagnostics:** [Rules: ${contextResult.diagnostics.rulesCount} | Skills: ${contextResult.diagnostics.skillsCount} | RAG Chunks: ${contextResult.diagnostics.ragChunksCount} | MCP Results: ${contextResult.diagnostics.mcpResultsCount}] (Est ${contextResult.diagnostics.estimatedTokens} context tokens)`);
 
     // Retrieve and Inject RAG Memories
     try {
@@ -406,8 +436,9 @@ export class LLMEngine {
 
     // Enforce a strict max token limit for the entire conversation payload
     // Leaving buffer for max completion tokens. e.g. for a 128k context model, we can safely use 16k for prompt history.
-    // We'll enforce an aggressive 8000 tokens maximum to reduce latency and costs.
-    messages = TokenOptimizer.trimMessages(messages, 8000);
+    const MAX_TOKENS = model.defaultCompletionOptions?.contextLength || (model.isLocal ? 4000 : 8192);
+    const SAFE_BUDGET = Math.floor(MAX_TOKENS * 0.85); // 15% buffer for safety and system overhead
+    messages = TokenOptimizer.trimMessages(messages, SAFE_BUDGET);
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -700,10 +731,10 @@ export class LLMEngine {
       '6. PROACTIVE RECOMMENDATIONS: When faced with design choices or implementations, propose 2-3 high-level recommendations with pros/cons and ask the user to select one (just like Antigravity does). Do not just blindly code sub-optimal solutions.\n' +
       '7. PLANNING MODE (For Complex Tasks or Very Long Prompts):\n' +
       'When asked to build a project, do a complex task, OR if the user provides a very long requirements document (e.g., 25-30+ pages), YOU MUST follow this strict workflow:\n' +
-      '  Phase 1: DO NOT start coding immediately. Take time to think, optimize, and deeply understand the text. Write an `implementation_plan.md` using `create_file` detailing your approach and architecture. Then STOP and ask the user to type "Proceed" to approve it.\n' +
-      '  Phase 2: Once approved, write a `task.md` file (or `plan.md`) using `create_file` containing a checklist of all files to be created/edited/deleted, their paths, and specific actions (e.g. `- [ ] create src/App.tsx - Add main component`).\n' +
-      '  Phase 3: Execute the tasks one by one autonomously from the work plan. After completing each file, you MUST use `replace_in_file` to update `task.md` by checking off the completed task (`- [x]`).\n' +
-      '  Phase 4: Continue this loop until all tasks are marked `[x]`. If disconnected, you can read `task.md` to resume exactly where you left off.';
+      '  Phase 1: DO NOT start coding immediately. Take time to think, optimize, and deeply understand the text. Write an `implementation_plan.md` using `create_file` detailing your approach and architecture. Then STOP and ask the user to type "Proceed" to approve it.\n' +
+      '  Phase 2: Once approved, write a `task.md` file (or `plan.md`) using `create_file` containing a checklist of all files to be created/edited/deleted, their paths, and specific actions (e.g. `- [ ] create src/App.tsx - Add main component`).\n' +
+      '  Phase 3: Execute the tasks one by one autonomously from the work plan. After completing each file, you MUST use `replace_in_file` to update `task.md` by checking off the completed task (`- [x]`).\n' +
+      '  Phase 4: Continue this loop until all tasks are marked `[x]`. If disconnected, you can read `task.md` to resume exactly where you left off.';
 
     if (!optimizerConfig || optimizerConfig.needsMCP !== false) {
       systemInstruction += '\n\n' + await AgentOrchestrator.getInstance().getXMLToolInstructions();
@@ -747,7 +778,7 @@ export class LLMEngine {
     systemInstruction = contextResult.systemPrompt;
     let fullPrompt = contextResult.userPrompt;
 
-    callbacks.onChunk(`> 🧠 **Context Diagnostics:** [Rules: ${contextResult.diagnostics.rulesCount} | Skills: ${contextResult.diagnostics.skillsCount} | RAG Chunks: ${contextResult.diagnostics.ragChunksCount} | MCP Results: ${contextResult.diagnostics.mcpResultsCount}] (Est ${contextResult.diagnostics.estimatedTokens} context tokens)\n\n`);
+    this.logger.log(`> 🧠 **Context Diagnostics:** [Rules: ${contextResult.diagnostics.rulesCount} | Skills: ${contextResult.diagnostics.skillsCount} | RAG Chunks: ${contextResult.diagnostics.ragChunksCount} | MCP Results: ${contextResult.diagnostics.mcpResultsCount}] (Est ${contextResult.diagnostics.estimatedTokens} context tokens)`);
 
     // Retrieve and Inject RAG Memories
     try {
