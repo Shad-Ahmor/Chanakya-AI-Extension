@@ -345,7 +345,17 @@ export class ConfigManager {
       activeChatModelId: 'ril-ai-foundry-qwen-27b',
       activeAutocompleteModelId: 'local-ollama-qwen',
       activeOptimizerModelId: 'openai-gpt-4-1',
-      models: defaultModels
+      models: defaultModels,
+      selfLearning: {
+        enabled: false,
+        retrieval: true,
+        reflection: true,
+        mistakeDetection: true,
+        antiLoop: true,
+        consolidation: true,
+        skillOptLearning: true,
+        debugTrace: false
+      }
     };
 
     try {

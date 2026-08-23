@@ -152,7 +152,8 @@ No markdown formatting, no explanation. Just the JSON array.`;
                             await this.saveCandidate(candidate);
                             resolve({ candidates: [candidate] });
                         } catch (e) {
-                            reject(new Error('Failed to parse candidate JSON: ' + (e as Error).message));
+                            Logger.getInstance().warn('Failed to parse candidate JSON, returning empty candidates: ' + e);
+                            resolve({ candidates: [] });
                         }
                     },
                     onError: (error: Error) => {

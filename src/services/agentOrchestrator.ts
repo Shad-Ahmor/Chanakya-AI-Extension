@@ -324,7 +324,7 @@ export class AgentOrchestrator {
 You have access to the following tools to perform autonomous tasks:
 `;
     for (const t of tools) {
-      instructions += `\n- **${t.function.name}**: ${t.function.description}`;
+      instructions += `\n- **${t.function.name}**: ${t.function.description}\n  Arguments schema: ${JSON.stringify(t.function.parameters)}`;
     }
 
     instructions += `

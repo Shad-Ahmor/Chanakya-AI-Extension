@@ -47,7 +47,7 @@ exec llama-server \
     --port "$PORT" \
     --alias "Qwen3.5-2B-Q8_0" \
     -ngl 99 \
-    -c 4096 \
+    -c 32768 \
     -n 1024 \
     -b 64 \
     -ub 32 \

@@ -31,7 +31,7 @@ export class SkillOptService {
         this.registry = SkillRegistry.getInstance(workspaceRoot);
         this.recorder = TrajectoryRecorder.getInstance(workspaceRoot);
         this.reflection = ReflectionEngine.getInstance();
-        this.generator = CandidateGenerator.getInstance('');
+        this.generator = CandidateGenerator.getInstance(workspaceRoot);
         this.validationGate = ValidationGate.getInstance();
     }
 

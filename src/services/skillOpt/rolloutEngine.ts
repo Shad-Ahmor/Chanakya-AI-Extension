@@ -42,7 +42,8 @@ export class RolloutEngine {
             const optimizerConfig = {
                 ...routingInfo,
                 needsMCP: true,
-                relevantSkills: [skillName]
+                relevantSkills: [skillName],
+                isRollout: true
             };
 
             const activeOptimizerModelId = ConfigManager.getInstance().getConfig().activeOptimizerModelId;

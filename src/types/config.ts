@@ -66,4 +66,14 @@ export interface AppConfig {
   readonly activeAutocompleteModelId?: string | undefined;
   readonly activeOptimizerModelId?: string | undefined;
   readonly models: readonly ModelConfig[];
+  readonly selfLearning?: {
+    readonly enabled?: boolean;
+    readonly retrieval?: boolean;
+    readonly reflection?: boolean;
+    readonly mistakeDetection?: boolean;
+    readonly antiLoop?: boolean;
+    readonly consolidation?: boolean;
+    readonly skillOptLearning?: boolean;
+    readonly debugTrace?: boolean;
+  } | undefined;
 }

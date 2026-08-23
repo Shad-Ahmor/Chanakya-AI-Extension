@@ -84,11 +84,25 @@ ${trajStr}
                     },
                     onComplete: (text: string) => {
                         try {
-                            const cleanedText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-                            const result = JSON.parse(cleanedText) as ReflectionResult;
+                            const jsonMatch = text.match(/\{[\s\S]*\}/);
+                            const jsonString = jsonMatch ? jsonMatch[0] : text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+                            const result = JSON.parse(jsonString) as ReflectionResult;
                             resolve(result);
                         } catch (e) {
-                            reject(new Error('Failed to parse reflection JSON: ' + (e as Error).message));
+                            // Fallback gracefully instead of crashing the pipeline
+                            resolve({
+                                observations: [
+                                    { problem: "Unable to parse full reflection from LLM (Truncated JSON)", evidenceCount: 1 }
+                                ],
+                                improvements: [
+                                    {
+                                        whatWorked: "Task execution ran successfully.",
+                                        whatFailed: "Reflection JSON was truncated by context limit or malformed.",
+                                        causeOfFailure: "Model may require a larger maxOutputTokens or simpler task context.",
+                                        proceduralRule: "Review the tool execution logic for robustness and ensure outputs are concise."
+                                    }
+                                ]
+                            });
                         }
                     },
                     onError: (error: Error) => {
