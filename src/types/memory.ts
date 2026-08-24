@@ -9,33 +9,44 @@ export interface MemoryEnvironment {
 }
 
 export interface MemoryRecord {
-  memory_id: string;
-  memory_type: MemoryType;
+  id: string;
+  type: MemoryType;
   title: string;
   task: string;
-  context?: string;
-  action?: string;
-  result?: string;
+  content: string; // The primary content or lesson
+  embedding?: number[];
+  
+  // Older fields moved or mapped to new names
   error?: string;
   root_cause?: string;
   correction?: string;
   prevention?: string;
   general_lesson?: string;
-  environment?: MemoryEnvironment;
-  tools?: string[];
-  tags?: string[];
+  
   confidence: number;
-  importance: number;
-  reliability: number;
-  times_retrieved: number;
-  times_helped: number;
-  times_failed: number;
-  created_at: string;
-  updated_at: string;
-  last_used_at: string;
-  version: number;
-  status: 'active' | 'superseded' | 'disabled';
-  superseded_by?: string;
+  applicability: number;
+  status: 'active' | 'superseded' | 'suppressed';
+
+  metadata: {
+    taskType: string;
+    framework?: string;
+    environment?: string;
+    model?: string;
+    
+    createdAt: number;
+    lastUsedAt?: number;
+    lastVerifiedAt?: number;
+    
+    successCount: number;
+    failureCount: number;
+    
+    source: 'reflection' | 'skillopt' | 'verification' | 'user';
+    supersededBy?: string;
+    
+    // Additional optional metadata
+    tags?: string[];
+    tools?: string[];
+  };
 }
 
 export interface ReflectionResult {

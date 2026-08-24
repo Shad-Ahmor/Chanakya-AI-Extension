@@ -232,6 +232,22 @@
 					"type": "number",
 					"default": 10,
 					"description": "Number of previous messages to keep in history."
+				},
+				"chanakya.memory.rolloutStage": {
+					"type": "string",
+					"enum": ["shadow", "controlled", "full"],
+					"default": "shadow",
+					"description": "Deployment stage for the Self-Learning Memory pipeline. 'shadow' logs decisions, 'controlled' influences actions with high confidence, 'full' fully integrates."
+				},
+				"chanakya.memory.controlledConfidenceThreshold": {
+					"type": "number",
+					"default": 0.80,
+					"description": "Minimum confidence required to influence the agent in 'controlled' mode."
+				},
+				"chanakya.memory.controlledApplicabilityThreshold": {
+					"type": "number",
+					"default": 0.80,
+					"description": "Minimum applicability score required to influence the agent in 'controlled' mode."
 				}
 			}
 		}

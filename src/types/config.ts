@@ -75,5 +75,8 @@ export interface AppConfig {
     readonly consolidation?: boolean;
     readonly skillOptLearning?: boolean;
     readonly debugTrace?: boolean;
+    readonly rolloutStage?: 'shadow' | 'controlled' | 'full';
+    readonly controlledConfidenceThreshold?: number;
+    readonly controlledApplicabilityThreshold?: number;
   } | undefined;
 }

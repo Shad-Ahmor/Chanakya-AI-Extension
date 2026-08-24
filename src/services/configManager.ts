@@ -354,7 +354,10 @@ export class ConfigManager {
         antiLoop: true,
         consolidation: true,
         skillOptLearning: true,
-        debugTrace: false
+        debugTrace: false,
+        rolloutStage: 'shadow',
+        controlledConfidenceThreshold: 0.80,
+        controlledApplicabilityThreshold: 0.80
       }
     };
 

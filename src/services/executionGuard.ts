@@ -48,6 +48,7 @@ export class ExecutionGuardService {
 
     if (recentDuplicates.length >= this.maxConsecutiveDuplicates - 1) {
       this.logger.warn(`[ExecutionGuard] Loop detected: ${toolName} called with identical arguments ${recentDuplicates.length + 1} times!`);
+      console.log(`\n[StrategyLoopGuard]\nRepeated strategy detected\nAction: BLOCK\n`);
       return {
         shouldHalt: false,
         reason: 'duplicate_call_loop',

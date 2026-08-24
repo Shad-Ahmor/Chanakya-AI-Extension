@@ -10,6 +10,7 @@ import { MemoryRetriever } from './memory/MemoryRetriever';
 import { TokenOptimizer } from '../utils/tokenOptimizer';
 import { ReflectionEngine } from './memory/ReflectionEngine';
 import { UnifiedContextBuilder } from './unifiedContextBuilder';
+import { SelfLearningTelemetry } from './memory/SelfLearningTelemetry';
 
 export interface StreamCallbacks {
   onChunk: (chunk: string) => void;
@@ -331,6 +332,8 @@ export class LLMEngine {
     const apiBase = (model.apiBase || 'https://api.openai.com/v1').replace(/\/+$/, '');
     const endpoint = `${apiBase}/chat/completions`;
     const orchestrator = AgentOrchestrator.getInstance();
+    const config = this.configManager.getConfig();
+    const workspaceRoot = customWorkspace || vscode.workspace.workspaceFolders?.[0].uri.fsPath || '';
     let useXmlTools = model.isLocal || ['vllm', 'ollama', 'lmstudio', 'custom'].includes(model.provider);
 
     let systemContent = optimizerConfig?.isRollout
@@ -405,12 +408,45 @@ export class LLMEngine {
 
     // Retrieve and Inject RAG Memories
     try {
+      const telemetry = SelfLearningTelemetry.getInstance(workspaceRoot);
       const memoryRetriever = MemoryRetriever.getInstance();
+      const rolloutStage = config.selfLearning?.rolloutStage || 'shadow';
+      
+      const retrieveStart = Date.now();
       const memories = await memoryRetriever.retrieve(prompt, 3);
+      const latencyMs = Date.now() - retrieveStart;
+      
       if (memories.length > 0) {
-        const memoryPrompt = memoryRetriever.formatMemoriesForPrompt(memories);
-        systemContent += memoryPrompt;
-        callbacks.onChunk(`> 🧠 **Agent Memory Activated:** Retrieved ${memories.length} relevant past experiences.\n\n`);
+        if (rolloutStage === 'shadow') {
+          this.logger.log(`[Shadow Mode] Memory retrieved ${memories.length} results but not injected.`);
+          telemetry.logMemoryRetrieval(latencyMs, 0, memories.length);
+        } else {
+          // controlled or full
+          let eligibleMemories = memories;
+          if (rolloutStage === 'controlled') {
+            const confThreshold = config.selfLearning?.controlledConfidenceThreshold ?? 0.8;
+            const appThreshold = config.selfLearning?.controlledApplicabilityThreshold ?? 0.8;
+            eligibleMemories = memories.filter(m => 
+              (m.confidence || 0) >= confThreshold && 
+              (m.applicability || 0) >= appThreshold
+            );
+          }
+          
+          if (eligibleMemories.length > 0) {
+            const memoryPrompt = memoryRetriever.formatMemoriesForPrompt(eligibleMemories);
+            systemContent += memoryPrompt;
+            telemetry.logMemoryRetrieval(latencyMs, estimateTokens(memoryPrompt), eligibleMemories.length);
+            
+            const msg = rolloutStage === 'controlled' 
+              ? `> 🧠 **Agent Memory (Controlled):** Retrieved ${eligibleMemories.length} highly confident past experiences.\n\n`
+              : `> 🧠 **Agent Memory Activated:** Retrieved ${eligibleMemories.length} relevant past experiences.\n\n`;
+            callbacks.onChunk(msg);
+          } else {
+             telemetry.logMemoryRetrieval(latencyMs, 0, 0);
+          }
+        }
+      } else {
+        telemetry.logMemoryRetrieval(latencyMs, 0, 0);
       }
     } catch (err) {
       this.logger.error('Failed to inject memory RAG', err);
@@ -725,6 +761,8 @@ export class LLMEngine {
   ): Promise<void> {
     const apiKey = model.apiKey || '';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model.model}:streamGenerateContent?alt=sse&key=${apiKey}`;
+    const workspaceRoot = customWorkspace || vscode.workspace.workspaceFolders?.[0].uri.fsPath || '';
+    const config = this.configManager.getConfig();
 
     let systemInstruction = 'You are Chanakya AI, an elite Staff-Level Software Engineer (SDE 4/5) and technical partner. ' +
       'Communicate conversationally, like a highly experienced peer pair-programming with the user.\n' +
@@ -789,11 +827,45 @@ export class LLMEngine {
 
     // Retrieve and Inject RAG Memories
     try {
+      const telemetry = SelfLearningTelemetry.getInstance(workspaceRoot);
       const memoryRetriever = MemoryRetriever.getInstance();
+      const rolloutStage = config.selfLearning?.rolloutStage || 'shadow';
+      
+      const retrieveStart = Date.now();
       const memories = await memoryRetriever.retrieve(prompt, 3);
+      const latencyMs = Date.now() - retrieveStart;
+      
       if (memories.length > 0) {
-        fullPrompt = memoryRetriever.formatMemoriesForPrompt(memories) + '\n\n' + fullPrompt;
-        callbacks.onChunk(`> 🧠 **Agent Memory Activated:** Retrieved ${memories.length} relevant past experiences.\n\n`);
+        if (rolloutStage === 'shadow') {
+          this.logger.log(`[Shadow Mode] Optimization Memory retrieved ${memories.length} results but not injected.`);
+          telemetry.logMemoryRetrieval(latencyMs, 0, memories.length);
+        } else {
+          // controlled or full
+          let eligibleMemories = memories;
+          if (rolloutStage === 'controlled') {
+            const confThreshold = config.selfLearning?.controlledConfidenceThreshold ?? 0.8;
+            const appThreshold = config.selfLearning?.controlledApplicabilityThreshold ?? 0.8;
+            eligibleMemories = memories.filter(m => 
+              (m.confidence || 0) >= confThreshold && 
+              (m.applicability || 0) >= appThreshold
+            );
+          }
+          
+          if (eligibleMemories.length > 0) {
+            const memoryPrompt = memoryRetriever.formatMemoriesForPrompt(eligibleMemories);
+            fullPrompt = memoryPrompt + '\n\n' + fullPrompt;
+            telemetry.logMemoryRetrieval(latencyMs, estimateTokens(memoryPrompt), eligibleMemories.length);
+            
+            const msg = rolloutStage === 'controlled' 
+              ? `> 🧠 **Agent Memory (Controlled):** Retrieved ${eligibleMemories.length} highly confident past experiences.\n\n`
+              : `> 🧠 **Agent Memory Activated:** Retrieved ${eligibleMemories.length} relevant past experiences.\n\n`;
+            callbacks.onChunk(msg);
+          } else {
+             telemetry.logMemoryRetrieval(latencyMs, 0, 0);
+          }
+        }
+      } else {
+        telemetry.logMemoryRetrieval(latencyMs, 0, 0);
       }
     } catch (err) {
       this.logger.error('Failed to inject memory RAG', err);

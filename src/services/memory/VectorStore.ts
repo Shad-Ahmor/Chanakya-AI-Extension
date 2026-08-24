@@ -51,11 +51,11 @@ export class VectorStore {
       this.validateVector(vector);
       // Upsert the item
       await this.index.upsertItem({
-        id: record.memory_id,
+        id: record.id,
         vector: vector,
         metadata: record as unknown as Record<string, any>
       });
-      this.logger.log(`Stored memory: ${record.memory_id} [${record.memory_type}]`);
+      this.logger.log(`Stored memory: ${record.id} [${record.type}]`);
     } catch (error) {
       this.logger.error('Failed to store memory vector', error);
     }
@@ -77,6 +77,9 @@ export class VectorStore {
     }
   }
 
+  /**
+   * Search for similar vectors
+   */
   public async search(vector: number[], topK: number = 5): Promise<MemoryRecord[]> {
     if (!this.isInitialized || !vector || vector.length === 0) return [];
     try {
@@ -122,6 +125,17 @@ export class VectorStore {
     } catch (error) {
       this.logger.error(`Failed to get memory ${memoryId}`, error);
       return null;
+    }
+  }
+
+  public async getAllMemories(): Promise<MemoryRecord[]> {
+    if (!this.isInitialized) return [];
+    try {
+      const items = await this.index.listItems();
+      return items.map(item => item.metadata as unknown as MemoryRecord);
+    } catch (error) {
+      this.logger.error(`Failed to get all memories`, error);
+      return [];
     }
   }
 

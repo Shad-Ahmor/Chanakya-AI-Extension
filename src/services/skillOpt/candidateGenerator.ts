@@ -6,6 +6,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { Logger } from '../../utils/logger';
 import { RejectedEditBuffer } from './rejectedEditBuffer';
+import { SelfLearningTelemetry } from '../memory/SelfLearningTelemetry';
 
 export interface SkillEdit {
     operation: 'ADD' | 'REPLACE' | 'DELETE';
@@ -23,6 +24,7 @@ export interface Candidate {
     content: string;
     edits: SkillEdit[];
     timestamp: number;
+    memoryIds?: string[];
 }
 
 export interface CandidateGenerationResult {
@@ -64,6 +66,46 @@ export class CandidateGenerator {
         let rejStr = JSON.stringify(rejected, null, 2);
         if (rejStr.length > 2000) rejStr = rejStr.substring(0, 2000) + '... (truncated)';
 
+        const { MemoryRetriever } = require('../memory/MemoryRetriever');
+        const telemetry = SelfLearningTelemetry.getInstance(this.workspaceRoot);
+        const startTime = Date.now();
+        const retrievedMemories = await MemoryRetriever.getInstance().retrieve(`Optimize skill ${skillName}`, 3);
+        const latencyMs = Date.now() - startTime;
+        
+        let strategyContext = '';
+        const memoryInfluenceIds: string[] = [];
+        
+        if (retrievedMemories.length > 0) {
+            strategyContext = `## Verified Strategies From Previous Tasks\n\n`;
+            let avgApplicability = 0;
+            
+            retrievedMemories.forEach((m: any, i: number) => {
+                memoryInfluenceIds.push(m.id);
+                avgApplicability += m.applicability;
+                
+                strategyContext += `Strategy #${i + 1}\nContext: ${m.task}\nConfidence: ${m.confidence}\nSuccesses: ${m.metadata?.successCount || 0}\nFailures: ${m.metadata?.failureCount || 0}\n\n`;
+                if (m.type === 'procedural') {
+                    strategyContext += `Procedure:\n${m.content}\n\n`;
+                } else if (m.type === 'mistake') {
+                    strategyContext += `Avoid:\n${m.content}\n\n`;
+                }
+            });
+            avgApplicability /= retrievedMemories.length;
+            
+            const memoryInfluence = {
+                used: true,
+                memoryIds: memoryInfluenceIds,
+                applicability: avgApplicability.toFixed(2)
+            };
+            
+            console.log(`[CandidateGenerator]\nApplying learned strategy`);
+            console.log(JSON.stringify({ memoryInfluence }, null, 2));
+            
+            telemetry.logMemoryRetrieval(latencyMs, Math.ceil(strategyContext.length / 2.8), retrievedMemories.length);
+        } else {
+            telemetry.logMemoryRetrieval(latencyMs, 0, 0);
+        }
+
         const prompt = `You are an expert AI behavior optimizer.
 You are given the current skill instructions and a reflection report detailing behavioral problems and improvements.
 Generate a minimal, evidence-based set of edits to improve the skill.
@@ -73,6 +115,9 @@ Strict Edit Budget:
 - Maximum Additions: 2
 - Maximum Deletions: 2
 - Maximum Replacements: 2
+
+${strategyContext}
+Use relevant verified strategies as guidance. Do not blindly copy them. Adapt them to the current task and current codebase.
 
 Current Skill:
 \`\`\`markdown
@@ -146,7 +191,8 @@ No markdown formatting, no explanation. Just the JSON array.`;
                                 baseVersion,
                                 content: candidateContent,
                                 edits: allowedEdits,
-                                timestamp: Date.now()
+                                timestamp: Date.now(),
+                                memoryIds: memoryInfluenceIds
                             };
 
                             await this.saveCandidate(candidate);

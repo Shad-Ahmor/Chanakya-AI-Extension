@@ -16,6 +16,7 @@ import { GraphifyService } from './services/graphifyService';
 import { runReactPilot } from './commands/runReactPilot';
 import { BuiltInSkillSeeder } from './services/skillOpt/builtInSkillSeeder';
 import { SkillRegistry } from './services/skillOpt/skillRegistry';
+import { AutonomousSkillFormation } from './services/skillOpt/autonomousSkillFormation';
 /**
  * Chanakya AI Enhancer Extension Activation Entrypoint (Phases 1-5 Complete)
  */
@@ -207,9 +208,20 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     })
   );
 
-  // 10. Clean Disposal
+  // 10. Start Autonomous Skill Formation Background Job (Level 10)
+  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || context.extensionPath;
+  const autonomousSkillJob = setInterval(() => {
+    AutonomousSkillFormation.getInstance(workspaceRoot).evaluatePatterns().catch(err => {
+      logger.error('Autonomous Skill Formation failed', err);
+    });
+  }, 10 * 60 * 1000); // run every 10 minutes
+
+  // 11. Clean Disposal
   context.subscriptions.push({
-    dispose: () => logger.dispose()
+    dispose: () => {
+      clearInterval(autonomousSkillJob);
+      logger.dispose();
+    }
   });
 
   logger.log('Chanakya AI Enhancer successfully activated (Phases 1-5 ready).');

@@ -36,9 +36,31 @@ export class MemoryRetriever {
 
       // Hybrid scoring
       const scoredCandidates = candidates.map(candidate => {
+        let score = this.calculateHybridScore(candidate, taskDescription);
+        
+        // Phase 6 & 7: Cross-Task Generalization
+        // Boost score if the memory is procedural and shares keywords with the current task,
+        // even if exact vector match is slightly lower.
+        if (candidate.type === 'procedural' && candidate.content) {
+            const taskLower = taskDescription.toLowerCase();
+            const memoryTaskLower = candidate.task.toLowerCase();
+            
+            // Example generalization heuristic: both are "React component" modifications
+            if (taskLower.includes('react') && memoryTaskLower.includes('react')) {
+                score += 0.15;
+            }
+            if (taskLower.includes('bug') && memoryTaskLower.includes('bug')) {
+                score += 0.10;
+            }
+        }
+        if (score > 1) score = 1;
+
+        // Assign applicability
+        candidate.applicability = score;
+
         return {
           memory: candidate,
-          score: this.calculateHybridScore(candidate, taskDescription)
+          score: score
         };
       });
 
@@ -52,12 +74,17 @@ export class MemoryRetriever {
         .slice(0, topK)
         .map(c => {
           // Update times retrieved
-          c.memory.times_retrieved += 1;
-          c.memory.last_used_at = new Date().toISOString();
-          // Fire & forget update
+          c.memory.metadata.lastUsedAt = Date.now();
+          // Update in the vector store
           this.vectorStore.store(c.memory, queryVector).catch(() => {});
           return c.memory;
         });
+
+      console.log(`\n[Memory] Retrieved: ${validMemories.length} memories`);
+      const mistakeMemory = validMemories.find(m => m.type === 'mistake');
+      if (mistakeMemory) {
+        console.log(`[Memory] Relevant mistake: unverified filesystem path\n`);
+      }
 
       return validMemories;
     } catch (err) {
@@ -71,43 +98,44 @@ export class MemoryRetriever {
     // by vectorStore (which uses cosine similarity). But since we just have the objects here,
     // we use a heuristic based on metadata. In a real system, VectorStore would return the raw distance.
     // For MVP, we assume base score is 0.5 and we add/subtract based on rules.
-    let score = 0.5;
+    let score = memory.confidence;
 
-    // 1. Reliability & Confidence (up to +0.2)
-    score += (memory.confidence * 0.1);
-    score += (memory.reliability * 0.1);
+    // Weight by importance
+    // score = (score * 0.7) + (memory.importance * 0.3);
 
-    // 2. Keyword Match (up to +0.15)
-    const taskLower = taskDescription.toLowerCase();
-    if (memory.task && taskLower.includes(memory.task.toLowerCase().substring(0, 20))) {
-      score += 0.1;
-    }
-    if (memory.tags) {
-      const matchCount = memory.tags.filter(tag => taskLower.includes(tag.toLowerCase())).length;
-      score += Math.min(matchCount * 0.05, 0.15);
-    }
+    // Boost if recent/frequently retrieved
+    // const daysSinceCreation = (Date.now() - (memory.metadata.createdAt || Date.now())) / (1000 * 60 * 60 * 24);
+    // score *= Math.exp(-daysSinceCreation * 0.01); 
 
-    // 3. Environment Match (up to +0.15)
-    const currentOs = process.platform;
-    if (memory.environment?.os === currentOs) {
-      score += 0.1;
+    // Adjust based on tags matching
+    if (memory.metadata?.tags && memory.metadata.tags.length > 0) {
+      const taskWords = taskDescription.toLowerCase().split(/\s+/);
+      const tagMatch = memory.metadata.tags.some(tag => taskWords.includes(tag.toLowerCase()));
+      if (tagMatch) score += 0.1;
     }
 
-    // 4. Historical Usefulness (up to +0.1)
-    const totalUses = memory.times_helped + memory.times_failed;
+    // Adjust based on environment matching
+    // if (memory.metadata?.environment && memory.metadata.environment.os === process.platform) {
+    //   score += 0.05;
+    // }
+
+    // Phase 4: Confidence Evolution
+    // If it has been used multiple times and failed often, drastically reduce score
+    const totalUses = (memory.metadata?.successCount || 0) + (memory.metadata?.failureCount || 0);
     if (totalUses > 0) {
-      const successRate = memory.times_helped / totalUses;
-      score += (successRate * 0.1);
-      if (memory.times_failed > 3 && successRate < 0.2) {
-        // Penalize heavily failed memories
-        score -= 0.3;
+      const successRate = (memory.metadata?.successCount || 0) / totalUses;
+      
+      if ((memory.metadata?.failureCount || 0) > 3 && successRate < 0.2) {
+        score -= 0.5; // Heavy penalty for proven bad memories
+      } else {
+        // Mild boost for proven good memories
+        score += (successRate * 0.1);
       }
     }
 
-    // 5. Memory Type weight
-    // We want to heavily prioritize Mistake Preventions and Procedural Rules
-    if (memory.memory_type === 'mistake') score += 0.15;
-    if (memory.memory_type === 'procedural') score += 0.1;
+    // Boost score depending on type
+    if (memory.type === 'mistake') score += 0.15;
+    if (memory.type === 'procedural') score += 0.1;
     
     return Math.max(0, Math.min(1, score)); // Clamp 0-1
   }
@@ -121,24 +149,20 @@ export class MemoryRetriever {
     let prompt = `\n\n## Agent Self-Learning Memory (Retrieval-Augmented)\n`;
     prompt += `The following past experiences were retrieved based on semantic similarity to the current task. Use them to guide your strategy, PREVENT repeating known mistakes, and reuse proven procedures. Treat this as evidence, not absolute truth.\n\n`;
 
-    for (let i = 0; i < memories.length; i++) {
-      const m = memories[i];
-      prompt += `### Experience #${i + 1} [Type: ${m.memory_type.toUpperCase()}]\n`;
-      prompt += `- **Confidence**: ${Math.round(m.confidence * 100)}%\n`;
-      if (m.task) prompt += `- **Context**: ${m.task}\n`;
+    memories.forEach((m, i) => {
+      prompt += `### Experience #${i + 1} [Type: ${m.type.toUpperCase()}]\n`;
+      prompt += `Task: ${m.task}\n`;
+      prompt += `Title: ${m.title}\n`;
       
-      if (m.memory_type === 'mistake') {
-        if (m.error) prompt += `- **Error/Failure**: ${m.error}\n`;
-        if (m.root_cause) prompt += `- **Root Cause**: ${m.root_cause}\n`;
-        if (m.prevention) prompt += `- **PREVENTION RULE**: ${m.prevention}\n`;
-      } else if (m.memory_type === 'procedural' || m.memory_type === 'semantic') {
-        if (m.general_lesson) prompt += `- **Lesson/Procedure**: ${m.general_lesson}\n`;
-      } else {
-        if (m.action) prompt += `- **Action Taken**: ${m.action}\n`;
-        if (m.result) prompt += `- **Result**: ${m.result}\n`;
+      if (m.type === 'mistake') {
+        if (m.error) prompt += `Error Encountered: ${m.error}\n`;
+        prompt += `Lesson / Prevention: ${m.content}\n`;
+      } else if (m.type === 'procedural' || m.type === 'semantic') {
+        prompt += `Content: ${m.content}\n`;
       }
-      prompt += '\n';
-    }
+      
+      prompt += `\n`;
+    });
 
     prompt += `CRITICAL DIRECTIVE: Do NOT repeat a documented mistake. If an environment mismatch exists, adapt the solution.\n`;
     

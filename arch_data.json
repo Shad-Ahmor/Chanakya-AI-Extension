@@ -1,0 +1,535 @@
+[
+  {
+    "file": "src/services/ConversationManager.ts",
+    "className": "ConversationManager",
+    "imports": [
+      "vscode",
+      "path",
+      "fs",
+      "uuid",
+      "../types/ipc",
+      "../utils/logger"
+    ]
+  },
+  {
+    "file": "src/services/agentOrchestrator.ts",
+    "className": "AgentOrchestrator",
+    "imports": [
+      "vscode",
+      "child_process",
+      "path",
+      "fs/promises",
+      "events",
+      "../utils/logger",
+      "./mcpService",
+      "./lspService",
+      "./planTracker",
+      "./executionGuard",
+      "./toolSpillService",
+      "./memory/SelfLearningTelemetry"
+    ]
+  },
+  {
+    "file": "src/services/aiService.ts",
+    "className": "AIService",
+    "imports": [
+      "vscode",
+      "../types",
+      "../utils/logger",
+      "./secretManager"
+    ]
+  },
+  {
+    "file": "src/services/compressionAgent.ts",
+    "className": "CompressionAgent",
+    "imports": [
+      "./llmEngine",
+      "./configManager",
+      "../utils/logger",
+      "../types/ipc"
+    ]
+  },
+  {
+    "file": "src/services/configManager.ts",
+    "className": "ConfigManager",
+    "imports": [
+      "fs",
+      "path",
+      "os",
+      "yaml",
+      "vscode",
+      "../types/config",
+      "../types/ipc",
+      "../utils/logger"
+    ]
+  },
+  {
+    "file": "src/services/contextExtractor.ts",
+    "className": "ContextExtractor",
+    "imports": [
+      "vscode",
+      "../types",
+      "../utils/tokenOptimizer"
+    ]
+  },
+  {
+    "file": "src/services/contextProvider.ts",
+    "className": "ContextProvider",
+    "imports": [
+      "vscode",
+      "path",
+      "../types/ipc",
+      "../utils/logger"
+    ]
+  },
+  {
+    "file": "src/services/documentParserService.ts",
+    "className": "DocumentParserService",
+    "imports": [
+      "path",
+      "fs/promises",
+      "../utils/logger"
+    ]
+  },
+  {
+    "file": "src/services/embeddedMcpServer.ts",
+    "className": "EmbeddedMcpServer",
+    "imports": [
+      "vscode",
+      "path",
+      "fs",
+      "child_process",
+      "../types/mcp",
+      "./graphifyService"
+    ]
+  },
+  {
+    "file": "src/services/evaluationService.ts",
+    "className": "EvaluationService",
+    "imports": [
+      "../utils/logger",
+      "./llmEngine",
+      "./configManager"
+    ]
+  },
+  {
+    "file": "src/services/executionGuard.ts",
+    "className": "ExecutionGuardService",
+    "imports": [
+      "../utils/logger"
+    ]
+  },
+  {
+    "file": "src/services/fimService.ts",
+    "className": "FIMService",
+    "imports": [
+      "vscode",
+      "../types/config",
+      "./configManager",
+      "../utils/logger"
+    ]
+  },
+  {
+    "file": "src/services/graphifyService.ts",
+    "className": "GraphifyService",
+    "imports": [
+      "vscode",
+      "path",
+      "../types/graphify",
+      "../utils/logger"
+    ]
+  },
+  {
+    "file": "src/services/llmEngine.ts",
+    "className": "LLMEngine",
+    "imports": [
+      "vscode",
+      "../types/config",
+      "../types/ipc",
+      "./configManager",
+      "../utils/logger",
+      "./agentOrchestrator",
+      "./skillOpt/trajectoryRecorder",
+      "./skillOpt/evaluator",
+      "./memory/MemoryRetriever",
+      "../utils/tokenOptimizer",
+      "./memory/ReflectionEngine",
+      "./unifiedContextBuilder",
+      "./memory/SelfLearningTelemetry"
+    ]
+  },
+  {
+    "file": "src/services/llmGateway.ts",
+    "className": "LLMGateway",
+    "imports": [
+      "vscode",
+      "./configManager",
+      "../utils/logger",
+      "./llmEngine",
+      "../utils/securityGuardrails",
+      "./evaluationService",
+      "./compressionAgent",
+      "./semanticCache",
+      "../types/config",
+      "../types/ipc"
+    ]
+  },
+  {
+    "file": "src/services/lspService.ts",
+    "className": "LspService",
+    "imports": [
+      "vscode",
+      "../utils/logger"
+    ]
+  },
+  {
+    "file": "src/services/mcpDbService.ts",
+    "className": "McpDbService",
+    "imports": [
+      "../types/mcp",
+      "../utils/logger"
+    ]
+  },
+  {
+    "file": "src/services/mcpService.ts",
+    "className": "McpService",
+    "imports": [
+      "path",
+      "fs",
+      "os",
+      "@modelcontextprotocol/sdk/client/index.js",
+      "@modelcontextprotocol/sdk/client/stdio.js",
+      "@modelcontextprotocol/sdk/client/sse.js",
+      "./embeddedMcpServer",
+      "./mcpDbService",
+      "../utils/logger"
+    ]
+  },
+  {
+    "file": "src/services/memory/EmbeddingService.ts",
+    "className": "EmbeddingService",
+    "imports": [
+      "../configManager",
+      "../../utils/logger"
+    ]
+  },
+  {
+    "file": "src/services/memory/MemoryManager.ts",
+    "className": "MemoryManager",
+    "imports": [
+      "uuid",
+      "vscode",
+      "../../types/memory",
+      "./VectorStore",
+      "./EmbeddingService",
+      "../../utils/logger",
+      "./SelfLearningTelemetry"
+    ]
+  },
+  {
+    "file": "src/services/memory/MemoryRetriever.ts",
+    "className": "MemoryRetriever",
+    "imports": [
+      "../../types/memory",
+      "./VectorStore",
+      "./EmbeddingService",
+      "../../utils/logger"
+    ]
+  },
+  {
+    "file": "src/services/memory/ReflectionEngine.ts",
+    "className": "ReflectionEngine",
+    "imports": [
+      "../../utils/logger",
+      "./MemoryManager"
+    ]
+  },
+  {
+    "file": "src/services/memory/SelfLearningTelemetry.ts",
+    "className": "SelfLearningTelemetry",
+    "imports": [
+      "fs",
+      "path",
+      "../../utils/logger"
+    ]
+  },
+  {
+    "file": "src/services/memory/VectorStore.ts",
+    "className": "VectorStore",
+    "imports": [
+      "path",
+      "vscode",
+      "vectra",
+      "../../types/memory",
+      "../../utils/logger"
+    ]
+  },
+  {
+    "file": "src/services/planTracker.ts",
+    "className": "PlanTracker",
+    "imports": [
+      "events",
+      "../utils/logger"
+    ]
+  },
+  {
+    "file": "src/services/pxpipeService.ts",
+    "className": "PxPipeService",
+    "imports": [
+      "../utils/pxpipeRenderer",
+      "../utils/factsheetExtractor",
+      "../utils/schemaStripper",
+      "../utils/visionCostCalculator",
+      "./pxpipeTracker",
+      "../utils/logger"
+    ]
+  },
+  {
+    "file": "src/services/pxpipeTracker.ts",
+    "className": "PxPipeTracker",
+    "imports": [
+      "../utils/logger"
+    ]
+  },
+  {
+    "file": "src/services/ragRetriever.ts",
+    "className": "RagRetriever",
+    "imports": [
+      "./memory/VectorStore",
+      "./memory/EmbeddingService",
+      "../utils/logger",
+      "../types/memory"
+    ]
+  },
+  {
+    "file": "src/services/rulesEngine/rulesRegistry.ts",
+    "className": "RulesRegistry",
+    "imports": [
+      "fs",
+      "path"
+    ]
+  },
+  {
+    "file": "src/services/secretManager.ts",
+    "className": "SecretManager",
+    "imports": [
+      "vscode",
+      "../utils/logger"
+    ]
+  },
+  {
+    "file": "src/services/semanticCache.ts",
+    "className": "SemanticCache",
+    "imports": [
+      "crypto",
+      "../utils/logger"
+    ]
+  },
+  {
+    "file": "src/services/skillOpt/autoTrainer.ts",
+    "className": "AutoTrainer",
+    "imports": [
+      "./trajectoryRecorder",
+      "./skillRegistry",
+      "./evaluator",
+      "../../utils/logger"
+    ]
+  },
+  {
+    "file": "src/services/skillOpt/autonomousSkillFormation.ts",
+    "className": "AutonomousSkillFormation",
+    "imports": [
+      "../../utils/logger",
+      "../memory/VectorStore",
+      "../../types/memory",
+      "../llmGateway",
+      "./skillRegistry",
+      "./skillValidator",
+      "./validationGate",
+      "../configManager"
+    ]
+  },
+  {
+    "file": "src/services/skillOpt/builtInSkillSeeder.ts",
+    "className": "BuiltInSkillSeeder",
+    "imports": [
+      "fs",
+      "path",
+      "./skillRegistry",
+      "../../utils/logger"
+    ]
+  },
+  {
+    "file": "src/services/skillOpt/candidateGenerator.ts",
+    "className": "CandidateGenerator",
+    "imports": [
+      "../llmGateway",
+      "../configManager",
+      "./reflectionEngine",
+      "fs/promises",
+      "path",
+      "../../utils/logger",
+      "./rejectedEditBuffer",
+      "../memory/SelfLearningTelemetry"
+    ]
+  },
+  {
+    "file": "src/services/skillOpt/evaluator.ts",
+    "className": "BaseTrajectoryEvaluator",
+    "imports": [
+      "./trajectoryRecorder",
+      "fs",
+      "path",
+      "child_process",
+      "util"
+    ]
+  },
+  {
+    "file": "src/services/skillOpt/metaOptimizer.ts",
+    "className": "MetaOptimizer",
+    "imports": [
+      "../llmGateway",
+      "../configManager",
+      "./trajectoryRecorder",
+      "./rejectedEditBuffer"
+    ]
+  },
+  {
+    "file": "src/services/skillOpt/reflectionEngine.ts",
+    "className": "ReflectionEngine",
+    "imports": [
+      "./trajectoryRecorder",
+      "../llmGateway",
+      "../configManager"
+    ]
+  },
+  {
+    "file": "src/services/skillOpt/rejectedEditBuffer.ts",
+    "className": "RejectedEditBuffer",
+    "imports": [
+      "fs",
+      "path",
+      "./candidateGenerator"
+    ]
+  },
+  {
+    "file": "src/services/skillOpt/rolloutEngine.ts",
+    "className": "RolloutEngine",
+    "imports": [
+      "../llmGateway",
+      "../configManager",
+      "./trajectoryRecorder",
+      "./taskDatasetManager",
+      "../../utils/logger",
+      "vscode",
+      "../taskUnderstander"
+    ]
+  },
+  {
+    "file": "src/services/skillOpt/skillDriftValidator.ts",
+    "className": "SkillDriftValidator",
+    "imports": [
+      "../llmGateway",
+      "../configManager",
+      "./candidateGenerator"
+    ]
+  },
+  {
+    "file": "src/services/skillOpt/skillOptService.ts",
+    "className": "SkillOptService",
+    "imports": [
+      "./skillRegistry",
+      "./trajectoryRecorder",
+      "./evaluator",
+      "./reflectionEngine",
+      "./candidateGenerator",
+      "./validationGate",
+      "../memory/MemoryManager",
+      "../../utils/logger"
+    ]
+  },
+  {
+    "file": "src/services/skillOpt/skillRegistry.ts",
+    "className": "SkillRegistry",
+    "imports": [
+      "fs",
+      "path"
+    ]
+  },
+  {
+    "file": "src/services/skillOpt/skillValidator.ts",
+    "className": "SkillValidator",
+    "imports": [
+      "../llmGateway",
+      "../configManager",
+      "./trajectoryRecorder",
+      "./reflectionEngine"
+    ]
+  },
+  {
+    "file": "src/services/skillOpt/taskDatasetManager.ts",
+    "className": "TaskDatasetManager",
+    "imports": [
+      "fs/promises",
+      "path"
+    ]
+  },
+  {
+    "file": "src/services/skillOpt/trajectoryRecorder.ts",
+    "className": "TrajectoryRecorder",
+    "imports": [
+      "fs",
+      "path"
+    ]
+  },
+  {
+    "file": "src/services/skillOpt/validationGate.ts",
+    "className": "ValidationGate",
+    "imports": []
+  },
+  {
+    "file": "src/services/taskUnderstander.ts",
+    "className": "TaskUnderstander",
+    "imports": [
+      "./llmGateway",
+      "./configManager",
+      "./skillOpt/skillRegistry"
+    ]
+  },
+  {
+    "file": "src/services/toolSpillService.ts",
+    "className": "ToolSpillService",
+    "imports": [
+      "vscode",
+      "../utils/logger"
+    ]
+  },
+  {
+    "file": "src/services/unifiedContextBuilder.ts",
+    "className": "UnifiedContextBuilder",
+    "imports": [
+      "../types/ipc",
+      "./skillOpt/skillRegistry",
+      "./rulesEngine/rulesRegistry",
+      "./ragRetriever",
+      "../utils/logger",
+      "./taskUnderstander"
+    ]
+  },
+  {
+    "file": "src/services/workspaceIndexer.ts",
+    "className": "WorkspaceIndexer",
+    "imports": [
+      "vscode",
+      "path",
+      "fs/promises",
+      "uuid",
+      "../utils/logger",
+      "../utils/tokenOptimizer",
+      "./documentParserService",
+      "./memory/EmbeddingService",
+      "./memory/VectorStore",
+      "../types/memory"
+    ]
+  }
+]

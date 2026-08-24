@@ -83,7 +83,7 @@ export default function ChatMessageItem({ message, onOpenArtifact }: Props) {
     <div
       className={`flex flex-col p-4 rounded-2xl transition-all leading-relaxed relative overflow-hidden ${
         isUser
-          ? 'bg-gradient-to-br from-indigo-500 via-purple-500 to-sky-500 text-white ml-6 shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-white/20'
+          ? 'bg-vscode-widgetBg text-vscode-editorFg ml-6 shadow-md border border-vscode-widgetBorder'
           : 'bg-vscode-editor-background/80 backdrop-blur-xl text-vscode-fg mr-4 border border-vscode-focusBorder/50 shadow-[0_8px_30px_rgb(0,0,0,0.12)]'
       }`}
     >
@@ -139,7 +139,7 @@ export default function ChatMessageItem({ message, onOpenArtifact }: Props) {
         <div className="my-2">
           <div
             onClick={() => setShowThought(!showThought)}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono cursor-pointer border border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 transition-all select-none"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono cursor-pointer border border-vscode-border bg-vscode-badgeBg/10 text-vscode-fg hover:bg-vscode-badgeBg/20 transition-all select-none"
           >
             <span className="text-xs">🧠</span>
             <span className="font-semibold">
@@ -152,7 +152,7 @@ export default function ChatMessageItem({ message, onOpenArtifact }: Props) {
           </div>
 
           {showThought && message.thought && (
-            <div className="mt-1.5 p-3 rounded-lg border border-purple-500/20 bg-purple-950/20 text-purple-200/90 text-[12px] font-mono leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto">
+            <div className="mt-1.5 p-3 rounded-lg border border-vscode-border bg-vscode-editorBg text-vscode-fg/90 text-[12px] font-mono leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto">
               {message.thought}
             </div>
           )}
@@ -230,8 +230,8 @@ export default function ChatMessageItem({ message, onOpenArtifact }: Props) {
                 if (block.parsed?.name === 'ask_user_options') {
                   const args = block.parsed.arguments || {};
                   return (
-                    <div key={i} className="my-3 border border-purple-500/30 bg-purple-500/10 rounded-xl overflow-hidden shadow-sm">
-                      <div className="flex items-center gap-2 px-3 py-2 bg-purple-500/20 border-b border-purple-500/20 font-mono text-[11px] font-bold text-purple-300">
+                    <div key={i} className="my-3 border border-vscode-border bg-vscode-badgeBg/10 rounded-xl overflow-hidden shadow-sm">
+                      <div className="flex items-center gap-2 px-3 py-2 bg-vscode-badgeBg/20 border-b border-vscode-border font-mono text-[11px] font-bold text-vscode-fg">
                         <Sparkles className="w-3.5 h-3.5" />
                         <span>Interactive Question</span>
                       </div>
@@ -251,8 +251,8 @@ export default function ChatMessageItem({ message, onOpenArtifact }: Props) {
                                 disabled={isAnswered}
                                 className={`px-3 py-2 text-left text-[12px] rounded border transition-colors ${
                                   isSelected 
-                                    ? 'bg-purple-500/40 border-purple-400 text-white shadow-sm' 
-                                    : 'border-purple-500/30 hover:bg-purple-500/20 text-white/80 disabled:opacity-50 disabled:hover:bg-transparent cursor-pointer'
+                                    ? 'bg-vscode-buttonBg border-vscode-buttonBorder text-vscode-buttonFg shadow-sm' 
+                                    : 'border-vscode-border hover:bg-vscode-buttonHover text-vscode-fg/80 disabled:opacity-50 disabled:hover:bg-transparent cursor-pointer'
                                 }`}
                               >
                                 {opt}
@@ -266,11 +266,11 @@ export default function ChatMessageItem({ message, onOpenArtifact }: Props) {
                 }
 
                 return (
-                  <div key={i} className="my-3 border border-sky-500/30 bg-sky-500/10 rounded-xl overflow-hidden shadow-sm">
-                    <div className="flex items-center gap-2 px-3 py-2 bg-sky-500/20 border-b border-sky-500/20 font-mono text-[11px] font-bold text-sky-300">
+                  <div key={i} className="my-3 border border-vscode-border bg-vscode-editorBg rounded-xl overflow-hidden shadow-sm">
+                    <div className="flex items-center gap-2 px-3 py-2 bg-vscode-badgeBg/10 border-b border-vscode-border font-mono text-[11px] font-bold text-vscode-fg">
                       <Sparkles className="w-3.5 h-3.5" />
                       <span>{block.parsed?.name ? `Executing Tool: ${block.parsed.name}` : 'Preparing Tool...'}</span>
-                      {!block.parsed && <Loader2 className="w-3 h-3 animate-spin ml-auto text-sky-400" />}
+                      {!block.parsed && <Loader2 className="w-3 h-3 animate-spin ml-auto text-vscode-fg" />}
                     </div>
                     <div className="p-0 text-xs">
                       <CodeBlock 
@@ -438,7 +438,7 @@ export default function ChatMessageItem({ message, onOpenArtifact }: Props) {
                 </span>
               )}
               {message.thoughtDurationMs !== undefined && (
-                <span className="text-purple-300 font-medium">
+                <span className="text-vscode-fg/60 font-medium">
                   🧠 {(message.thoughtDurationMs / 1000).toFixed(1)}s think
                 </span>
               )}

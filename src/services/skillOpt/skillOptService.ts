@@ -4,6 +4,7 @@ import { EvaluatorFactory } from './evaluator';
 import { ReflectionEngine } from './reflectionEngine';
 import { CandidateGenerator, SkillEdit } from './candidateGenerator';
 import { ValidationGate } from './validationGate';
+import { MemoryManager } from '../memory/MemoryManager';
 import { Logger } from '../../utils/logger';
 
 export interface OptimizationResult {
@@ -110,13 +111,32 @@ export class SkillOptService {
             // Promote candidate
             this.registry.promoteSkill(skillName, candidateSkill.metadata.version);
             this.logger.log(`Optimization ACCEPTED: Promoted ${skillName} to v${candidateSkill.metadata.version}`);
+            
+            // Phase 7: Store SkillOpt Learning (Accepted)
+            MemoryManager.getInstance().storeExperience({
+                type: 'procedural',
+                title: `SkillOpt Accepted: ${skillName}`,
+                task: `Optimize skill ${skillName}`,
+                general_lesson: `Optimization ACCEPTED: ${decision.reason}. Score improved from ${scoreBefore} to ${scoreAfter}.`,
+                confidence: 0.8,
+                tags: ['skillopt', 'accepted', skillName]
+            });
+
         } else {
             // Reject candidate
             candidateSkill.metadata.status = 'archived';
             candidateSkill.metadata.changeDescription = `Rejected: ${decision.reason}`;
             this.registry.saveSkillVersion(skillName, candidateSkill);
             
-            this.logger.log(`Optimization REJECTED: Candidate v${candidateSkill.metadata.version} discarded.`);
+            // Phase 7: Store SkillOpt Learning (Rejected)
+            MemoryManager.getInstance().storeExperience({
+                type: 'procedural',
+                title: `SkillOpt Rejected: ${skillName}`,
+                task: `Optimize skill ${skillName}`,
+                general_lesson: `This exact approach previously underperformed in similar context: Score lower than baseline (${scoreBefore} -> ${scoreAfter}). Avoid candidate changes: ${candidateResult.candidates[0].edits.map(e => e.operation).join(', ')}`,
+                confidence: 0.8,
+                tags: ['skillopt', 'rejected', skillName]
+            });
         }
 
         // 9. Return Optimization Report

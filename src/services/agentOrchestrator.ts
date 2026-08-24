@@ -9,6 +9,7 @@ import { LspService } from './lspService';
 import { PlanTracker } from './planTracker';
 import { ExecutionGuardService } from './executionGuard';
 import { ToolSpillService } from './toolSpillService';
+import { SelfLearningTelemetry } from './memory/SelfLearningTelemetry';
 export interface ToolDefinition {
   type: 'function';
   function: {
@@ -349,11 +350,14 @@ Only one tool call per response is supported. Do not output anything else if you
 
   public async executeTool(name: string, args: any, customWorkspace?: string): Promise<string> {
     this.logger.log(`[Agent] Executing tool: ${name}`);
+    const workspaceRoot = customWorkspace || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+    const telemetry = SelfLearningTelemetry.getInstance(workspaceRoot);
 
     // 1. Guard check for loop hygiene
     const guardIntervention = ExecutionGuardService.getInstance().evaluatePreExecution(name, args);
     if (guardIntervention.warningPrompt) {
       this.logger.warn(`[Agent] Loop warning: ${guardIntervention.warningPrompt}`);
+      telemetry.logLoopDetected();
     }
 
     try {
@@ -434,12 +438,14 @@ Only one tool call per response is supported. Do not output anything else if you
       }
 
       ExecutionGuardService.getInstance().recordToolResult(name, true);
+      telemetry.logToolCall(false);
 
       // 2. Tool output spill check
       const spillResult = await ToolSpillService.getInstance().handleOutputSpill(name, rawResult);
       return spillResult.content;
     } catch (err: any) {
       ExecutionGuardService.getInstance().recordToolResult(name, false, err.message);
+      telemetry.logToolCall(true);
       this.logger.error(`[Agent] Tool ${name} failed`, err);
       return `Error executing ${name}: ${err.message}`;
     }
