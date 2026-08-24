@@ -79,4 +79,14 @@ export interface AppConfig {
     readonly controlledConfidenceThreshold?: number;
     readonly controlledApplicabilityThreshold?: number;
   } | undefined;
+  readonly longTask?: {
+    readonly enabled?: boolean;
+    readonly mediumThreshold?: number;
+    readonly largeThreshold?: number;
+    readonly veryLargeThreshold?: number;
+    readonly extremeThreshold?: number;
+    readonly persistArtifacts?: boolean;
+    readonly artifactDirectory?: string;
+    readonly autoCreatePlan?: boolean;
+  } | undefined;
 }

@@ -19,6 +19,26 @@ import { SkillOptService } from '../services/skillOpt/skillOptService';
 import { AutoTrainer } from '../services/skillOpt/autoTrainer';
 import { TaskUnderstander } from '../services/taskUnderstander';
 import { PxPipeRenderer } from '../utils/pxpipeRenderer';
+import { AgentOrchestrator } from '../services/agentOrchestrator';
+import { MemoryRetriever } from '../services/memory/MemoryRetriever';
+import { ReflectionEngine } from '../services/skillOpt/reflectionEngine';
+import { MemoryManager } from '../services/memory/MemoryManager';
+import { SelfLearningTelemetry } from '../services/memory/SelfLearningTelemetry';
+
+// Long Task System
+import { TaskComplexityDetector } from '../services/longTask/TaskComplexityDetector';
+import { TaskComplexity } from '../services/longTask/types';
+import { LongTaskManager } from '../services/longTask/LongTaskManager';
+import { LongContextIngestionService } from '../services/longTask/LongContextIngestionService';
+import { RequirementExtractionService } from '../services/longTask/RequirementExtractionService';
+import { TaskPlanner } from '../services/longTask/TaskPlanner';
+import { TaskRecoveryManager } from '../services/longTask/TaskRecoveryManager';
+import { PlanVerifier } from '../services/longTask/PlanVerifier';
+import { RequirementCoverageAnalyzer } from '../services/longTask/RequirementCoverageAnalyzer';
+import { LongTaskTelemetry } from '../services/longTask/LongTaskTelemetry';
+import { TaskDecomposer } from '../services/longTask/TaskDecomposer';
+import { PlanStore } from '../services/longTask/PlanStore';
+import { TaskCheckpointManager } from '../services/longTask/TaskCheckpointManager';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'chanakya-ai-launcher';
@@ -698,6 +718,82 @@ ${diff}`;
           readonly promptTokens?: number | undefined;
           readonly completionTokens?: number | undefined;
         } | undefined = undefined;
+
+        // --- LONG TASK SUBSYSTEM INTEGRATION ---
+        const config = this._configManager.getConfig();
+        if (config.longTask?.enabled) {
+          const detector = new TaskComplexityDetector(config);
+          const complexityScore = detector.detect(text);
+          const complexity = complexityScore.classification;
+          
+          if (complexity === TaskComplexity.LARGE || complexity === TaskComplexity.VERY_LARGE || complexity === TaskComplexity.EXTREME) {
+            this._logger.log(`[SidebarProvider] High complexity task detected (${complexity}). Routing to LongTaskManager.`);
+            this.postMessage({
+              type: 'updateTaskStatus',
+              payload: { messageId: assistantMsgId, task: { id: `longtask-${Date.now()}`, status: 'running', label: `Long Task Detected. Initializing Planner...` } }
+            });
+
+            try {
+              // Instantiate the Long Task subsystem
+              const planStore = new PlanStore(workspaceRoot);
+              const storageBaseDir = path.join(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '', '.chanakya', 'tasks');
+              const ingestionService = new LongContextIngestionService(detector, storageBaseDir);
+              const requirementService = new RequirementExtractionService();
+              const decomposer = new TaskDecomposer(ingestionService, requirementService, storageBaseDir);
+              const planner = new TaskPlanner(decomposer, planStore);
+              const checkpointManager = new TaskCheckpointManager(planStore);
+              const recoveryManager = new TaskRecoveryManager(planStore, checkpointManager);
+              const verifier = new PlanVerifier();
+              const coverageAnalyzer = new RequirementCoverageAnalyzer();
+              const telemetry = new LongTaskTelemetry();
+              
+              const longTaskManager = new LongTaskManager(
+                planner,
+                recoveryManager,
+                verifier,
+                coverageAnalyzer,
+                checkpointManager,
+                telemetry,
+                storageBaseDir,
+                AgentOrchestrator.getInstance(),
+                MemoryRetriever.getInstance(),
+                ReflectionEngine.getInstance(),
+                MemoryManager.getInstance(),
+                SelfLearningTelemetry.getInstance(workspaceRoot)
+              );
+
+              // Offload execution to LongTaskManager with live progress updates
+              await longTaskManager.executeTask(text, complexity, 128000, (msg) => {
+                this.postMessage({
+                  type: 'updateTaskStatus',
+                  payload: { messageId: assistantMsgId, task: { id: `longtask-${Date.now()}`, status: 'running', label: msg } }
+                });
+              });
+
+              this.postMessage({
+                type: 'updateTaskStatus',
+                payload: { messageId: assistantMsgId, task: { id: `longtask-${Date.now()}`, status: 'done', label: `Long Task Execution Completed.` } }
+              });
+
+              this.postMessage({
+                type: 'streamEnd',
+                payload: { messageId: assistantMsgId }
+              });
+              
+              // End processing here so the legacy execution does not run
+              return;
+
+            } catch (err: any) {
+              this._logger.error(`[SidebarProvider] LongTaskManager failed:`, err);
+              this.postMessage({
+                type: 'updateTaskStatus',
+                payload: { messageId: assistantMsgId, task: { id: `longtask-${Date.now()}`, status: 'error', label: `Long Task Failed: ${err.message}` } }
+              });
+              // Fallback to standard execution if Planner crashes
+            }
+          }
+        }
+        // --- END LONG TASK INTEGRATION ---
 
         await LLMGateway.getInstance().streamChat({
           prompt: text,

@@ -358,6 +358,16 @@ export class ConfigManager {
         rolloutStage: 'shadow',
         controlledConfidenceThreshold: 0.80,
         controlledApplicabilityThreshold: 0.80
+      },
+      longTask: {
+        enabled: false,
+        mediumThreshold: 20,
+        largeThreshold: 50,
+        veryLargeThreshold: 100,
+        extremeThreshold: 200,
+        persistArtifacts: true,
+        artifactDirectory: '.chanakya/tasks',
+        autoCreatePlan: true
       }
     };
 
