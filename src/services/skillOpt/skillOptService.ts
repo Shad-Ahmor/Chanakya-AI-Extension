@@ -2,22 +2,12 @@ import { SkillRegistry } from './skillRegistry';
 import { TrajectoryRecorder } from './trajectoryRecorder';
 import { EvaluatorFactory } from './evaluator';
 import { ReflectionEngine } from './reflectionEngine';
-import { CandidateGenerator, SkillEdit } from './candidateGenerator';
+import { CandidateGenerator } from './candidateGenerator';
 import { ValidationGate } from './validationGate';
 import { MemoryManager } from '../memory/MemoryManager';
 import { Logger } from '../../utils/logger';
-
-export interface OptimizationResult {
-    skill: string;
-    previousVersion: number;
-    candidateVersion: number;
-    scoreBefore: number;
-    scoreAfter: number;
-    improvement: number;
-    decision: 'accepted' | 'rejected';
-    changes: SkillEdit[];
-    reason?: string;
-}
+import { OptimizationResult } from './types';
+import { TaskApplicabilityValidator } from './taskApplicabilityValidator';
 
 export class SkillOptService {
     private static instance: SkillOptService;
@@ -77,6 +67,43 @@ export class SkillOptService {
             totalScore += (await evaluator.evaluate(t)).score;
         }
         const scoreBefore = totalScore / skillTrajectories.length;
+        
+        // 3.5 Check Task Applicability before generating candidates
+        const latestTrajectory = skillTrajectories[skillTrajectories.length - 1];
+        const validator = TaskApplicabilityValidator.getInstance();
+        const applicability = await validator.validate(latestTrajectory.task || skillName, latestTrajectory);
+
+        if (applicability.applicable !== 'YES') {
+            this.logger.log(`[SkillOpt] Task applicability validation failed: ${applicability.applicable} - ${applicability.reasonCode}`);
+            return {
+                decision: 'not_evaluated',
+                skill: skillName,
+                reason: applicability.reason,
+                task: {
+                    status: applicability.applicable === 'NO' ? 'TASK_NOT_APPLICABLE' : applicability.applicable === 'UNCERTAIN' ? 'TASK_NEEDS_CLARIFICATION' : 'TASK_BLOCKED',
+                    reason: applicability.reason,
+                    reasonCode: applicability.reasonCode,
+                    evidence: applicability.evidence
+                },
+                candidate: {
+                    status: 'CANDIDATE_NOT_CREATED',
+                    candidateId: null,
+                    generated: false,
+                    applied: false
+                },
+                evaluation: {
+                    status: 'EVALUATION_NOT_RUN',
+                    score: 0,
+                    baselineScore: scoreBefore,
+                    candidateScore: 0,
+                    testsPassed: false
+                },
+                optimization: {
+                    decision: 'NOT_EVALUATED',
+                    reason: applicability.reason
+                }
+            };
+        }
 
         // 4. Ask ReflectionEngine for repeated problems
         const reflectionResult = await this.reflection.reflect(skillTrajectories);
@@ -147,9 +174,31 @@ export class SkillOptService {
             scoreBefore: scoreBefore,
             scoreAfter: scoreAfter,
             improvement: decision.improvement,
-            decision: decision.decision,
+            decision: decision.decision as any,
             changes: candidateResult.candidates[0].edits,
-            reason: decision.reason
+            reason: decision.reason,
+            task: {
+                status: 'TASK_COMPLETED',
+                reason: 'Task executed and evaluated successfully',
+                reasonCode: 'CANDIDATE_EVALUATED' as any
+            },
+            candidate: {
+                status: decision.decision === 'accepted' ? 'CANDIDATE_ACCEPTED' : 'CANDIDATE_REJECTED',
+                candidateId: candidateSkill.metadata.version.toString(),
+                generated: true,
+                applied: true
+            },
+            evaluation: {
+                status: 'EVALUATION_PASSED',
+                score: scoreAfter,
+                baselineScore: scoreBefore,
+                candidateScore: scoreAfter,
+                testsPassed: true
+            },
+            optimization: {
+                decision: decision.decision === 'accepted' ? 'ACCEPTED' : 'REJECTED',
+                reason: decision.reason
+            }
         };
     }
 }

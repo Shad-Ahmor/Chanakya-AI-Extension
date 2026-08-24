@@ -171,9 +171,26 @@ if (!content.includes('[count]')) {
                 return evalResult.score;
             });
 
-            logger.log(`[SkillOpt] ValidationGate: ${result.decision.toUpperCase()}`);
-            
-            vscode.window.showInformationMessage(`React Pilot Completed. Decision: ${result.decision.toUpperCase()}`);
+            logger.log(`[Task] Received`);
+            logger.log(`[Task] Applicability: ${result.task.status === 'TASK_NOT_APPLICABLE' ? 'NOT_APPLICABLE' : 'VALID'}`);
+            if (result.task.status === 'TASK_NOT_APPLICABLE') {
+                logger.log(`[Task] Reason: ${result.task.reasonCode}`);
+                logger.log(`[Candidate] Not created`);
+                logger.log(`[Evaluation] Not run`);
+                logger.log(`[Optimization] Not evaluated`);
+                vscode.window.showInformationMessage(`React Pilot: Task NOT APPLICABLE. Reason: ${result.task.reasonCode}`);
+            } else {
+                logger.log(`[Candidate] Generated: candidate-${result.candidateVersion}`);
+                logger.log(`[Candidate] Applied`);
+                logger.log(`[Evaluation] Started`);
+                logger.log(`[Evaluation] Completed`);
+                logger.log(`[Baseline] ${result.scoreBefore}`);
+                logger.log(`[Candidate] ${result.scoreAfter}`);
+                logger.log(`[Optimization] Decision: ${result.optimization.decision}`);
+                logger.log(`[Reason] ${result.optimization.reason}`);
+                
+                vscode.window.showInformationMessage(`React Pilot Completed. Decision: ${result.optimization.decision}`);
+            }
         } catch (e: any) {
             logger.error('React Pilot failed: ', e);
             vscode.window.showErrorMessage('React Pilot failed. See logs.');

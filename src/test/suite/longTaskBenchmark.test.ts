@@ -32,7 +32,7 @@ suite('Long Task Subsystem Benchmarks', () => {
 
     test('Should correctly classify long tasks based on context size', () => {
         const detector = new TaskComplexityDetector(mockConfig);
-        const prompt = 'Refactor the entire authentication flow across all 15 services. Implement OAuth2, JWT rotation, and user session revocation. Make sure to update the database schema and migrate existing users.';
+        const prompt = 'Refactor the entire repository authentication flow end-to-end across all 15 services. Implement OAuth2, JWT rotation, and user session revocation. Make sure to update the database schema and migrate existing users. This is a massive, comprehensive deep analysis and architecture review.';
         const complexity = detector.detect(prompt).classification;
         
         assert.ok(

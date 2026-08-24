@@ -88,8 +88,8 @@ async function runTests() {
         assert.strictEqual(acceptedResult.skill, 'coding');
         assert.strictEqual(acceptedResult.previousVersion, 1);
         assert.strictEqual(acceptedResult.candidateVersion, 2);
-        assert.ok(acceptedResult.scoreBefore < 0.95);
-        assert.ok(acceptedResult.changes.length > 0);
+        assert.ok(acceptedResult.scoreBefore! < 0.95);
+        assert.ok(acceptedResult.changes!.length > 0);
         
         // Verify registry promoted it
         const bestSkillAfterAccept = registry.getBestSkill('coding');
