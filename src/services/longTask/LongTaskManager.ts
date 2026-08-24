@@ -40,7 +40,8 @@ export class LongTaskManager {
         prompt: string,
         complexity: TaskComplexity,
         modelContextLimit: number = 128000,
-        onProgress?: LongTaskProgressCallback
+        onProgress?: LongTaskProgressCallback,
+        awaitApproval?: (taskId: string, planPath: string) => Promise<boolean>
     ): Promise<void> {
         this.logger.log(`[LongTaskManager] Starting executeTask — complexity: ${complexity}`);
         onProgress?.('🔍 Analyzing and planning task...', 'PLANNING');
@@ -62,6 +63,20 @@ export class LongTaskManager {
         }
 
         onProgress?.(`✅ Plan verified — ${artifact.requirements.length} requirements, ${artifact.phases.length} phases`);
+        
+        // — STEP 2.5: User Approval Checkpoint —
+        if (awaitApproval) {
+            onProgress?.(`⏳ Waiting for user approval of ImplementationPlan.md...`);
+            const planPath = require('path').join(this.storageBaseDir, artifact.taskId, 'plans', 'ImplementationPlan.md');
+            const approved = await awaitApproval(artifact.taskId, planPath);
+            if (!approved) {
+                this.logger.log(`[LongTaskManager] User rejected the implementation plan for ${artifact.taskId}.`);
+                artifact.state = TaskState.CANCELLED;
+                onProgress?.(`❌ Task Cancelled by user during plan review.`);
+                return;
+            }
+            onProgress?.(`✅ Plan Approved by user. Executing...`);
+        }
 
         // — STEP 3: Execute phase by phase —
         artifact.state = TaskState.EXECUTING;

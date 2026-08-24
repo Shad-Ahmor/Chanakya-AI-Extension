@@ -768,6 +768,26 @@ ${diff}`;
                   type: 'updateTaskStatus',
                   payload: { messageId: assistantMsgId, task: { id: `longtask-${Date.now()}`, status: 'running', label: msg } }
                 });
+              }, async (_taskId: string, planPath: string) => {
+                  let approved = false;
+                  while (true) {
+                      const selection = await vscode.window.showInformationMessage(
+                          'Implementation Plan is ready. Do you want to proceed with execution?',
+                          'View Plan', 'Proceed', 'Cancel'
+                      );
+                      if (selection === 'View Plan') {
+                          const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(planPath));
+                          await vscode.window.showTextDocument(doc);
+                          // Loop continues so they can still approve/cancel after viewing
+                      } else if (selection === 'Proceed') {
+                          approved = true;
+                          break;
+                      } else {
+                          // Cancel or closed
+                          break;
+                      }
+                  }
+                  return approved;
               });
 
               this.postMessage({

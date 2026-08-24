@@ -34,11 +34,26 @@ export class LongContextIngestionService {
         // Save the raw input outside active context
         await fs.writeFile(path.join(sourceDir, 'input.md'), prompt, 'utf-8');
         
-        // Chunking large sections (simulation of chunking logic for simplicity)
-        const chunks = this.chunkText(prompt, 5000);
-        for (let i = 0; i < chunks.length; i++) {
-            const chunkHash = crypto.createHash('sha256').update(chunks[i]).digest('hex').substring(0, 8);
-            await fs.writeFile(path.join(sourceDir, `section-${i.toString().padStart(3, '0')}-${chunkHash}.md`), chunks[i], 'utf-8');
+        // Chunking large sections safely without holding string arrays in memory
+        const maxLength = 50000;
+        let currentIndex = 0;
+        let chunkIndex = 0;
+        
+        while (currentIndex < prompt.length) {
+            let nextIndex = currentIndex + maxLength;
+            if (nextIndex < prompt.length) {
+                const newlineIndex = prompt.lastIndexOf('\n', nextIndex);
+                if (newlineIndex > currentIndex) {
+                    nextIndex = newlineIndex;
+                }
+            }
+            
+            const chunk = prompt.substring(currentIndex, nextIndex);
+            const chunkHash = crypto.createHash('sha256').update(chunk).digest('hex').substring(0, 8);
+            await fs.writeFile(path.join(sourceDir, `section-${chunkIndex.toString().padStart(3, '0')}-${chunkHash}.md`), chunk, 'utf-8');
+            
+            currentIndex = nextIndex + (prompt[nextIndex] === '\n' ? 1 : 0);
+            chunkIndex++;
         }
 
         return {
@@ -47,24 +62,5 @@ export class LongContextIngestionService {
             metrics,
             sourceDir
         };
-    }
-
-    private chunkText(text: string, maxLength: number): string[] {
-        const chunks: string[] = [];
-        let currentIndex = 0;
-        
-        while (currentIndex < text.length) {
-            let nextIndex = currentIndex + maxLength;
-            if (nextIndex < text.length) {
-                const newlineIndex = text.lastIndexOf('\n', nextIndex);
-                if (newlineIndex > currentIndex) {
-                    nextIndex = newlineIndex;
-                }
-            }
-            chunks.push(text.substring(currentIndex, nextIndex));
-            currentIndex = nextIndex;
-        }
-        
-        return chunks;
     }
 }
