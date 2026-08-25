@@ -28,13 +28,11 @@ export class SecurityUtils {
    * Generates strict Content Security Policy (CSP) for Webviews.
    */
   public static getWebviewCsp(webview: vscode.Webview, nonce: string): string {
-    // NOTE: 'unsafe-inline' is required for script-src because vite-plugin-singlefile
-    // bundles the entire React app as inline <script> blocks. Nonce alone is insufficient
-    // for inline-bundled apps in VS Code webviews.
+    // Strictly enforce CSP without 'unsafe-inline' for scripts to comply with Rule 1.
     return [
       `default-src 'none'`,
       `img-src ${webview.cspSource} https: data:`,
-      `script-src 'nonce-${nonce}' 'unsafe-inline'`,
+      `script-src 'nonce-${nonce}'`,
       `style-src ${webview.cspSource} 'unsafe-inline'`,
       `font-src ${webview.cspSource}`,
       `connect-src https: http:`

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { ModelConfig } from '../types/config';
 import { ConfigManager } from './configManager';
+import { SecretManager } from './secretManager';
 import { Logger } from '../utils/logger';
 
 /**
@@ -110,8 +111,9 @@ export class FIMService {
       ...(model.requestOptions?.headers || {})
     };
 
-    if (model.apiKey && model.apiKey.trim().length > 0) {
-      headers['Authorization'] = `Bearer ${model.apiKey.trim()}`;
+    const apiKey = await SecretManager.getInstance().getApiKey(model.provider);
+    if (apiKey && apiKey.trim().length > 0) {
+      headers['Authorization'] = `Bearer ${apiKey.trim()}`;
     }
 
     // Check if endpoint supports /v1/completions for FIM

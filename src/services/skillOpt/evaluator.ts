@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { EvidenceValidator } from './evidenceValidator';
 
 const execAsync = promisify(exec);
 
@@ -21,6 +22,16 @@ export class BaseTrajectoryEvaluator implements IEvaluator {
 
     public async evaluate(trajectory: Trajectory, _options?: any): Promise<EvaluationResult> {
         
+        const evidenceValidator = EvidenceValidator.getInstance();
+        const evidenceResult = evidenceValidator.validateEvidence(trajectory);
+
+        if (evidenceResult.status === 'FRAUD_DETECTED' || evidenceResult.status === 'UNVERIFIED') {
+            return {
+                success: false,
+                score: 0,
+                reason: `Evidence Validation Failed: ${evidenceResult.reason}`
+            };
+        }
 
         let score = 0;
         let reasons: string[] = [];

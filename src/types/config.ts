@@ -47,7 +47,7 @@ export interface ModelConfig {
   readonly provider: ModelProvider;
   readonly model: string;
   readonly apiBase?: string | undefined;
-  readonly apiKey?: string | undefined;
+
   readonly isLocal?: boolean | undefined;
   readonly executionMode?: ModelExecutionMode | undefined;
   readonly roles?: readonly ModelRole[] | undefined;

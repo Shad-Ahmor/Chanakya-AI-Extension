@@ -1,4 +1,5 @@
 import { ConfigManager } from '../configManager';
+import { SecretManager } from '../secretManager';
 import { Logger } from '../../utils/logger';
 
 export class EmbeddingService {
@@ -37,8 +38,9 @@ export class EmbeddingService {
           'Content-Type': 'application/json'
         };
         
-        if (activeModel.apiKey && activeModel.apiKey.trim().length > 0) {
-          headers['Authorization'] = `Bearer ${activeModel.apiKey.trim()}`;
+        const apiKey = await SecretManager.getInstance().getApiKey(activeModel.provider);
+        if (apiKey && apiKey.trim().length > 0) {
+          headers['Authorization'] = `Bearer ${apiKey.trim()}`;
         }
 
         // For local models, model name is usually ignored or uses the same name as chat.
@@ -67,7 +69,7 @@ export class EmbeddingService {
       } 
       // Gemini
       else if (activeModel.provider === 'gemini') {
-        const apiKey = activeModel.apiKey || '';
+        const apiKey = await SecretManager.getInstance().getApiKey(activeModel.provider) || '';
         const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${apiKey}`;
         
         const res = await fetch(endpoint, {

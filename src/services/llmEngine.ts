@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { ModelConfig } from '../types/config';
 import { ContextItem } from '../types/ipc';
 import { ConfigManager } from './configManager';
+import { SecretManager } from './secretManager';
 import { Logger } from '../utils/logger';
 import { AgentOrchestrator } from './agentOrchestrator';
 import { TrajectoryRecorder } from './skillOpt/trajectoryRecorder';
@@ -502,8 +503,9 @@ export class LLMEngine {
       ...(model.requestOptions?.headers || {})
     };
 
-    if (model.apiKey && model.apiKey.trim().length > 0) {
-      headers['Authorization'] = `Bearer ${model.apiKey.trim()}`;
+    const apiKey = await SecretManager.getInstance().getApiKey(model.provider);
+    if (apiKey && apiKey.trim().length > 0) {
+      headers['Authorization'] = `Bearer ${apiKey.trim()}`;
     }
 
     const payload: Record<string, unknown> = {
@@ -773,7 +775,7 @@ export class LLMEngine {
     skillVersion?: number,
     customWorkspace?: string
   ): Promise<void> {
-    const apiKey = model.apiKey || '';
+    const apiKey = await SecretManager.getInstance().getApiKey(model.provider) || '';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model.model}:streamGenerateContent?alt=sse&key=${apiKey}`;
     const workspaceRoot = customWorkspace || vscode.workspace.workspaceFolders?.[0].uri.fsPath || '';
     const config = this.configManager.getConfig();

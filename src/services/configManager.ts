@@ -5,6 +5,7 @@ import * as YAML from 'yaml';
 import * as vscode from 'vscode';
 import { AppConfig, ModelConfig } from '../types/config';
 import { DetectedLocalModel } from '../types/ipc';
+import { SecretManager } from './secretManager';
 import { Logger } from '../utils/logger';
 
 /**
@@ -161,8 +162,9 @@ export class ConfigManager {
         ...(model.requestOptions?.headers || {})
       };
 
-      if (model.apiKey && model.apiKey.trim().length > 0) {
-        headers['Authorization'] = `Bearer ${model.apiKey.trim()}`;
+      const apiKey = await SecretManager.getInstance().getApiKey(model.provider);
+      if (apiKey && apiKey.trim().length > 0) {
+        headers['Authorization'] = `Bearer ${apiKey.trim()}`;
       }
 
       const controller = new AbortController();
@@ -277,7 +279,6 @@ export class ConfigManager {
         name: 'OpenAI GPT-4.1',
         provider: 'openai',
         model: 'gpt-4.1-2025-04-14',
-        apiKey: '1234',
         apiBase: 'https://api.openai.com/v1',
         isLocal: false,
         executionMode: 'online_api',
@@ -293,7 +294,6 @@ export class ConfigManager {
         name: 'o3',
         provider: 'openai',
         model: 'o3',
-        apiKey: '1234',
         apiBase: 'https://api.openai.com/v1',
         isLocal: false,
         executionMode: 'online_api',
@@ -309,7 +309,6 @@ export class ConfigManager {
         name: 'OpenAI GPT-4.1 mini',
         provider: 'openai',
         model: 'gpt-4.1-mini-2025-04-14',
-        apiKey: '1234',
         apiBase: 'https://api.openai.com/v1',
         isLocal: false,
         executionMode: 'online_api',

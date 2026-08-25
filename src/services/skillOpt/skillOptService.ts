@@ -6,8 +6,10 @@ import { CandidateGenerator } from './candidateGenerator';
 import { ValidationGate } from './validationGate';
 import { MemoryManager } from '../memory/MemoryManager';
 import { Logger } from '../../utils/logger';
-import { OptimizationResult } from './types';
+import { OptimizationResult, ReasonCode } from './types';
 import { TaskApplicabilityValidator } from './taskApplicabilityValidator';
+import { ChangePolicyGate } from './changePolicyGate';
+import { PatchScopeValidator } from './patchScopeValidator';
 
 export class SkillOptService {
     private static instance: SkillOptService;
@@ -105,6 +107,42 @@ export class SkillOptService {
             };
         }
 
+        // 3.7 Change Policy Gate
+        const policyGate = ChangePolicyGate.getInstance();
+        const policyResult = policyGate.evaluatePolicy(latestTrajectory.task || skillName, undefined, false);
+        
+        if (policyResult.decision === 'BLOCK') {
+            this.logger.log(`[SkillOpt] Change Policy blocked task: ${policyResult.reasonCode}`);
+            return {
+                decision: 'not_evaluated',
+                skill: skillName,
+                reason: policyResult.reason,
+                task: {
+                    status: 'TASK_BLOCKED',
+                    reason: policyResult.reason,
+                    reasonCode: policyResult.reasonCode as ReasonCode,
+                    evidence: []
+                },
+                candidate: {
+                    status: 'CANDIDATE_NOT_CREATED',
+                    candidateId: null,
+                    generated: false,
+                    applied: false
+                },
+                evaluation: {
+                    status: 'EVALUATION_NOT_RUN',
+                    score: 0,
+                    baselineScore: scoreBefore,
+                    candidateScore: 0,
+                    testsPassed: false
+                },
+                optimization: {
+                    decision: 'NOT_EVALUATED',
+                    reason: policyResult.reason
+                }
+            };
+        }
+
         // 4. Ask ReflectionEngine for repeated problems
         const reflectionResult = await this.reflection.reflect(skillTrajectories);
         if (reflectionResult.improvements.length === 0) {
@@ -146,6 +184,42 @@ export class SkillOptService {
                 optimization: {
                     decision: 'NOT_EVALUATED',
                     reason: 'Candidate generation failed'
+                }
+            };
+        }
+        
+        // 5.5 Patch Scope Validator
+        const scopeValidator = PatchScopeValidator.getInstance();
+        const scopeResult = scopeValidator.validateScope(candidateResult.candidates[0], latestTrajectory.task || skillName);
+
+        if (scopeResult.decision === 'BLOCK') {
+            this.logger.log(`[SkillOpt] Patch Scope Blocked: ${scopeResult.reason}`);
+            return {
+                decision: 'not_evaluated',
+                skill: skillName,
+                reason: scopeResult.reason,
+                task: {
+                    status: 'TASK_BLOCKED',
+                    reason: scopeResult.reason,
+                    reasonCode: 'SCOPE_ESCAPE_BLOCKED' as ReasonCode,
+                    evidence: []
+                },
+                candidate: {
+                    status: 'CANDIDATE_NOT_CREATED',
+                    candidateId: null,
+                    generated: true,
+                    applied: false
+                },
+                evaluation: {
+                    status: 'EVALUATION_NOT_RUN',
+                    score: 0,
+                    baselineScore: scoreBefore,
+                    candidateScore: 0,
+                    testsPassed: false
+                },
+                optimization: {
+                    decision: 'NOT_EVALUATED',
+                    reason: scopeResult.reason
                 }
             };
         }
