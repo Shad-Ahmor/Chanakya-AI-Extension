@@ -110,4 +110,89 @@ suite('Decision Taxonomy & Pre-Execution Validation Tests', () => {
         assert.strictEqual(result.optimization.decision, 'NOT_EVALUATED');
     });
 
+    test('Candidate generation failure -> NOT_EVALUATED', async () => {
+        const validator = new MockApplicabilityValidator({
+            applicable: 'YES',
+            reasonCode: 'TASK_VALID',
+            reason: 'Valid',
+            evidence: []
+        });
+        (TaskApplicabilityValidator as any).instance = validator;
+        const recorder = TrajectoryRecorder.getInstance(workspaceRoot);
+        (recorder as any).getTrajectories = () => [{ taskId: 'test-gen-fail', task: 'mock', skill: 'react', skillVersion: 1, toolCalls: [], success: false }];
+        const service = SkillOptService.getInstance(workspaceRoot);
+        
+        // Mock a failure during candidate generation
+        (service as any).generator = {
+            generateCandidate: async () => { throw new Error('Generation failed'); }
+        };
+        (service as any).reflection = { reflect: async () => ({ improvements: ['test'] }) };
+        
+        const result = await service.optimize('react', async () => 0);
+        assert.strictEqual(result.task.status, 'TASK_FAILED');
+        assert.strictEqual(result.task.reasonCode, 'CANDIDATE_GENERATION_FAILED');
+        assert.strictEqual(result.candidate.status, 'CANDIDATE_GENERATION_FAILED');
+        assert.strictEqual(result.optimization.decision, 'NOT_EVALUATED');
+        assert.notStrictEqual(result.decision, 'rejected'); // Enforce strict rejection rule
+    });
+
+    test('Evaluation failure -> NOT_EVALUATED', async () => {
+        const validator = new MockApplicabilityValidator({ applicable: 'YES', reasonCode: 'TASK_VALID', reason: 'Valid', evidence: [] });
+        (TaskApplicabilityValidator as any).instance = validator;
+        const recorder = TrajectoryRecorder.getInstance(workspaceRoot);
+        (recorder as any).getTrajectories = () => [{ taskId: 'test-eval-fail', task: 'mock', skill: 'react', skillVersion: 1, toolCalls: [], success: false }];
+        const service = SkillOptService.getInstance(workspaceRoot);
+        
+        (service as any).generator = { generateCandidate: async () => ({ candidates: [{ edits: [{ operation: 'add' }], content: 'mock' }] }) };
+        (service as any).reflection = { reflect: async () => ({ improvements: ['test'] }) };
+        (service as any).registry.createSkillVersion = () => ({ metadata: { version: 2 }, content: 'mock' });
+        (service as any).registry.saveSkillVersion = () => {};
+        
+        const result = await service.optimize('react', async () => { throw new Error('Eval crash'); });
+        
+        assert.strictEqual(result.task.status, 'TASK_FAILED');
+        assert.strictEqual(result.task.reasonCode, 'EVALUATION_FAILED');
+        assert.strictEqual(result.evaluation.status, 'EVALUATION_FAILED');
+        assert.strictEqual(result.optimization.decision, 'NOT_EVALUATED');
+    });
+
+    test('Candidate accepted -> ACCEPTED', async () => {
+        const validator = new MockApplicabilityValidator({ applicable: 'YES', reasonCode: 'TASK_VALID', reason: 'Valid', evidence: [] });
+        (TaskApplicabilityValidator as any).instance = validator;
+        const recorder = TrajectoryRecorder.getInstance(workspaceRoot);
+        (recorder as any).getTrajectories = () => [{ taskId: 'test-acc', task: 'mock', skill: 'react', skillVersion: 1, toolCalls: [], success: false }];
+        const service = SkillOptService.getInstance(workspaceRoot);
+        
+        (service as any).generator = { generateCandidate: async () => ({ candidates: [{ edits: [{ operation: 'add' }], content: 'mock' }] }) };
+        (service as any).reflection = { reflect: async () => ({ improvements: ['test'] }) };
+        (service as any).registry.createSkillVersion = () => ({ metadata: { version: 2 }, content: 'mock' });
+        (service as any).registry.saveSkillVersion = () => {};
+        (service as any).registry.promoteSkill = () => {};
+        (service as any).validationGate = { evaluateDecision: () => ({ decision: 'accepted', reason: 'Improved', improvement: 1 }) };
+        
+        const result = await service.optimize('react', async () => 1);
+        
+        assert.strictEqual(result.candidate.status, 'CANDIDATE_ACCEPTED');
+        assert.strictEqual(result.optimization.decision, 'ACCEPTED');
+    });
+
+    test('Candidate rejected -> REJECTED', async () => {
+        const validator = new MockApplicabilityValidator({ applicable: 'YES', reasonCode: 'TASK_VALID', reason: 'Valid', evidence: [] });
+        (TaskApplicabilityValidator as any).instance = validator;
+        const recorder = TrajectoryRecorder.getInstance(workspaceRoot);
+        (recorder as any).getTrajectories = () => [{ taskId: 'test-rej', task: 'mock', skill: 'react', skillVersion: 1, toolCalls: [], success: false }];
+        const service = SkillOptService.getInstance(workspaceRoot);
+        
+        (service as any).generator = { generateCandidate: async () => ({ candidates: [{ edits: [{ operation: 'add' }], content: 'mock' }] }) };
+        (service as any).reflection = { reflect: async () => ({ improvements: ['test'] }) };
+        (service as any).registry.createSkillVersion = () => ({ metadata: { version: 2 }, content: 'mock' });
+        (service as any).registry.saveSkillVersion = () => {};
+        (service as any).validationGate = { evaluateDecision: () => ({ decision: 'rejected', reason: 'Worse', improvement: -1 }) };
+        
+        const result = await service.optimize('react', async () => -1);
+        
+        assert.strictEqual(result.candidate.status, 'CANDIDATE_REJECTED');
+        assert.strictEqual(result.optimization.decision, 'REJECTED');
+    });
+
 });

@@ -46,7 +46,7 @@ export class AutonomousSkillFormation {
             
             // Filter highly successful procedural memories that haven't been processed yet
             const candidates = allMemories.filter(m => 
-                m.type === 'procedural' &&
+                m.type === 'SUCCESSFUL_PROCEDURE' &&
                 m.confidence >= confidenceThreshold &&
                 (m.metadata.successCount || 0) >= minSuccessCount &&
                 !this.processedMemoryIds.has(m.id)

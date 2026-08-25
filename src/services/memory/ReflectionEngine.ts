@@ -31,38 +31,64 @@ export class ReflectionEngine {
       this.logger.log(`[ReflectionEngine] Evaluating task success=${success}`);
       
       if (!success) {
-        // Automatically extract a mistake rule
-        const mistakeTitle = `Failed execution: ${toolUsed || 'Task'}`;
-        const rootCause = `Encountered error: ${resultOrError.substring(0, 100)}`;
-        let category = 'EXECUTION_ERROR';
+        let memoryType: any = 'AGENT_ERROR';
         let prevention = `Verify inputs to avoid error: ${resultOrError.substring(0, 50)}`;
-
-        if (toolUsed === 'fs_read' && (resultOrError.includes('ENOENT') || resultOrError.includes('not found') || resultOrError.includes('failed'))) {
-            category = 'INVALID_PATH';
-            prevention = 'SEARCH_BEFORE_READ';
+        
+        // Better heuristic classification
+        const errorLower = resultOrError.toLowerCase();
+        let agentError = true;
+        let candidateGenerated = true;
+        let evaluationExecuted = true;
+        
+        if (errorLower.includes('not found') || errorLower.includes('enoent') || errorLower.includes('does not exist')) {
+           memoryType = 'TASK_REPOSITORY_MISMATCH';
+           prevention = 'Verify target existence before modification.';
+           agentError = false;
+           candidateGenerated = false;
+           evaluationExecuted = false;
+        } else if (errorLower.includes('permission denied') || errorLower.includes('eacces')) {
+           memoryType = 'ENVIRONMENT_FAILURE';
+           agentError = false;
+           evaluationExecuted = false;
+        } else if (toolUsed) {
+           memoryType = 'TOOL_FAILURE';
+           agentError = false;
+           candidateGenerated = false;
+           evaluationExecuted = false;
         }
 
-        console.log(`\n[MistakeAnalyzer]\nCategory: ${category}\nRootCause: UNVERIFIED_PATH\nPrevention: ${prevention}\n`);
+        const mistakeTitle = `Failed execution: ${toolUsed || 'Task'}`;
+        const rootCause = `Encountered error: ${resultOrError.substring(0, 100)}`;
+        
+        console.log(`\n[MistakeAnalyzer]\nCategory: ${memoryType}\nRootCause: ${rootCause}\nPrevention: ${prevention}\n`);
 
         await this.memoryManager.storeExperience({
-          type: 'mistake',
+          type: memoryType,
           title: mistakeTitle,
           task: taskDescription,
-          error: resultOrError,
+          outcome: 'NOT_APPLICABLE',
           root_cause: rootCause,
+          observation: resultOrError,
+          evidence: resultOrError.substring(0, 500),
+          verificationStatus: 'FAILED',
           prevention: prevention,
-          confidence: 0.6,
-          tags: ['auto-generated', 'mistake']
+          agent_error: agentError,
+          candidate_generated: candidateGenerated,
+          evaluation_executed: evaluationExecuted,
+          reusable_lesson: true,
+          confidence: 0.9,
+          tags: ['auto-generated', 'failure']
         });
       } else {
         // If it succeeded, check if it's worth storing
         if (taskDescription.length > 30) {
           await this.memoryManager.storeExperience({
-            type: 'procedural',
+            type: 'SUCCESSFUL_PROCEDURE',
             title: `Successful Task: ${taskDescription.substring(0, 30)}`,
             task: taskDescription,
-            result: resultOrError,
+            outcome: resultOrError,
             general_lesson: `Successfully completed using standard approach.`,
+            verificationStatus: 'VERIFIED_SUCCESS',
             confidence: 0.7,
             tags: ['auto-generated', 'success']
           });
@@ -91,7 +117,7 @@ export class ReflectionEngine {
       console.log(`\n[ProceduralExtraction]\nTask: ${taskDescription}\nStrategy: ${sequenceStr}\nRule: ${proceduralRule}\n`);
 
       await this.memoryManager.storeExperience({
-        type: 'procedural',
+        type: 'SUCCESSFUL_PROCEDURE',
         title: `Procedural Strategy: ${taskDescription.substring(0, 30)}`,
         task: taskDescription,
         general_lesson: proceduralRule,

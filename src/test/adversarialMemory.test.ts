@@ -8,7 +8,7 @@ async function runAdversarialTests() {
 
   console.log('=== TEST B: Irrelevant Memory (RAG Contamination) ===');
   await memoryManager.storeExperience({
-    type: 'procedural',
+    type: 'SUCCESSFUL_PROCEDURE',
     title: 'Python FastAPI debugging strategy',
     task: 'Debug Python FastAPI route handler timeout',
     general_lesson: 'Use pdb to trace the request cycle in FastAPI.',
@@ -36,7 +36,7 @@ async function runAdversarialTests() {
   
   // Memory A (old, low confidence)
   await memoryManager.storeExperience({
-    type: 'mistake',
+    type: 'AGENT_ERROR',
     title: 'File Reading Protocol v1',
     task: taskC,
     general_lesson: 'Always search before reading',
@@ -45,7 +45,7 @@ async function runAdversarialTests() {
 
   // Memory B (new, verified, high confidence)
   await memoryManager.storeExperience({
-    type: 'procedural',
+    type: 'SUCCESSFUL_PROCEDURE',
     title: 'File Reading Protocol v2',
     task: taskC,
     general_lesson: 'Direct read is preferable when exact path is provided',
@@ -69,7 +69,7 @@ async function runAdversarialTests() {
   console.log('=== TEST D: False Memory Resistance ===');
   // High confidence, completely irrelevant
   await memoryManager.storeExperience({
-    type: 'procedural',
+    type: 'SUCCESSFUL_PROCEDURE',
     title: 'NPM Package Modification',
     task: 'Update package.json dependencies for React',
     general_lesson: 'Always modify package.json before fixing React bugs.',

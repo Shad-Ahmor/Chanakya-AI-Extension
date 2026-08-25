@@ -14,6 +14,12 @@ export interface SkillEdit {
     content?: string;
     targetContent?: string;
     reason: string;
+    memory_influence?: {
+        memoryRetrieved: string | null;
+        previousMistake: string;
+        influence: string;
+        newStrategy: string;
+    };
     evidenceTrajectoryIDs: string[];
 }
 
@@ -135,14 +141,20 @@ ${rejStr}
 
 Output your edits as ONLY a valid JSON array of objects matching this schema:
 [
-  {
-    "operation": "ADD" | "REPLACE" | "DELETE",
-    "section": "The name of the section you are modifying or adding to",
-    "content": "The new content to ADD or REPLACE with",
-    "targetContent": "The exact existing content to REPLACE or DELETE",
-    "reason": "Detailed explanation of why this edit is proposed",
-    "evidenceTrajectoryIDs": ["List of trajectory IDs supporting this change"]
-  }
+  {
+    "operation": "ADD" | "REPLACE" | "DELETE",
+    "section": "The name of the section you are modifying or adding to",
+    "content": "The new content to ADD or REPLACE with",
+    "targetContent": "The exact existing content to REPLACE or DELETE",
+    "reason": "Detailed explanation of why this edit is proposed",
+    "memory_influence": {
+      "memoryRetrieved": "ID of the memory retrieved, or null if none",
+      "previousMistake": "What the previous candidate failed at",
+      "influence": "How this memory influenced this edit (e.g. avoided X)",
+      "newStrategy": "What new strategy is being applied"
+    },
+    "evidenceTrajectoryIDs": ["List of trajectory IDs supporting this change"]
+  }
 ]
 No markdown formatting, no explanation. Just the JSON array.`;
 

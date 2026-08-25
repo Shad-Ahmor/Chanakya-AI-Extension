@@ -1,4 +1,15 @@
-export type MemoryType = 'episodic' | 'semantic' | 'procedural' | 'mistake';
+export type MemoryType = 
+  | 'AGENT_ERROR' 
+  | 'TASK_REPOSITORY_MISMATCH'
+  | 'USER_AMBIGUITY'
+  | 'ENVIRONMENT_FAILURE'
+  | 'TOOL_FAILURE'
+  | 'CANDIDATE_FAILURE'
+  | 'EVALUATION_FAILURE'
+  | 'SUCCESSFUL_PROCEDURE'
+  | 'GENERAL_LESSON'
+  | 'CONTRADICTION'
+  | 'SUPERSEDED_LESSON';
 
 export interface MemoryEnvironment {
   os?: string;
@@ -16,7 +27,21 @@ export interface MemoryRecord {
   content: string; // The primary content or lesson
   embedding?: number[];
   
-  // Older fields moved or mapped to new names
+  trigger?: string;
+  context?: string;
+  observation?: string;
+  action?: string;
+  outcome?: string;
+  evidence?: string;
+  verificationStatus?: string;
+
+  // Semantic execution flags
+  agent_error?: boolean;
+  candidate_generated?: boolean;
+  evaluation_executed?: boolean;
+  reusable_lesson?: boolean;
+
+  // Legacy/other optional fields
   error?: string;
   root_cause?: string;
   correction?: string;

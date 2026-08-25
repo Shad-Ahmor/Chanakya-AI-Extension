@@ -41,7 +41,7 @@ export class MemoryRetriever {
         // Phase 6 & 7: Cross-Task Generalization
         // Boost score if the memory is procedural and shares keywords with the current task,
         // even if exact vector match is slightly lower.
-        if (candidate.type === 'procedural' && candidate.content) {
+        if (candidate.type === 'SUCCESSFUL_PROCEDURE' && candidate.content) {
             const taskLower = taskDescription.toLowerCase();
             const memoryTaskLower = candidate.task.toLowerCase();
             
@@ -81,7 +81,7 @@ export class MemoryRetriever {
         });
 
       console.log(`\n[Memory] Retrieved: ${validMemories.length} memories`);
-      const mistakeMemory = validMemories.find(m => m.type === 'mistake');
+      const mistakeMemory = validMemories.find(m => m.type === 'AGENT_ERROR');
       if (mistakeMemory) {
         console.log(`[Memory] Relevant mistake: unverified filesystem path\n`);
       }
@@ -134,8 +134,8 @@ export class MemoryRetriever {
     }
 
     // Boost score depending on type
-    if (memory.type === 'mistake') score += 0.15;
-    if (memory.type === 'procedural') score += 0.1;
+    if (memory.type === 'AGENT_ERROR') score += 0.15;
+    if (memory.type === 'SUCCESSFUL_PROCEDURE') score += 0.1;
     
     return Math.max(0, Math.min(1, score)); // Clamp 0-1
   }
@@ -154,10 +154,10 @@ export class MemoryRetriever {
       prompt += `Task: ${m.task}\n`;
       prompt += `Title: ${m.title}\n`;
       
-      if (m.type === 'mistake') {
+      if (m.type === 'AGENT_ERROR') {
         if (m.error) prompt += `Error Encountered: ${m.error}\n`;
         prompt += `Lesson / Prevention: ${m.content}\n`;
-      } else if (m.type === 'procedural' || m.type === 'semantic') {
+      } else if (m.type === 'SUCCESSFUL_PROCEDURE') {
         prompt += `Content: ${m.content}\n`;
       }
       

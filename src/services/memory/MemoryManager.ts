@@ -28,13 +28,24 @@ export class MemoryManager {
     type: MemoryType;
     title: string;
     task: string;
+    trigger?: string;
+    context?: string;
+    observation?: string;
+    action?: string;
+    outcome?: string;
+    evidence?: string;
+    verificationStatus?: string;
     error?: string;
     root_cause?: string;
     correction?: string;
     prevention?: string;
     general_lesson?: string;
-    action?: string;
-    result?: string;
+    
+    agent_error?: boolean;
+    candidate_generated?: boolean;
+    evaluation_executed?: boolean;
+    reusable_lesson?: boolean;
+
     confidence?: number;
     applicability?: number;
     tags?: string[];
@@ -48,7 +59,7 @@ export class MemoryManager {
         type: params.type,
         title: params.title,
         task: params.task,
-        content: params.general_lesson || params.error || params.action || '',
+        content: params.general_lesson || params.observation || params.error || params.action || '',
         confidence: params.confidence ?? 0.5,
         applicability: params.applicability ?? 1.0,
         status: 'active',
@@ -64,14 +75,31 @@ export class MemoryManager {
         }
       };
 
+      if (params.trigger !== undefined) record.trigger = params.trigger;
+      if (params.context !== undefined) record.context = params.context;
+      if (params.observation !== undefined) record.observation = params.observation;
+      if (params.action !== undefined) record.action = params.action;
+      if (params.outcome !== undefined) record.outcome = params.outcome;
+      if (params.evidence !== undefined) record.evidence = params.evidence;
+      if (params.verificationStatus !== undefined) record.verificationStatus = params.verificationStatus;
+      
+      // Legacy fields
       if (params.error !== undefined) record.error = params.error;
       if (params.root_cause !== undefined) record.root_cause = params.root_cause;
       if (params.correction !== undefined) record.correction = params.correction;
       if (params.prevention !== undefined) record.prevention = params.prevention;
       if (params.general_lesson !== undefined) record.general_lesson = params.general_lesson;
 
+      // Semantic execution flags
+      if (params.agent_error !== undefined) record.agent_error = params.agent_error;
+      if (params.candidate_generated !== undefined) record.candidate_generated = params.candidate_generated;
+      if (params.evaluation_executed !== undefined) record.evaluation_executed = params.evaluation_executed;
+      if (params.reusable_lesson !== undefined) record.reusable_lesson = params.reusable_lesson;
+
       // Create a text representation to embed
       let textToEmbed = `Task: ${params.task}\n`;
+      if (params.observation) textToEmbed += `Observation: ${params.observation}\n`;
+      if (params.evidence) textToEmbed += `Evidence: ${params.evidence}\n`;
       if (params.error) textToEmbed += `Error: ${params.error}\n`;
       if (params.prevention) textToEmbed += `Prevention: ${params.prevention}\n`;
       if (params.general_lesson) textToEmbed += `Lesson: ${params.general_lesson}\n`;
@@ -82,18 +110,16 @@ export class MemoryManager {
       const similarMemories = await this.vectorStore.search(vector, 3);
       if (similarMemories && similarMemories.length > 0) {
         for (const old of similarMemories) {
-          // If a highly similar memory contradicts the new one (e.g., both are procedural for the same task but different rules)
-          // we could perform an LLM check, but for MVP we assume if it's the exact same task environment and the new memory is confident, it supersedes.
-          // Note: Here we're using a simple heuristic. If similarity > 0.85 and it's not the exact same ID.
-          // Since our mock VectorStore returns arbitrary similarities, we'll just check if task matches closely.
-          
           if (old.id !== memoryId && old.status !== 'superseded') {
             const similarity = old.task === params.task ? 0.9 : 0.5; // Stub for semantic similarity
             if (similarity > 0.85) {
-                // If old memory was a mistake and new is procedural success -> supersedes
-                if ((old.type === 'mistake' && params.type === 'procedural') || 
-                    (old.type === 'procedural' && params.type === 'procedural')) {
-                    
+                // Determine if contradiction exists or if old memory should be superseded
+                if (
+                    (old.type === 'AGENT_ERROR' && params.type === 'SUCCESSFUL_PROCEDURE') || 
+                    (old.type === 'SUCCESSFUL_PROCEDURE' && params.type === 'SUCCESSFUL_PROCEDURE') ||
+                    (old.type === 'mistake' as any && params.type === 'SUCCESSFUL_PROCEDURE') ||
+                    (old.type === 'procedural' as any && params.type === 'SUCCESSFUL_PROCEDURE')
+                ) {
                     this.logger.log(`[MemoryManager] Memory ${old.id} superseded by new evidence ${memoryId}`);
                     console.log(`\n[ContradictionResolver]\nOld memory ${old.id} marked as SUPERSEDED by ${memoryId}\n`);
                     old.status = 'superseded';

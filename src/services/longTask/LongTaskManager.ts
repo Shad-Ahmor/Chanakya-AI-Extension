@@ -161,7 +161,7 @@ export class LongTaskManager {
                         
                         // Record procedural memory on success
                         await this.memoryManager.storeExperience({
-                            type: 'procedural',
+                            type: 'SUCCESSFUL_PROCEDURE',
                             title: `Procedural knowledge from ${step.stepId}`,
                             task: step.objective,
                             action: observation,
@@ -188,7 +188,7 @@ export class LongTaskManager {
                         
                         if (reflectionResult.improvements.length > 0) {
                             await this.memoryManager.storeExperience({
-                                type: 'mistake',
+                                type: 'AGENT_ERROR',
                                 title: `Reflection from failure in ${step.stepId}`,
                                 task: step.objective,
                                 error: observation,

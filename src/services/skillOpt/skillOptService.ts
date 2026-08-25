@@ -112,9 +112,42 @@ export class SkillOptService {
         }
 
         // 5. Generate candidate skill
-        const candidateResult = await this.generator.generateCandidate(skillName, bestSkill.metadata.version, bestSkill.content, reflectionResult, []);
-        if (candidateResult.candidates[0].edits.length === 0) {
-            throw new Error('Optimization halted: No edits generated for the candidate.');
+        let candidateResult: any;
+        try {
+            candidateResult = await this.generator.generateCandidate(skillName, bestSkill.metadata.version, bestSkill.content, reflectionResult, []);
+            if (!candidateResult || !candidateResult.candidates || candidateResult.candidates.length === 0 || candidateResult.candidates[0].edits.length === 0) {
+                throw new Error('Optimization halted: No edits generated for the candidate.');
+            }
+        } catch (e: any) {
+            this.logger.log(`[SkillOpt] Candidate generation failed: ${e.message}`);
+            return {
+                decision: 'not_evaluated',
+                skill: skillName,
+                reason: e.message,
+                task: {
+                    status: 'TASK_FAILED',
+                    reason: e.message,
+                    reasonCode: 'CANDIDATE_GENERATION_FAILED',
+                    evidence: []
+                },
+                candidate: {
+                    status: 'CANDIDATE_GENERATION_FAILED',
+                    candidateId: null,
+                    generated: false,
+                    applied: false
+                },
+                evaluation: {
+                    status: 'EVALUATION_NOT_RUN',
+                    score: 0,
+                    baselineScore: scoreBefore,
+                    candidateScore: 0,
+                    testsPassed: false
+                },
+                optimization: {
+                    decision: 'NOT_EVALUATED',
+                    reason: 'Candidate generation failed'
+                }
+            };
         }
         
         // Save candidate to registry as draft
@@ -129,8 +162,44 @@ export class SkillOptService {
 
         // 6. Validate candidate
         this.logger.log(`Validating candidate v${candidateSkill.metadata.version} for ${skillName}...`);
-        const scoreAfter = await validationRunner(candidateResult.candidates[0].content, reflectionResult, skillTrajectories, scoreBefore);
+        let scoreAfter = 0;
+        try {
+            scoreAfter = await validationRunner(candidateResult.candidates[0].content, reflectionResult, skillTrajectories, scoreBefore);
+        } catch (e: any) {
+            this.logger.log(`[SkillOpt] Evaluation failed: ${e.message}`);
+            candidateSkill.metadata.status = 'archived';
+            candidateSkill.metadata.changeDescription = `Evaluation crashed: ${e.message}`;
+            this.registry.saveSkillVersion(skillName, candidateSkill);
 
+            return {
+                decision: 'not_evaluated',
+                skill: skillName,
+                reason: e.message,
+                task: {
+                    status: 'TASK_FAILED',
+                    reason: e.message,
+                    reasonCode: 'EVALUATION_FAILED',
+                    evidence: []
+                },
+                candidate: {
+                    status: 'CANDIDATE_APPLIED',
+                    candidateId: candidateSkill.metadata.version.toString(),
+                    generated: true,
+                    applied: true
+                },
+                evaluation: {
+                    status: 'EVALUATION_FAILED',
+                    score: 0,
+                    baselineScore: scoreBefore,
+                    candidateScore: 0,
+                    testsPassed: false
+                },
+                optimization: {
+                    decision: 'NOT_EVALUATED',
+                    reason: 'Evaluation crashed or threw an error'
+                }
+            };
+        }
         // 7 & 8. Validation Gate (Accept or Reject)
         const decision = this.validationGate.evaluateDecision(scoreBefore, scoreAfter);
 
@@ -141,7 +210,7 @@ export class SkillOptService {
             
             // Phase 7: Store SkillOpt Learning (Accepted)
             MemoryManager.getInstance().storeExperience({
-                type: 'procedural',
+                type: 'SUCCESSFUL_PROCEDURE',
                 title: `SkillOpt Accepted: ${skillName}`,
                 task: `Optimize skill ${skillName}`,
                 general_lesson: `Optimization ACCEPTED: ${decision.reason}. Score improved from ${scoreBefore} to ${scoreAfter}.`,
@@ -157,10 +226,10 @@ export class SkillOptService {
             
             // Phase 7: Store SkillOpt Learning (Rejected)
             MemoryManager.getInstance().storeExperience({
-                type: 'procedural',
+                type: 'EVALUATION_FAILURE',
                 title: `SkillOpt Rejected: ${skillName}`,
                 task: `Optimize skill ${skillName}`,
-                general_lesson: `This exact approach previously underperformed in similar context: Score lower than baseline (${scoreBefore} -> ${scoreAfter}). Avoid candidate changes: ${candidateResult.candidates[0].edits.map(e => e.operation).join(', ')}`,
+                general_lesson: `This exact approach previously underperformed in similar context: Score lower than baseline (${scoreBefore} -> ${scoreAfter}). Avoid candidate changes: ${candidateResult.candidates[0].edits.map((e: any) => e.operation).join(', ')}`,
                 confidence: 0.8,
                 tags: ['skillopt', 'rejected', skillName]
             });

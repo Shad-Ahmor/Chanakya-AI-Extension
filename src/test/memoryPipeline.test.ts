@@ -22,7 +22,7 @@ async function runTest() {
   console.log(`[Decision]\nACCEPTED\n`);
   
   await memoryManager.storeExperience({
-    type: 'procedural',
+    type: 'SUCCESSFUL_PROCEDURE',
     title: 'SkillOpt Accepted: React Auth Fix',
     task: authTask,
     general_lesson: 'Optimization ACCEPTED: Solved token issue.',

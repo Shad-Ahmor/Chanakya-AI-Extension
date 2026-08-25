@@ -354,7 +354,21 @@ export class LLMEngine {
         '  Phase 1: DO NOT start coding immediately. Take time to think, optimize, and deeply understand the text. Write an `implementation_plan.md` using `create_file` detailing your approach and architecture. Then STOP and ask the user to type "Proceed" to approve it.\n' +
         '  Phase 2: Once approved, write a `task.md` file (or `plan.md`) using `create_file` containing a checklist of all files to be created/edited/deleted, their paths, and specific actions (e.g. `- [ ] create src/App.tsx - Add main component`).\n' +
         '  Phase 3: Execute the tasks one by one autonomously from the work plan. After completing each file, you MUST use `replace_in_file` to update `task.md` by checking off the completed task (`- [x]`).\n' +
-        '  Phase 4: Continue this loop until all tasks are marked `[x]`.';
+        '  Phase 4: Continue this loop until all tasks are marked `[x]`.\n' +
+        '8. REQUIREMENT & CONSTRAINT RESOLUTION:\n' +
+        ' - CLASSIFY: Classify instructions internally as REQUIREMENT, CONSTRAINT, PROHIBITION, PREFERENCE, CONDITION, EXAMPLE, or OUTPUT_FORMAT.\n' +
+        ' - SEMANTICS: Interpret constraints by actual meaning (e.g., "no new state-management" prohibits Redux/Zustand, NOT Jest/ESLint). Do NOT over-infer.\n' +
+        ' - HIERARCHY: 1. Safety > 2. Explicit Reqs > 3. Prohibitions > 4. Objective > 5. Conventions > 6. Preferences > 7. Examples.\n' +
+        ' - CONDITIONALS: "If tests exist, use them" means use if exist, do not hallucinate them, and do NOT interpret as "never create tests".\n' +
+        ' - APPLICABILITY: Before acting, check if the target feature/framework/bug actually exists in the workspace. If NO -> TASK_NOT_APPLICABLE. If UNCERTAIN -> TASK_NEEDS_CLARIFICATION. If YES -> proceed.\n' +
+        ' - STRUCTURED PLAN: Before modifying code, generate an internal JSON plan inside a <think> block: { objective, target, requirements, constraints, prohibitions, optional_validations, assumptions, uncertainties, applicability }. Proceed only if applicability is sufficiently established.\n' +
+        '9. EVIDENCE-FIRST & PRECISE REPORTING:\n' +
+        ' - NO FALSE CERTAINTY: Never claim "exhaustive inspection", "every file/line", or "definitive assessment" unless literally true.\n' +
+        ' - USE PRECISE LANGUAGE: Say "I inspected [folder]" instead of "I inspected every file". Say "Repository search returned no matches" instead of "Exhaustive search found nothing".\n' +
+        ' - INSPECTION STRATEGY: Use stages: 1. Structure -> 2. Configs -> 3. Target discovery -> 4. Source -> 5. Tests. Stop unnecessary inspection once sufficient evidence establishes TARGET_EXISTS, TARGET_DOES_NOT_EXIST, or TARGET_AMBIGUOUS.\n' +
+        ' - EVIDENCE OBJECT: Internally structure findings as { scope, pathsInspected, searchesPerformed, filesRead, findings, confidence }.\n' +
+        ' - EFFICIENCY: Do not repeat identical tool calls unless scope/context changed. Reuse zero-match results.\n' +
+        ' - FINAL REPORT: Final reports MUST include "Inspection scope:", "Files inspected:", "Searches performed:", "Evidence:", and "Confidence:".';
 
     if (useXmlTools) {
       if (!optimizerConfig || optimizerConfig.needsMCP !== false) {

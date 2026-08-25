@@ -35,6 +35,10 @@ Baseline Trajectory Summary:
 Did the agent find the necessary targets to perform the task, or did it fail because the required components/infrastructure do not exist (e.g., requested a dashboard but repo is a calculator)?
 Was the execution blocked by external factors (e.g., permission denied, tool missing)?
 
+CRITICAL RULES:
+- CONDITIONAL REQUIREMENTS: If the user specified a conditional task (e.g., "If tests exist, update them" or "Run TypeScript if available"), and the condition is NOT met (e.g., tests do not exist, TS is not available), the task is STILL APPLICABLE ("YES") and "VALID_TO_PROCEED". Do NOT mark it as "NO" or "TASK_TARGET_NOT_FOUND" just because an optional or conditional validation step could not be run.
+- ONLY mark "NO" if the primary, non-optional objective of the task is impossible (e.g., "Fix the dashboard" in a repo that has no dashboard).
+
 Respond STRICTLY with a JSON object matching this schema:
 {
     "applicable": "YES" | "NO" | "UNCERTAIN" | "BLOCKED",

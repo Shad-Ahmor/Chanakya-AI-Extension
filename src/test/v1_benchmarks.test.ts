@@ -13,7 +13,7 @@ async function simulateExecution(hasMemory: boolean, task: string, mistakeAllowe
     if (hasMemory) {
         // Mock retrieval
         const memories = await MemoryRetriever.getInstance().retrieve(task, 3);
-        if (memories.length > 0 && memories.some(m => m.type === 'mistake')) {
+        if (memories.length > 0 && memories.some(m => m.type === 'AGENT_ERROR')) {
             // Memory prevents the mistake
             steps += 2; // direct path
             success = true;
@@ -54,7 +54,7 @@ async function runV1Benchmarks() {
     
     // Inject procedural memory
     const memoryId = await memoryManager.storeExperience({
-        type: 'mistake',
+        type: 'AGENT_ERROR',
         task: task,
         title: 'Authentication Path',
         error: 'hallucinated path',
@@ -66,7 +66,7 @@ async function runV1Benchmarks() {
     // Force the retriever to return the memory for testing
     const origRetrieve = MemoryRetriever.getInstance().retrieve;
     MemoryRetriever.getInstance().retrieve = async () => [
-        { id: memoryId, type: 'mistake', task, content: 'Always search workspace first', confidence: 0.9, applicability: 1.0, status: 'active', metadata: { successCount: 0, failureCount: 0 } as any } as any
+        { id: memoryId, type: 'AGENT_ERROR', task, content: 'Always search workspace first', confidence: 0.9, applicability: 1.0, status: 'active', metadata: { successCount: 0, failureCount: 0 } as any } as any
     ];
     
     // Warm Run
@@ -97,7 +97,7 @@ async function runV1Benchmarks() {
     
     // Override vector store mock temporarily for candidate generator
     vectorStore.search = async () => [
-        { id: "proc_1", type: "procedural", task: "Opt Task", content: "Test Strategy", confidence: 0.9, applicability: 0.85, status: "active", metadata: { successCount: 5, failureCount: 0 } } as any
+        { id: "proc_1", type: "SUCCESSFUL_PROCEDURE", task: "Opt Task", content: "Test Strategy", confidence: 0.9, applicability: 0.85, status: "active", metadata: { successCount: 5, failureCount: 0 } } as any
     ] as any;
     
     const generator = CandidateGenerator.getInstance(__dirname);

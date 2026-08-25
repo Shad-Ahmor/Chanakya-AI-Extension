@@ -14,7 +14,7 @@ suite('Autonomous Skill Formation Tests', () => {
         vectorStore.getAllMemories = async () => ([
             {
                 id: 'mem1',
-                type: 'procedural',
+                type: 'SUCCESSFUL_PROCEDURE',
                 task: 'Some task',
                 content: 'Strategy 1',
                 confidence: 0.5, // Too low
@@ -44,7 +44,7 @@ suite('Autonomous Skill Formation Tests', () => {
         vectorStore.getAllMemories = async () => ([
             {
                 id: 'mem2',
-                type: 'procedural',
+                type: 'SUCCESSFUL_PROCEDURE',
                 task: 'Fix React component bug',
                 content: 'Discover component, fix bug, test',
                 confidence: 0.95,
