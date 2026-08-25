@@ -88,9 +88,9 @@ export class RuntimeIntelligenceService {
         }
 
         // --- PHASE 8: Performance Benchmark ---
-        let ttft_ms = createUnknownEvidence('Not implemented', null);
-        let prompt_tps = createUnknownEvidence('Not implemented', null);
-        let gen_tps = createUnknownEvidence('Not implemented', null);
+        let ttft_ms = createUnknownEvidence<number | null>('Not implemented', null);
+        let prompt_tps = createUnknownEvidence<number | null>('Not implemented', null);
+        let gen_tps = createUnknownEvidence<number | null>('Not implemented', null);
         
         if (activeModel && isLocal === 'LOCAL' && serverType === 'llama.cpp') {
             const perf = await PerformanceBenchmark.runBenchmark(apiBase, activeModel.model, headers);
