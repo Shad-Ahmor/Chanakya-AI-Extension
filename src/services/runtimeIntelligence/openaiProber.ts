@@ -1,4 +1,3 @@
-import { ModelConfig } from '../../types/config';
 
 export class OpenAIProber {
     public static async probeModels(apiBase: string, headers: Record<string, string>): Promise<any | null> {
