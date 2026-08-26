@@ -4,6 +4,7 @@ import { InlineEditProvider } from './providers/inlineEditProvider';
 import { SidebarProvider } from './providers/sidebarProvider';
 import { DashboardProvider } from './providers/dashboardProvider';
 import { ConfigManager } from './services/configManager';
+import { SecretManager } from './services/secretManager';
 import { McpService } from './services/mcpService';
 import { ContextItem } from './types/ipc';
 import { Logger } from './utils/logger';
@@ -24,7 +25,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const logger = Logger.getInstance();
   logger.log('Activating Chanakya AI Enhancer (Full Continue/Copilot Engine with FIM Autocomplete)...');
 
-  // 1. Initialize Configuration Manager
+  // 1. Initialize Configuration Manager and SecretManager
+  SecretManager.initialize(context);
   const configManager = ConfigManager.getInstance();
 
   // Initialize Conversation Manager
