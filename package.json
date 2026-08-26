@@ -99,6 +99,11 @@
 				"title": "Chanakya AI Enhancer: Run React JS SkillOpt Pilot",
 				"category": "Chanakya AI Enhancer",
 				"icon": "$(beaker)"
+			},
+			{
+				"command": "aiEnhancer.openChat",
+				"title": "Open Chanakya AI Chat",
+				"icon": "$(sparkle)" 
 			}
 		],
 		"keybindings": [
@@ -139,6 +144,10 @@
 					"command": "aiEnhancer.acceptEdit",
 					"when": "inDiffEditor",
 					"group": "navigation"
+				},
+				{
+					"command": "aiEnhancer.openChat",
+					"group": "navigation@1"
 				}
 			],
 			"webview/context": [

@@ -94,6 +94,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     )
   );
 
+  // 3.5 Register Command: Open Chat (Quick Access Icon)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('aiEnhancer.openChat', () => {
+      vscode.commands.executeCommand('chanakya-ai-launcher.focus');
+    })
+  );
+
   // 4. Register Command: Toggle Autocomplete
   context.subscriptions.push(
     vscode.commands.registerCommand('aiEnhancer.toggleAutocomplete', () => {
