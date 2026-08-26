@@ -60,6 +60,7 @@ export default function App() {
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
   const [isVersionInfoOpen, setIsVersionInfoOpen] = useState(false);
   const [historySearchQuery, setHistorySearchQuery] = useState('');  
+  const [isMcpGlobalEnabled, setIsMcpGlobalEnabled] = useState(false);
   // @ mentions autocomplete state
   const [showMentionMenu, setShowMentionMenu] = useState(false);
   const [mentionQuery, setMentionQuery] = useState('');
@@ -109,6 +110,11 @@ export default function App() {
         case 'openSettingsTab': {
           setViewMode('dashboard');
           setInitialDashboardTab('settings');
+          break;
+        }
+
+        case 'globalMcpStateUpdated': {
+          setIsMcpGlobalEnabled(message.payload.enabled);
           break;
         }
 
@@ -1085,6 +1091,13 @@ export default function App() {
                 className="p-1.5 hover:bg-vscode-list-hoverBackground rounded-lg transition text-vscode-descriptionForeground hover:text-vscode-foreground"
               >
                 <Zap className="w-4 h-4" />
+              </button>
+              <button
+                title="Toggle MCP Context"
+                onClick={() => vscode.postMessage({ type: 'toggleGlobalMcp', payload: { enabled: !isMcpGlobalEnabled } })}
+                className={`p-1.5 hover:bg-vscode-list-hoverBackground rounded-lg transition ${isMcpGlobalEnabled ? 'text-sky-400' : 'text-vscode-descriptionForeground hover:text-vscode-foreground'}`}
+              >
+                <Cpu className="w-4 h-4" />
               </button>
               <button
                 title="Goal Hub"

@@ -198,9 +198,20 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
 
-    webviewView.webview.onDidReceiveMessage(async (message: FromWebviewMessage) => {
-      await this._handleWebviewMessage(message);
-    });
+    webviewView.webview.onDidReceiveMessage(
+        async (message) => {
+          await this._handleWebviewMessage(message);
+        },
+        null,
+        this._context.subscriptions
+      );
+
+      // Send initial state
+      const isMcpGlobalEnabled = this._context.workspaceState.get<boolean>('mcpGlobalEnabled', false);
+      this.postMessage({
+        type: 'globalMcpStateUpdated',
+        payload: { enabled: isMcpGlobalEnabled }
+      });
   }
 
   public postMessage(message: ToWebviewMessage): void {
@@ -692,7 +703,8 @@ ${diff}`;
           payload: { messageId: assistantMsgId, task: { id: `task-understander-${Date.now()}`, status: 'running', label: `Analyzing intent...` } }
         });
         
-        let taskRoutingInfo: any = { needsRAG: false, needsMCP: false, relevantSkills: [], needsRules: true };
+        const isMcpGlobalEnabled = this._context.workspaceState.get<boolean>('mcpGlobalEnabled', false);
+        let taskRoutingInfo: any = { needsRAG: false, needsMCP: isMcpGlobalEnabled, relevantSkills: [], needsRules: true };
         try {
           taskRoutingInfo = await TaskUnderstander.getInstance(workspaceRoot).understandTask(text);
           this.postMessage({
@@ -713,7 +725,7 @@ ${diff}`;
             ...taskRoutingInfo,
             // Fallback for older properties if necessary
             needsRAG: taskRoutingInfo.needsRAG,
-            needsMCP: taskRoutingInfo.needsMCP,
+            needsMCP: isMcpGlobalEnabled,
             needsRules: taskRoutingInfo.needsRules,
             relevantSkills: taskRoutingInfo.relevantSkills
         };
@@ -1429,6 +1441,36 @@ ${diff}`;
           });
         } catch (err: any) {
           vscode.window.showErrorMessage(`Failed to toggle MCP server: ${err.message}`);
+        }
+        break;
+      }
+
+      case 'toggleGlobalMcp': {
+        const mcpService = McpService.getInstance();
+        const servers = await mcpService.getServersStatus();
+        
+        // Check if there are any configured servers
+        if (servers.length === 0) {
+          vscode.window.showErrorMessage('Please configure your MCP server first.');
+          this.postMessage({
+            type: 'globalMcpStateUpdated',
+            payload: { enabled: false }
+          });
+          break;
+        }
+
+        // Toggle state
+        const newState = message.payload.enabled;
+        await this._context.workspaceState.update('mcpGlobalEnabled', newState);
+        this.postMessage({
+          type: 'globalMcpStateUpdated',
+          payload: { enabled: newState }
+        });
+        
+        if (newState) {
+          vscode.window.showInformationMessage('Chanakya AI Agent: MCP Server Enabled');
+        } else {
+          vscode.window.showInformationMessage('Chanakya AI Agent: MCP Server Disabled');
         }
         break;
       }
