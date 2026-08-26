@@ -6,6 +6,7 @@ import { LLMGateway } from '../services/llmGateway';
 import { ContextItem, FromWebviewMessage, ToWebviewMessage } from '../types/ipc';
 import { Logger } from '../utils/logger';
 import { SecurityUtils } from '../utils/security';
+import { SecretManager } from '../services/secretManager';
 import { ConversationManager } from '../services/ConversationManager';
 import { WorkspaceIndexer } from '../services/workspaceIndexer';
 import { DocumentParserService } from '../services/documentParserService';
@@ -418,11 +419,27 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
               payload: { config: updatedConfig, rawYaml: message.payload.rawYaml }
             });
           } else {
-            this._configManager.saveConfig(message.payload.config);
+            const configObj = message.payload.config as any;
+            if (configObj && Array.isArray(configObj.models)) {
+              for (const model of configObj.models) {
+                if (model.apiKey !== undefined) {
+                  if (model.apiKey.trim() === '') {
+                    // Do nothing or maybe allow clearing? For now, we only save non-empty keys.
+                    // If they want to clear, they can change the provider or edit the raw YAML.
+                  } else {
+                    await SecretManager.getInstance().setApiKey(model.apiKey.trim(), model.provider);
+                  }
+                  // Remove from config so it doesn't get written to config.yaml in plaintext
+                  delete model.apiKey;
+                }
+              }
+            }
+
+            this._configManager.saveConfig(configObj);
             const rawYaml = this._configManager.getRawYaml();
             this.postMessage({
               type: 'configResult',
-              payload: { config: message.payload.config, rawYaml }
+              payload: { config: configObj, rawYaml }
             });
           }
           vscode.window.showInformationMessage('Chanakya AI Agent: Model configuration saved successfully!');
