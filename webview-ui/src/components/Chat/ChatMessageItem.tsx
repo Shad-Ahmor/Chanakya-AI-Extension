@@ -105,7 +105,7 @@ export default function ChatMessageItem({ message, onOpenArtifact }: Props) {
             </div>
           )}
           <span className={isUser ? 'text-white font-bold' : 'text-sky-400 font-bold'}>
-            {isUser ? 'You' : 'Chanakya AI Enhancer'}
+            {isUser ? 'You' : 'Chanakya AI Agent'}
           </span>
         </div>
         <div className="flex items-center gap-2">

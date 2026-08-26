@@ -117,7 +117,7 @@ export class DashboardProvider {
               payload: { config: message.payload.config, rawYaml }
             });
           }
-          vscode.window.showInformationMessage('Chanakya AI Enhancer: Model configuration saved successfully!');
+          vscode.window.showInformationMessage('Chanakya AI Agent: Model configuration saved successfully!');
         } catch (err: unknown) {
           const errMsg = err instanceof Error ? err.message : String(err);
           this.postMessage({ type: 'setError', payload: { error: errMsg } });

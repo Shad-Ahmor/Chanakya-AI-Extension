@@ -1,12 +1,12 @@
-# Chanakya AI Enhancer by GDLSofts
+# Chanakya AI Agent by GDLSofts
 
-Welcome to **Chanakya AI Enhancer**, a revolutionary, next-generation AI coding assistant crafted with excellence by **GDLSofts**. Built to elevate your development workflow, this extension brings the raw power of advanced AI directly into your VS Code environment with a stunning, immersive full-screen dashboard and lightning-fast inline autocomplete.
+Welcome to **Chanakya AI Agent**, a revolutionary, next-generation AI coding assistant crafted with excellence by **GDLSofts**. Built to elevate your development workflow, this extension brings the raw power of advanced AI directly into your VS Code environment with a stunning, immersive full-screen dashboard and lightning-fast inline autocomplete.
 
-**GDLSofts** takes pride in delivering world-class, premium software solutions. With Chanakya AI Enhancer, we have pushed the boundaries of developer tools, combining unparalleled aesthetics (glassmorphism, native VS Code theme sync) with robust, enterprise-grade AI architecture.
+**GDLSofts** takes pride in delivering world-class, premium software solutions. With Chanakya AI Agent, we have pushed the boundaries of developer tools, combining unparalleled aesthetics (glassmorphism, native VS Code theme sync) with robust, enterprise-grade AI architecture.
 
 ---
 
-## 🌟 Why Chanakya AI Enhancer?
+## 🌟 Why Chanakya AI Agent?
 
 Chanakya, named after the ancient master strategist, acts as your ultimate strategic coding partner. Whether you are debugging complex logic, writing boilerplate, or architecting large systems, Chanakya AI anticipates your needs and provides brilliant solutions instantly.
 
@@ -42,11 +42,11 @@ Maximize your productivity with these built-in shortcuts:
 | **`Cmd + Alt + L`** | **`Ctrl + Alt + L`** | **Add to Context**: Sends the currently selected code to the Chanakya Chat. |
 
 ### Available Command Palette Actions (`Cmd+Shift+P`):
-- `Chanakya AI Enhancer: Open AI Dashboard` - Launch the main UI.
-- `Chanakya AI Enhancer: Add Selection to Chat` - Send code to AI.
-- `Chanakya AI Enhancer: Configure API Key / Model Endpoint` - Securely update API keys in OS Keychain.
-- `Chanakya AI Enhancer: Clear Chat History` - Wipe current conversation.
-- `Chanakya AI Enhancer: Trigger Inline Autocomplete` - Manually force a FIM suggestion.
+- `Chanakya AI Agent: Open AI Dashboard` - Launch the main UI.
+- `Chanakya AI Agent: Add Selection to Chat` - Send code to AI.
+- `Chanakya AI Agent: Configure API Key / Model Endpoint` - Securely update API keys in OS Keychain.
+- `Chanakya AI Agent: Clear Chat History` - Wipe current conversation.
+- `Chanakya AI Agent: Trigger Inline Autocomplete` - Manually force a FIM suggestion.
 
 ---
 

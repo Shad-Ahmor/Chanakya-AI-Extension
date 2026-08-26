@@ -74,7 +74,7 @@
         if (statusIndicator) {
           if (hasKey) {
             statusIndicator.classList.add('ready');
-            statusIndicator.title = 'Chanakya AI Enhancer is connected & ready';
+            statusIndicator.title = 'Chanakya AI Agent is connected & ready';
           } else {
             statusIndicator.classList.remove('ready');
             statusIndicator.title = 'API Key missing. Click settings to configure.';
@@ -187,7 +187,7 @@
     const banner = document.createElement('div');
     banner.className = 'chat-message assistant';
     banner.innerHTML = `
-      <strong>✨ Welcome to Chanakya AI Enhancer</strong><br/>
+      <strong>✨ Welcome to Chanakya AI Agent</strong><br/>
       Select code in your editor and ask questions, generate enhancements, refactor, or click the quick action chips above.
     `;
     messagesContainer.appendChild(banner);

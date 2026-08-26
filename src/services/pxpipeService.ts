@@ -207,7 +207,7 @@ export class PxPipeService {
 
     const manifest = {
       version: '1.0.0',
-      generator: 'Chanakya AI Enhancer PxPipe',
+      generator: 'Chanakya AI Agent PxPipe',
       timestamp: new Date().toISOString(),
       dimensions: { width: render.width, height: render.height },
       charCount: render.charCount,

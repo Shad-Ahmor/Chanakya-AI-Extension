@@ -102,7 +102,7 @@ export default function SettingsView() {
             <div className="p-4 rounded-xl border border-[var(--vscode-widget-border)] bg-[var(--vscode-list-hoverBackground)]">
               <h3 className="text-sm font-semibold text-[var(--vscode-foreground)] mb-2">Workspace MCP Config</h3>
               <p className="text-xs text-[var(--vscode-descriptionForeground)] leading-relaxed">
-                Chanakya AI Enhancer automatically supports the **Model Context Protocol (MCP)**. 
+                Chanakya AI Agent automatically supports the **Model Context Protocol (MCP)**. 
                 To add custom tools (like Local DB, GitHub, Web Search), create a <code className="text-emerald-400 bg-black/20 px-1 rounded">.vscode/mcp.json</code> file in your workspace root.
               </p>
               <pre className="mt-3 p-3 rounded-lg bg-black/40 border border-white/5 text-[11px] font-mono text-emerald-300 overflow-x-auto">

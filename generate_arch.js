@@ -1,10 +1,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const archContent = `# MASTER ARCHITECTURE: Chanakya AI Enhancer
+const archContent = `# MASTER ARCHITECTURE: Chanakya AI Agent
 
 ## EXECUTIVE SUMMARY
-Chanakya AI Enhancer is an experience-driven agent with persistent memory, reflective learning, procedural generalization, validated autonomous skill formation, and bounded continual adaptation. It interfaces with VS Code, an LLM Engine, an embedded MCP server, and a specialized Memory/RAG Vector Store.
+Chanakya AI Agent is an experience-driven agent with persistent memory, reflective learning, procedural generalization, validated autonomous skill formation, and bounded continual adaptation. It interfaces with VS Code, an LLM Engine, an embedded MCP server, and a specialized Memory/RAG Vector Store.
 
 ## TECHNOLOGY STACK
 - Frontend: React, Vite, TailwindCSS (webview-ui)

@@ -1258,7 +1258,7 @@ export class GraphifyService {
 
     let md = `# Project Architecture & Codebase Map
 
-> Generated automatically by **Chanakya AI Enhancer Graphify Engine** on ${now}.
+> Generated automatically by **Chanakya AI Agent Graphify Engine** on ${now}.
 
 ---
 
@@ -1328,7 +1328,7 @@ ${data.analytics?.suggestedQuestions && data.analytics.suggestedQuestions.length
 
 ---
 
-*Chanakya AI Enhancer — Deep Architecture Intelligence*
+*Chanakya AI Agent — Deep Architecture Intelligence*
 `;
 
     return md;

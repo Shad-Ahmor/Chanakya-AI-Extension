@@ -130,7 +130,7 @@ export class McpService {
       }
 
       const client = new Client(
-        { name: 'Chanakya AI Enhancer', version: '0.1.5' },
+        { name: 'Chanakya AI Agent', version: '0.1.5' },
         { capabilities: {} }
       );
 

@@ -414,7 +414,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
               payload: { config: message.payload.config, rawYaml }
             });
           }
-          vscode.window.showInformationMessage('Chanakya AI Enhancer: Model configuration saved successfully!');
+          vscode.window.showInformationMessage('Chanakya AI Agent: Model configuration saved successfully!');
         } catch (err: unknown) {
           const errMsg = err instanceof Error ? err.message : String(err);
           this.postMessage({ type: 'setError', payload: { error: errMsg } });
@@ -1347,7 +1347,7 @@ ${diff}`;
       case 'exportArchitectureMd': {
         try {
           const relativePath = await GraphifyService.getInstance().exportArchitectureToFile();
-          vscode.window.showInformationMessage(`Chanakya AI Enhancer: ${relativePath} generated and opened successfully!`);
+          vscode.window.showInformationMessage(`Chanakya AI Agent: ${relativePath} generated and opened successfully!`);
         } catch (err: any) {
           this._logger.error('Failed to export architecture.md', err);
           vscode.window.showErrorMessage(`Failed to export architecture.md: ${err.message}`);

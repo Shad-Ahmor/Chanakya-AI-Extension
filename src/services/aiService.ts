@@ -54,7 +54,7 @@ export class AIService {
     const apiKey = await this.secretManager.getApiKey('gemini');
     if (!apiKey) {
       callbacks.onError(
-        new Error('API Key not found. Please configure your API key using the command: "Chanakya AI Enhancer: Configure API Key"')
+        new Error('API Key not found. Please configure your API key using the command: "Chanakya AI Agent: Configure API Key"')
       );
       return;
     }

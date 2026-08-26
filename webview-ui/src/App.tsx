@@ -764,7 +764,7 @@ export default function App() {
             <div className="w-14 h-14 rounded-3xl bg-gradient-to-tr from-sky-500/20 to-purple-500/20 border border-sky-400/30 flex items-center justify-center mb-3 shadow-xl animate-glow">
               <Sparkles className="w-7 h-7 text-sky-400" />
             </div>
-            <h3 className="font-extrabold text-white text-base mb-1 tracking-tight">Chanakya AI Enhancer</h3>
+            <h3 className="font-extrabold text-white text-base mb-1 tracking-tight">Chanakya AI Agent</h3>
             <p className="text-xs max-w-xs mb-4 text-white/70 leading-relaxed">
               Connected to <strong className="text-sky-300 font-mono">{activeModel?.name}</strong>.
             </p>
@@ -1051,7 +1051,7 @@ export default function App() {
                   handleSendPrompt();
                 }
               }}
-              placeholder="Ask Chanakya AI Enhancer or type @ to attach files..."
+              placeholder="Ask Chanakya AI Agent or type @ to attach files..."
             rows={1}
             className="w-full bg-transparent text-vscode-input-foreground outline-none resize-none text-[13px] leading-snug max-h-32 placeholder-vscode-input-placeholder p-1"
           />

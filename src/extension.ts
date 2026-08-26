@@ -19,11 +19,11 @@ import { BuiltInSkillSeeder } from './services/skillOpt/builtInSkillSeeder';
 import { SkillRegistry } from './services/skillOpt/skillRegistry';
 import { AutonomousSkillFormation } from './services/skillOpt/autonomousSkillFormation';
 /**
- * Chanakya AI Enhancer Extension Activation Entrypoint (Phases 1-5 Complete)
+ * Chanakya AI Agent Extension Activation Entrypoint (Phases 1-5 Complete)
  */
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const logger = Logger.getInstance();
-  logger.log('Activating Chanakya AI Enhancer (Full Continue/Copilot Engine with FIM Autocomplete)...');
+  logger.log('Activating Chanakya AI Agent (Full Continue/Copilot Engine with FIM Autocomplete)...');
 
   // 1. Initialize Configuration Manager and SecretManager
   SecretManager.initialize(context);
@@ -106,7 +106,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('aiEnhancer.toggleAutocomplete', () => {
       const isEnabled = inlineProvider.toggle();
       vscode.window.showInformationMessage(
-        `Chanakya AI Enhancer: Inline Autocomplete is now ${isEnabled ? 'ENABLED' : 'DISABLED'}`
+        `Chanakya AI Agent: Inline Autocomplete is now ${isEnabled ? 'ENABLED' : 'DISABLED'}`
       );
       updateStatusBar();
     })
@@ -117,7 +117,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('aiEnhancer.addSelectionToContext', () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor || editor.selection.isEmpty) {
-        vscode.window.showInformationMessage('Please select some code first to add it to Chanakya AI Enhancer.');
+        vscode.window.showInformationMessage('Please select some code first to add it to Chanakya AI Agent.');
         return;
       }
 
@@ -160,7 +160,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const cfg = configManager.getConfig();
     const activeModel = cfg.models.find((m) => m.id === cfg.activeChatModelId);
     statusBarItem.text = `$(sparkle) AI: ${activeModel?.name || 'Enhancer'}`;
-    statusBarItem.tooltip = `Chanakya AI Enhancer Connected (${activeModel?.model || 'Ready'}) - Click to Open`;
+    statusBarItem.tooltip = `Chanakya AI Agent Connected (${activeModel?.model || 'Ready'}) - Click to Open`;
     statusBarItem.show();
   }
 
@@ -233,9 +233,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   });
 
-  logger.log('Chanakya AI Enhancer successfully activated (Phases 1-5 ready).');
+  logger.log('Chanakya AI Agent successfully activated (Phases 1-5 ready).');
 }
 
 export function deactivate(): void {
-  Logger.getInstance().log('Chanakya AI Enhancer extension deactivated.');
+  Logger.getInstance().log('Chanakya AI Agent extension deactivated.');
 }

@@ -8,7 +8,7 @@ export class Logger {
   private channel: vscode.OutputChannel;
 
   private constructor() {
-    this.channel = vscode.window.createOutputChannel('Chanakya AI Enhancer');
+    this.channel = vscode.window.createOutputChannel('Chanakya AI Agent');
   }
 
   public static getInstance(): Logger {

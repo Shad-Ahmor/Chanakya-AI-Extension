@@ -2,7 +2,7 @@ import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 
 /**
- * Security helper utilities for Chanakya AI Enhancer to eliminate vulnerabilities (XSS, Injection, Secret Leaks).
+ * Security helper utilities for Chanakya AI Agent to eliminate vulnerabilities (XSS, Injection, Secret Leaks).
  */
 export class SecurityUtils {
   /**

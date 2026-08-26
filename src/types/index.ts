@@ -1,5 +1,5 @@
 /**
- * Core type definitions for Chanakya AI Enhancer
+ * Core type definitions for Chanakya AI Agent
  */
 
 export type AIModelType =

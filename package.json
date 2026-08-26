@@ -1,7 +1,7 @@
 {
 	"name": "chanakya-ai-enhancer",
-	"displayName": "Chanakya AI Enhancer",
-	"description": "Chanakya AI Enhancer by GDLSofts: The ultimate, full-screen AI coding strategist with blazing-fast FIM autocomplete and an immersive Chat Dashboard.",
+	"displayName": "Chanakya AI Agent",
+	"description": "Chanakya AI Agent by GDLSofts: The ultimate, full-screen AI coding strategist with blazing-fast FIM autocomplete and an immersive Chat Dashboard.",
 	"version": "0.1.5",
 	"publisher": "chanakya-ai-enhancer",
 	"repository": {
@@ -37,67 +37,67 @@
 		"commands": [
 			{
 				"command": "aiEnhancer.addSelectionToContext",
-				"title": "Chanakya AI Enhancer: Add Selection to Chat",
-				"category": "Chanakya AI Enhancer",
+				"title": "Chanakya AI Agent: Add Selection to Chat",
+				"category": "Chanakya AI Agent",
 				"icon": "$(add)"
 			},
 			{
 				"command": "aiEnhancer.setApiKey",
-				"title": "Chanakya AI Enhancer: Configure API Key / Model Endpoint",
-				"category": "Chanakya AI Enhancer",
+				"title": "Chanakya AI Agent: Configure API Key / Model Endpoint",
+				"category": "Chanakya AI Agent",
 				"icon": "$(key)"
 			},
 			{
 				"command": "aiEnhancer.clearHistory",
-				"title": "Chanakya AI Enhancer: Clear Chat History",
-				"category": "Chanakya AI Enhancer",
+				"title": "Chanakya AI Agent: Clear Chat History",
+				"category": "Chanakya AI Agent",
 				"icon": "$(trash)"
 			},
 			{
 				"command": "aiEnhancer.triggerInlineCompletion",
-				"title": "Chanakya AI Enhancer: Trigger Inline Autocomplete",
-				"category": "Chanakya AI Enhancer"
+				"title": "Chanakya AI Agent: Trigger Inline Autocomplete",
+				"category": "Chanakya AI Agent"
 			},
 			{
 				"command": "aiEnhancer.inlineEdit",
-				"title": "Chanakya AI Enhancer: Inline Edit Code",
-				"category": "Chanakya AI Enhancer",
+				"title": "Chanakya AI Agent: Inline Edit Code",
+				"category": "Chanakya AI Agent",
 				"icon": "$(edit)"
 			},
 			{
 				"command": "aiEnhancer.acceptEdit",
-				"title": "Chanakya AI Enhancer: Accept Inline Edit",
-				"category": "Chanakya AI Enhancer",
+				"title": "Chanakya AI Agent: Accept Inline Edit",
+				"category": "Chanakya AI Agent",
 				"icon": "$(check)"
 			},
 			{
 				"command": "aiEnhancer.openModelsHub",
-				"title": "Chanakya AI Enhancer: Open Models Hub",
-				"category": "Chanakya AI Enhancer",
+				"title": "Chanakya AI Agent: Open Models Hub",
+				"category": "Chanakya AI Agent",
 				"icon": "$(hub)"
 			},
 			{
 				"command": "aiEnhancer.openGraphify",
-				"title": "Chanakya AI Enhancer: Open Graphify Architecture Visualizer",
-				"category": "Chanakya AI Enhancer",
+				"title": "Chanakya AI Agent: Open Graphify Architecture Visualizer",
+				"category": "Chanakya AI Agent",
 				"icon": "$(graph)"
 			},
 			{
 				"command": "aiEnhancer.generateArchitecture",
-				"title": "Chanakya AI Enhancer: Generate Workspace Architecture",
-				"category": "Chanakya AI Enhancer",
+				"title": "Chanakya AI Agent: Generate Workspace Architecture",
+				"category": "Chanakya AI Agent",
 				"icon": "$(list-tree)"
 			},
 			{
 				"command": "aiEnhancer.setupMcp",
-				"title": "Chanakya AI Enhancer: Setup MCP Configuration",
-				"category": "Chanakya AI Enhancer",
+				"title": "Chanakya AI Agent: Setup MCP Configuration",
+				"category": "Chanakya AI Agent",
 				"icon": "$(gear)"
 			},
 			{
 				"command": "aiEnhancer.runReactPilot",
-				"title": "Chanakya AI Enhancer: Run React JS SkillOpt Pilot",
-				"category": "Chanakya AI Enhancer",
+				"title": "Chanakya AI Agent: Run React JS SkillOpt Pilot",
+				"category": "Chanakya AI Agent",
 				"icon": "$(beaker)"
 			},
 			{
@@ -185,7 +185,7 @@
 			]
 		},
 		"configuration": {
-			"title": "Chanakya AI Enhancer",
+			"title": "Chanakya AI Agent",
 			"properties": {
 				"aiEnhancer.model": {
 					"type": "string",
