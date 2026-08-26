@@ -1448,9 +1448,10 @@ ${diff}`;
       case 'toggleGlobalMcp': {
         const mcpService = McpService.getInstance();
         const servers = await mcpService.getServersStatus();
+        const userServers = servers.filter(s => s.type !== 'embedded');
         
-        // Check if there are any configured servers
-        if (servers.length === 0) {
+        // Check if there are any configured servers (ignoring the built-in embedded server)
+        if (userServers.length === 0) {
           vscode.window.showErrorMessage('Please configure your MCP server first.');
           this.postMessage({
             type: 'globalMcpStateUpdated',
