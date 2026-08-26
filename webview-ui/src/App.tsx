@@ -583,8 +583,8 @@ export default function App() {
 
       {/* Version & Build Info Popover */}
       {isVersionInfoOpen && (
-        <div className="absolute top-[48px] right-3 z-30 w-72 bg-vscode-editorWidget-background border border-vscode-widget-border shadow-2xl rounded-xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-4 duration-200">
-          <div className="px-4 py-3 border-b border-vscode-widget-border flex items-center justify-between bg-black/20">
+        <div className="absolute top-[48px] right-3 z-30 w-72 bg-vscode-widgetBg border border-vscode-widgetBorder shadow-2xl rounded-xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-4 duration-200">
+          <div className="px-4 py-3 border-b border-vscode-widgetBorder flex items-center justify-between bg-black/20">
             <span className="font-bold text-sm text-vscode-foreground flex items-center gap-2">
               <Info className="w-4 h-4 text-sky-400" />
               Build Information
