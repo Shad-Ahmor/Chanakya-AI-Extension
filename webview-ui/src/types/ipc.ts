@@ -1,6 +1,25 @@
 import { AppConfig, ModelConfig } from './config';
 import { GraphifyData } from './graphify';
 
+export interface AgentActivity {
+  readonly id: string;
+  readonly type: 'search' | 'analyze' | 'edit' | 'create' | 'delete' | 'command' | 'build' | 'test' | 'lint' | 'install' | 'git' | 'thinking' | 'error' | 'status';
+  readonly status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timeout';
+  readonly title: string;
+  readonly description?: string;
+  readonly filePath?: string;
+  readonly startLine?: number;
+  readonly endLine?: number;
+  readonly command?: string;
+  readonly durationMs?: number;
+  readonly exitCode?: number;
+  readonly additions?: number;
+  readonly deletions?: number;
+  readonly resultCount?: number;
+  readonly timestamp: number;
+  readonly details?: any;
+}
+
 export interface ContextItem {
   readonly id: string;
   readonly type: 'file' | 'selection' | 'terminal' | 'codebase';
@@ -36,6 +55,7 @@ export interface ChatMessage {
   readonly tool_call_id?: string | undefined;
   readonly name?: string | undefined;
   readonly artifacts?: { readonly name: string; readonly content: string }[] | undefined;
+  readonly activities?: AgentActivity[] | undefined;
   readonly fileChanges?: {
     readonly count: number;
     readonly added: number;
@@ -152,6 +172,7 @@ export type ToWebviewMessage =
   | { type: 'addMessage'; payload: ChatMessage }
   | { type: 'streamChunk'; payload: { messageId: string; chunk: string } }
   | { type: 'streamEnd'; payload: { messageId: string } }
+  | { type: 'agentActivity'; payload: AgentActivity }
   | { type: 'addContextItem'; payload: ContextItem }
   | { type: 'workspaceFilesResult'; payload: { query: string; files: WorkspaceFileResult[] } }
   | { type: 'fileContentResult'; payload: { contextItem: ContextItem } }
@@ -159,13 +180,13 @@ export type ToWebviewMessage =
   | { type: 'setError'; payload: { error: string } }
   | { type: 'clearChat' }
   | { type: 'configResult'; payload: { config: AppConfig; rawYaml: string } }
-  | { type: 'vscodeSettingsResult'; payload: { settings: Record<string, any> } }
   | { type: 'pxpipeSettingsUpdated'; payload: { settings: any } }
   | { type: 'skillOps:skillsResult'; payload: { skills: any[] } }
   | { type: 'skillOps:historyResult'; payload: { skillName: string; history: any[] } }
   | { type: 'skillOps:optimizationResult'; payload: { result: any; error?: string } }
   | { type: 'skillOps:rollbackResult'; payload: { success: boolean; error?: string } }
   | { type: 'skillOps:skillContentResult'; payload: { category: string; version: number; content: string | null } }
+  | { type: 'vscodeSettingsResult'; payload: { settings: Record<string, any> } }
   | { type: 'testModelResult'; payload: { modelId: string; success: boolean; latencyMs?: number | undefined; error?: string | undefined } }
   | { type: 'updateTaskStatus'; payload: { messageId: string; task: TaskStatus } }
   | { type: 'openSettingsTab' }

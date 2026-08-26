@@ -242,6 +242,31 @@ export default function App() {
           break;
         }
 
+        case 'agentActivity': {
+          setMessages((prev) => {
+            const lastAssistantMsgIndex = prev.length - 1;
+            // Assuming the last message is the one we want to attach activities to
+            if (lastAssistantMsgIndex >= 0 && prev[lastAssistantMsgIndex].role === 'assistant') {
+              const newMsgs = [...prev];
+              const lastMsg = { ...newMsgs[lastAssistantMsgIndex] };
+              const currentActivities = lastMsg.activities ? [...lastMsg.activities] : [];
+              
+              const activityIndex = currentActivities.findIndex(a => a.id === message.payload.id);
+              if (activityIndex >= 0) {
+                currentActivities[activityIndex] = message.payload;
+              } else {
+                currentActivities.push(message.payload);
+              }
+              
+              lastMsg.activities = currentActivities;
+              newMsgs[lastAssistantMsgIndex] = lastMsg;
+              return newMsgs;
+            }
+            return prev;
+          });
+          break;
+        }
+
         case 'clearChat': {
           setMessages([]);
           setContextItems([]);

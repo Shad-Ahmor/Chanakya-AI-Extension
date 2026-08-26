@@ -341,6 +341,7 @@ export class LLMEngine {
       ? 'You are an autonomous execution agent. Fulfill the user task using the available tools. Be concise.'
       : 'You are Chanakya AI, an elite Staff-Level Software Engineer (SDE 4/5) and technical partner. ' +
         'Communicate conversationally, like a highly experienced peer pair-programming with the user.\n' +
+        'IMPORTANT TONE DIRECTIVE: Never use third-person phrases like "The user wants" or "The user asked". ALWAYS use direct, friendly phrasing like "You asked me to", "You wanted", or "Let\'s do what you said".\n' +
         'You have access to tools to run terminal commands, read files, and write code.\n' +
         (vscode.workspace.workspaceFolders?.length ? `[WORKSPACE ROOT]: ${vscode.workspace.workspaceFolders[0].uri.fsPath}\nUse this path as the base for all file operations.\n` : '') +
         'CRITICAL RULES:\n' +
@@ -782,6 +783,7 @@ export class LLMEngine {
 
     let systemInstruction = 'You are Chanakya AI, an elite Staff-Level Software Engineer (SDE 4/5) and technical partner. ' +
       'Communicate conversationally, like a highly experienced peer pair-programming with the user.\n' +
+      'IMPORTANT TONE DIRECTIVE: Never use third-person phrases like "The user wants" or "The user asked". ALWAYS use direct, friendly phrasing like "You asked me to", "You wanted", or "Let\'s do what you said".\n' +
       (vscode.workspace.workspaceFolders?.length ? `[WORKSPACE ROOT]: ${vscode.workspace.workspaceFolders[0].uri.fsPath}\nUse this path as the base for all file operations.\n` : '') +
       'CRITICAL RULES:\n' +
       '1. NEVER hallucinate imports or function names. ALWAYS use the `search_code` tool to verify exact names before importing or calling them.\n' +

@@ -3,6 +3,7 @@ import remarkGfm from 'remark-gfm';
 import { ChatMessage } from '../../types/ipc';
 import CodeBlock from './CodeBlock';
 import { Code, FileText, Bot, User, Sparkles, Undo2, ArrowDownRight, Loader2, ChevronRight, Copy, Check, ThumbsUp, ThumbsDown, GitBranch } from 'lucide-react';
+import { AgentActivityFeed } from './AgentActivityFeed';
 import { vscode } from '../../vscode';
 import { useState, useEffect } from 'react';
 
@@ -212,6 +213,11 @@ export default function ChatMessageItem({ message, onOpenArtifact }: Props) {
             </div>
           ) : null}
         </div>
+      )}
+
+      {/* Agent Activity Feed */}
+      {!isUser && message.activities && message.activities.length > 0 && (
+        <AgentActivityFeed activities={message.activities} />
       )}
 
       {/* Context Item Pills */}

@@ -360,6 +360,23 @@ Only one tool call per response is supported. Do not output anything else if you
       telemetry.logLoopDetected();
     }
 
+    const activityId = Date.now().toString() + Math.random().toString(36).substring(7);
+    const activityType = this.mapToolToActivityType(name);
+    const startTime = Date.now();
+
+    // Emit 'running' event
+    this.events.emit('activity', {
+      id: activityId,
+      type: activityType,
+      status: 'running',
+      title: this.formatActivityTitle(name, args),
+      description: `Executing ${name}`,
+      timestamp: startTime,
+      filePath: args.path || args.filePath || args.dirPath,
+      command: args.command,
+      details: args
+    });
+
     try {
       let rawResult = '';
       const targetPath = args.path || args.filePath || args.dirPath;
@@ -442,12 +459,69 @@ Only one tool call per response is supported. Do not output anything else if you
 
       // 2. Tool output spill check
       const spillResult = await ToolSpillService.getInstance().handleOutputSpill(name, rawResult);
+      
+      const durationMs = Date.now() - startTime;
+      
+      // Emit 'completed' event
+      this.events.emit('activity', {
+        id: activityId,
+        type: activityType,
+        status: 'completed',
+        title: this.formatActivityTitle(name, args),
+        timestamp: Date.now(),
+        durationMs,
+        filePath: args.path || args.filePath || args.dirPath,
+        command: args.command,
+        details: { output: spillResult.content }
+      });
+
       return spillResult.content;
     } catch (err: any) {
+      const durationMs = Date.now() - startTime;
+      
+      // Emit 'failed' event
+      this.events.emit('activity', {
+        id: activityId,
+        type: activityType,
+        status: 'failed',
+        title: this.formatActivityTitle(name, args),
+        timestamp: Date.now(),
+        durationMs,
+        filePath: args.path || args.filePath || args.dirPath,
+        command: args.command,
+        details: { error: err.message }
+      });
+
       ExecutionGuardService.getInstance().recordToolResult(name, false, err.message);
       telemetry.logToolCall(true);
       this.logger.error(`[Agent] Tool ${name} failed`, err);
       return `Error executing ${name}: ${err.message}`;
+    }
+  }
+
+  private mapToolToActivityType(name: string): string {
+    if (name === 'search_code' || name.startsWith('lsp_')) return 'search';
+    if (name === 'view_file' || name === 'list_directory') return 'analyze';
+    if (name === 'edit_file' || name === 'replace_in_file') return 'edit';
+    if (name === 'create_file') return 'create';
+    if (name === 'delete_file' || name === 'delete_directory') return 'delete';
+    if (name === 'run_terminal_command') return 'command';
+    return 'tool';
+  }
+
+  private formatActivityTitle(name: string, args: any): string {
+    const targetPath = args.path || args.filePath || args.dirPath || '';
+    const baseName = targetPath ? path.basename(targetPath) : '';
+    
+    switch (name) {
+      case 'run_terminal_command': return `Command: ${args.command}`;
+      case 'view_file': return `Analyzed ${baseName}`;
+      case 'search_code': return `Searched ${args.query}`;
+      case 'edit_file': return `Edited ${baseName}`;
+      case 'replace_in_file': return `Replaced in ${baseName}`;
+      case 'create_file': return `Created ${baseName}`;
+      case 'delete_file': return `Deleted ${baseName}`;
+      default: return name;
     }
   }
 

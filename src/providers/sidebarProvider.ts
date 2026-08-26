@@ -86,6 +86,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           });
         }
       });
+      m.AgentOrchestrator.getInstance().events.on('activity', (payload) => {
+        if (this._view) {
+          this.postMessage({
+            type: 'agentActivity',
+            payload
+          });
+        }
+      });
     });
 
     PlanTracker.getInstance().events.on('planChanged', (plan) => {
