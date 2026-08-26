@@ -1,85 +1,85 @@
-import { Requirement, RequirementStatus } from './types';
+import { TaskUnderstanding } from './types';
 import { Logger } from '../../utils/logger';
-import { randomUUID } from 'crypto';
-import * as fs from 'fs/promises';
-import * as path from 'path';
+import { LLMEngine } from '../llmEngine';
 
 export class RequirementExtractionService {
     private readonly logger = Logger.getInstance();
 
-    constructor() {}
+    constructor(private readonly llmEngine: LLMEngine) {}
 
-    public async extractRequirements(sourceDir: string): Promise<Requirement[]> {
+    public async extractRequirements(sourceDir: string, originalPrompt: string): Promise<TaskUnderstanding> {
         this.logger.log(`[RequirementExtraction] Extracting requirements from ${sourceDir}`);
         
-        const reqs: Requirement[] = [];
-        
         try {
-            // Read the main input to extract requirements
-            // In a real implementation with a huge prompt, this would iterate over the chunks
-            // and map reduce the requirements to avoid hitting token limits.
-            const inputPath = path.join(sourceDir, 'input.md');
-            const content = await fs.readFile(inputPath, 'utf-8');
+            const systemPrompt = `You are an expert requirement extraction engine for an autonomous coding agent.
+Your task is to analyze the user's prompt and extract a structured TaskUnderstanding JSON object.
+Extract all requirements, constraints, explicit files, technologies, and ambiguities.
+Output ONLY valid JSON.
+{
+    "intent": "Brief description of what the user wants to achieve",
+    "taskType": "bug_fix | feature | refactor | investigation | configuration | documentation | testing | mixed | unknown",
+    "requirements": ["List of functional and technical requirements"],
+    "constraints": ["List of strict constraints"],
+    "explicitFiles": ["Files explicitly mentioned in the prompt"],
+    "explicitTechnologies": ["Technologies/Frameworks mentioned"],
+    "expectedOutcome": "What does success look like?",
+    "acceptanceCriteria": ["List of criteria to verify completion"],
+    "prohibitedActions": ["Actions the user explicitly forbid"],
+    "ambiguities": ["Any unclear aspects of the prompt"],
+    "riskLevel": "low | medium | high",
+    "requiresPlanning": true,
+    "requiresRepositoryInspection": true,
+    "requiresUserClarification": false
+}`;
 
-            // LLM prompt for future extraction will be built here when integrated
+            const prompt = `${systemPrompt}\n\nUSER PROMPT:\n${originalPrompt}`;
 
-            // We mock the LLM call for now, but connect the structure.
-            // const response = await this.llmEngine.chat([{ role: 'system', content: systemPrompt }, { role: 'user', content }]);
-            // const parsed = JSON.parse(response);
-            
-            // Mock extraction logic based on the user prompt's content (heuristics)
-            const isRefactor = content.toLowerCase().includes('refactor');
-            const isAuth = content.toLowerCase().includes('auth');
-            
-            reqs.push({
-                id: `REQ-${randomUUID().slice(0, 4).toUpperCase()}`,
-                description: isRefactor ? 'Refactor the target module without breaking existing functionality' : 'Implement the requested feature',
-                type: 'MUST',
-                priority: 'CRITICAL',
-                category: isRefactor ? 'architectural' : 'functional',
-                sourceSection: 'input.md',
-                dependencies: [],
-                acceptanceCriteria: ['All tests pass', 'Code compiles'],
-                status: RequirementStatus.PENDING,
-                verificationMethod: 'npm run test'
+            const response = await new Promise<string>((resolve, reject) => {
+                let fullText = '';
+                this.llmEngine.streamChat({
+                    prompt,
+                    contextItems: [],
+                    callbacks: {
+                        onChunk: (chunk: string) => { fullText += chunk; },
+                        onComplete: (text: string) => resolve(text || fullText),
+                        onError: (error: Error) => reject(error)
+                    }
+                }).catch(reject);
             });
-
-            if (isAuth) {
-                reqs.push({
-                    id: `REQ-${randomUUID().slice(0, 4).toUpperCase()}`,
-                    description: 'Ensure session security is maintained',
-                    type: 'MUST',
-                    priority: 'HIGH',
-                    category: 'security',
-                    sourceSection: 'input.md',
-                    dependencies: [],
-                    acceptanceCriteria: ['No plaintext tokens stored'],
-                    status: RequirementStatus.PENDING,
-                    verificationMethod: 'Security audit tool'
-                });
-            }
-
-            // Extract explicit constraints
-            const constraints = content.match(/(must not|never|do not)/gi);
-            if (constraints && constraints.length > 0) {
-                reqs.push({
-                    id: `REQ-${randomUUID().slice(0, 4).toUpperCase()}`,
-                    description: 'Follow explicit user constraints',
-                    type: 'MUST NOT',
-                    priority: 'CRITICAL',
-                    category: 'explicit_constraint',
-                    sourceSection: 'input.md',
-                    dependencies: [],
-                    acceptanceCriteria: ['Constraint is never violated'],
-                    status: RequirementStatus.PENDING,
-                    verificationMethod: 'Manual code review'
-                });
-            }
-
-            return reqs;
+            
+            // Basic json parsing fallback
+            const jsonMatch = response.match(/\{[\s\S]*\}/);
+            const jsonString = jsonMatch ? jsonMatch[0] : response;
+            const parsed = JSON.parse(jsonString) as TaskUnderstanding;
+            
+            parsed.originalPrompt = originalPrompt;
+            
+            // Ensure priority sorting for requirements
+            // This is just a structural mapping since LLM returns simple strings for requirements
+            // Real sorting happens when mapping to full Requirement objects later if needed
+            
+            return parsed;
         } catch (error) {
             this.logger.error('[RequirementExtraction] Failed to extract requirements', error);
-            throw error;
+            
+            // Fallback object on failure
+            return {
+                originalPrompt,
+                intent: 'Failed to extract intent',
+                taskType: 'unknown',
+                requirements: ['Process user prompt'],
+                constraints: [],
+                explicitFiles: [],
+                explicitTechnologies: [],
+                expectedOutcome: 'Task completed',
+                acceptanceCriteria: [],
+                prohibitedActions: [],
+                ambiguities: ['Failed to parse prompt'],
+                riskLevel: 'medium',
+                requiresPlanning: true,
+                requiresRepositoryInspection: true,
+                requiresUserClarification: false
+            };
         }
     }
 }

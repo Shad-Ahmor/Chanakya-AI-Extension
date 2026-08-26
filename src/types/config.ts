@@ -51,6 +51,7 @@ export interface ModelConfig {
   readonly isLocal?: boolean | undefined;
   readonly executionMode?: ModelExecutionMode | undefined;
   readonly roles?: readonly ModelRole[] | undefined;
+  readonly apiKey?: string | undefined;
   readonly requestOptions?: ModelRequestOptions | undefined;
   readonly defaultCompletionOptions?: ModelCompletionOptions | undefined;
   readonly capabilities?: readonly ModelCapability[] | undefined;

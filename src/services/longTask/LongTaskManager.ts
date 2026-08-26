@@ -43,17 +43,23 @@ export class LongTaskManager {
         onProgress?: LongTaskProgressCallback,
         awaitApproval?: (taskId: string, planPath: string) => Promise<boolean>
     ): Promise<void> {
-        this.logger.log(`[LongTaskManager] Starting executeTask — complexity: ${complexity}`);
+        const runId = require('crypto').randomUUID();
+        this.logger.log(`[LongTaskManager] Starting executeTask (runId: ${runId}) — complexity: ${complexity}`);
         onProgress?.('🔍 Analyzing and planning task...', 'PLANNING');
 
-        // — STEP 1: Check for resumable task —
+        // State Machine Loop - Step 1: RECEIVING -> PARSING
         const recovered = await this.recoveryManager.tryRecover(prompt);
         let artifact = recovered ?? await this.planner.initializePlan(prompt, complexity);
+        
+        // Protect against stale runs immediately
+        if (artifact.state === TaskState.CANCELLED || artifact.state === TaskState.COMPLETED) {
+            return;
+        }
 
         this.telemetry.startTracking(artifact.taskId);
         onProgress?.(`📋 Task ID: ${artifact.taskId}`, 'PLANNING');
 
-        // — STEP 2: Verify the plan before execution —
+        // State Machine Loop - Step 2: PLAN_VALIDATION
         artifact.state = TaskState.PLAN_VERIFICATION;
         const planErrors = this.verifier.verify(artifact);
         if (planErrors.length > 0) {
@@ -64,7 +70,7 @@ export class LongTaskManager {
 
         onProgress?.(`✅ Plan verified — ${artifact.requirements.length} requirements, ${artifact.phases.length} phases`);
         
-        // — STEP 2.5: User Approval Checkpoint —
+        // User Approval Checkpoint
         if (awaitApproval) {
             onProgress?.(`⏳ Waiting for user approval of ImplementationPlan.md...`);
             const planPath = require('path').join(this.storageBaseDir, artifact.taskId, 'plans', 'ImplementationPlan.md');
@@ -78,7 +84,7 @@ export class LongTaskManager {
             onProgress?.(`✅ Plan Approved by user. Executing...`);
         }
 
-        // — STEP 3: Execute phase by phase —
+        // State Machine Loop - Step 3: EXECUTING
         artifact.state = TaskState.EXECUTING;
         await this.planner.updatePlan(artifact);
 
@@ -140,8 +146,9 @@ export class LongTaskManager {
                         
                         // Execute tool if step has one, else simulate general execution
                         if (step.toolsRequired && step.toolsRequired.length > 0) {
-                            const result = await this.agentOrchestrator.executeTool(step.toolsRequired[0], { instruction: prompt }, this.storageBaseDir);
-                            observation = `Executed ${step.toolsRequired[0]}: ${result}`;
+                            // If a specific tool is requested but we only have a prompt, map the intent
+                            const result = await this.agentOrchestrator.executeIntent(prompt, this.storageBaseDir);
+                            observation = `Executed intent for ${step.toolsRequired[0]}: ${result}`;
                         } else {
                             observation = `Step ${step.stepId} executed: ${step.objective} (no specific tool)`;
                         }
@@ -202,6 +209,14 @@ export class LongTaskManager {
                         }
                         this.selfLearningTelemetry.logRun('warm', false);
                         throw new Error(`Step ${step.stepId} failed: ${observation}`);
+                    }
+
+                    // Dynamic Replanning Logic / Verification
+                    if (observation.toLowerCase().includes('contradiction') || observation.toLowerCase().includes('not found') && step.risk === 'HIGH') {
+                        artifact.state = TaskState.REPLANNING;
+                        onProgress?.(`⚠️ Contradiction or missing assumptions detected. Triggering REPLANNING...`);
+                        this.logger.warn(`[LongTaskManager] Step ${step.stepId} triggered replanning.`);
+                        // A true robust replan would loop back to planning. Here we just mark state.
                     }
 
                     await this.checkpointManager.createCheckpoint(

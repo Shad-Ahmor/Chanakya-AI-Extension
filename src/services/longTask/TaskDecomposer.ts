@@ -1,10 +1,11 @@
-import { TaskArtifact, Phase, TaskState, TaskComplexity, WorkingSet } from './types';
+import { TaskArtifact, Phase, TaskState, TaskComplexity, WorkingSet, Requirement, RequirementStatus } from './types';
 import { Logger } from '../../utils/logger';
 import { randomUUID } from 'crypto';
 import { LongContextIngestionService } from './LongContextIngestionService';
 import { RequirementExtractionService } from './RequirementExtractionService';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { LLMEngine } from '../llmEngine';
 
 export class TaskDecomposer {
     private readonly logger = Logger.getInstance();
@@ -12,7 +13,8 @@ export class TaskDecomposer {
     constructor(
         private readonly ingestionService: LongContextIngestionService,
         private readonly requirementService: RequirementExtractionService,
-        private readonly storageBaseDir: string
+        private readonly storageBaseDir: string,
+        private readonly llmEngine: LLMEngine
     ) {}
 
     public async decompose(
@@ -27,35 +29,87 @@ export class TaskDecomposer {
             // 1. Ingest
             const ingestion = await this.ingestionService.ingest(originalPrompt, taskId);
             
-            // 2. Extract Requirements
-            const requirements = await this.requirementService.extractRequirements(ingestion.sourceDir);
+            // 2. Extract Requirements & TaskUnderstanding
+            const understanding = await this.requirementService.extractRequirements(ingestion.sourceDir, originalPrompt);
 
             // 3. Decompose into Phases and Steps
-            // In a real execution, we would call LLMEngine here with the requirements and summaries
-            const phases: Phase[] = [
+            const systemPrompt = `You are a Senior Software Architect planning the execution of a task.
+Based on the provided Task Understanding, break down the task into logical phases and steps.
+Output ONLY valid JSON matching this schema:
+{
+    "phases": [
+        {
+            "phaseId": "string",
+            "name": "string",
+            "steps": [
                 {
-                    phaseId: `PHASE-DISCOVERY`,
+                    "stepId": "string",
+                    "objective": "string",
+                    "requiredInputs": ["string"],
+                    "expectedOutput": "string",
+                    "filesInvolved": ["string"],
+                    "toolsRequired": ["string"],
+                    "dependencies": ["string"],
+                    "risk": "LOW | MEDIUM | HIGH",
+                    "verificationMethod": "string"
+                }
+            ]
+        }
+    ]
+}`;
+            const prompt = `${systemPrompt}\n\nUSER PROMPT:\n${JSON.stringify(understanding)}`;
+            const response = await new Promise<string>((resolve, reject) => {
+                let fullText = '';
+                this.llmEngine.streamChat({
+                    prompt,
+                    contextItems: [],
+                    callbacks: {
+                        onChunk: (chunk: string) => { fullText += chunk; },
+                        onComplete: (text: string) => resolve(text || fullText),
+                        onError: (error: Error) => reject(error)
+                    }
+                }).catch(reject);
+            });
+            
+            const jsonMatch = response.match(/\{[\s\S]*\}/);
+            const jsonString = jsonMatch ? jsonMatch[0] : response;
+            
+            let parsedPhases: Phase[] = [];
+            try {
+                const parsedPlan = JSON.parse(jsonString);
+                if (parsedPlan.phases && Array.isArray(parsedPlan.phases)) {
+                    parsedPhases = parsedPlan.phases.map((p: any) => ({
+                        ...p,
+                        status: TaskState.PENDING,
+                        steps: (p.steps || []).map((s: any) => ({
+                            ...s,
+                            status: TaskState.PENDING
+                        }))
+                    }));
+                }
+            } catch (e) {
+                this.logger.error('[TaskDecomposer] Failed to parse plan JSON', e);
+                parsedPhases = [{
+                    phaseId: 'PHASE-DISCOVERY',
                     name: 'Discovery and Analysis',
                     status: TaskState.PENDING,
-                    steps: [
-                        {
-                            stepId: `STEP-001`,
-                            objective: 'Analyze existing codebase structure',
-                            requiredInputs: [],
-                            expectedOutput: 'Understanding of file layout',
-                            filesInvolved: [],
-                            toolsRequired: ['workspace_search'],
-                            dependencies: [],
-                            risk: 'LOW',
-                            verificationMethod: 'Review discovered files',
-                            status: TaskState.PENDING
-                        }
-                    ]
-                }
-            ];
+                    steps: [{
+                        stepId: 'STEP-001',
+                        objective: 'Analyze existing codebase structure',
+                        requiredInputs: [],
+                        expectedOutput: 'Understanding of file layout',
+                        filesInvolved: [],
+                        toolsRequired: ['workspace_search'],
+                        dependencies: [],
+                        risk: 'LOW',
+                        verificationMethod: 'Review discovered files',
+                        status: TaskState.PENDING
+                    }]
+                }];
+            }
 
             const initialWorkingSet: WorkingSet = {
-                currentFiles: [],
+                currentFiles: understanding.explicitFiles || [],
                 relevantFiles: [],
                 recentlyModifiedFiles: [],
                 referencedFiles: [],
@@ -64,29 +118,57 @@ export class TaskDecomposer {
                 dependencyFiles: []
             };
 
+            const mappedRequirements: Requirement[] = (understanding.requirements || []).map((desc: string, i: number) => ({
+                id: `REQ-${String(i+1).padStart(3, '0')}`,
+                type: 'MUST',
+                description: desc,
+                priority: 'NORMAL',
+                category: 'functional',
+                sourceSection: 'TaskUnderstanding',
+                dependencies: [],
+                acceptanceCriteria: [],
+                status: RequirementStatus.PENDING,
+                verificationMethod: 'Testing'
+            }));
+
+            // Map constraints
+            (understanding.constraints || []).forEach((desc: string, i: number) => {
+                mappedRequirements.push({
+                    id: `CON-${String(i+1).padStart(3, '0')}`,
+                    type: 'MUST NOT',
+                    description: desc,
+                    priority: 'CRITICAL',
+                    category: 'explicit_constraint',
+                    sourceSection: 'TaskUnderstanding',
+                    dependencies: [],
+                    acceptanceCriteria: ['Constraint maintained'],
+                    status: RequirementStatus.PENDING,
+                    verificationMethod: 'Manual review'
+                });
+            });
+
             const artifact: TaskArtifact = {
                 taskId,
                 originalInput: originalPrompt,
-                normalizedGoal: 'Processed task goal',
-                requirements,
-                constraints: ['Maintain existing architecture'],
-                acceptanceCriteria: ['All tests pass'],
-                referencedFiles: [],
-                referencedTechnologies: [],
-                detectedRisks: ['Potential side-effects in legacy code'],
-                ambiguities: [],
+                normalizedGoal: understanding.intent || 'Processed task goal',
+                requirements: mappedRequirements,
+                constraints: understanding.constraints || [],
+                acceptanceCriteria: understanding.acceptanceCriteria || [],
+                referencedFiles: understanding.explicitFiles || [],
+                referencedTechnologies: understanding.explicitTechnologies || [],
+                detectedRisks: [],
+                ambiguities: understanding.ambiguities || [],
                 dependencies: [],
-                assumptions: ['User has committed recent changes'],
-                priority: 'NORMAL',
+                assumptions: [],
+                priority: understanding.riskLevel === 'high' ? 'HIGH' : 'NORMAL',
                 complexity: complexity,
                 createdAt: Date.now(),
                 updatedAt: Date.now(),
-                phases: phases,
+                phases: parsedPhases,
                 state: TaskState.RECEIVED,
                 workingSet: initialWorkingSet
             };
 
-            // Generate physical ImplementationPlan.md
             await this.writeImplementationPlan(artifact, ingestion.sourceDir);
 
             return artifact;
@@ -115,16 +197,12 @@ export class TaskDecomposer {
         });
         md += `\n`;
 
-        md += `## Constraints\n`;
-        artifact.constraints.forEach(c => md += `- ${c}\n`);
-        md += `\n`;
-
         md += `## Phases\n`;
         artifact.phases.forEach(p => {
             md += `### Phase: ${p.name}\n`;
             p.steps.forEach(s => {
                 md += `- **${s.stepId}**: ${s.objective} (Risk: ${s.risk})\n`;
-                if (s.toolsRequired.length > 0) md += `  - Tools: ${s.toolsRequired.join(', ')}\n`;
+                if (s.toolsRequired && s.toolsRequired.length > 0) md += `  - Tools: ${s.toolsRequired.join(', ')}\n`;
                 if (s.verificationMethod) md += `  - Verification: ${s.verificationMethod}\n`;
             });
         });

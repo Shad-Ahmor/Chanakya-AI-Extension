@@ -55,6 +55,23 @@ export class PlanVerifier {
             }
         }
 
+        if (artifact.constraints.length > 0) {
+            // Check if constraints are mentioned in risks or verifications
+            let constraintsHandled = false;
+            for (const phase of artifact.phases) {
+                for (const step of phase.steps) {
+                    if (step.objective.toLowerCase().includes('constraint') || 
+                        step.verificationMethod.toLowerCase().includes('constraint')) {
+                        constraintsHandled = true;
+                    }
+                }
+            }
+            if (!constraintsHandled && artifact.constraints.some(c => c.toLowerCase().includes('must not'))) {
+                this.logger.warn(`[PlanVerifier] Plan has explicit negative constraints but no step explicitly verifies them.`);
+                // We'll add a warning instead of error so it doesn't block entirely, but in strict mode it could.
+            }
+        }
+
         return errors;
     }
 }

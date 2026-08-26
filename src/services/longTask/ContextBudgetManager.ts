@@ -99,5 +99,54 @@ export class ContextBudgetManager {
         if (text.length <= maxChars) return text;
         return `[...truncated ${text.length - maxChars} chars...]\n` + text.substring(text.length - maxChars);
     }
-}
 
+    // --- Discovery Budget & File Read Validation ---
+    
+    private discoveryBudget = {
+        searchesUsed: 0,
+        filesRead: 0,
+        unrelatedFilesRead: 0
+    };
+
+    public getDiscoveryBudget(complexity: TaskComplexity) {
+        const base = {
+            maxSearches: 3,
+            maxFilesInitiallyRead: 5,
+            maxLinesInitiallyRead: 500,
+            maxUnrelatedFiles: 2
+        };
+        if (complexity === TaskComplexity.EXTREME || complexity === TaskComplexity.VERY_LARGE) {
+            base.maxSearches = 10;
+            base.maxFilesInitiallyRead = 15;
+            base.maxLinesInitiallyRead = 1500;
+        }
+        return base;
+    }
+
+    public resetDiscoveryTracking() {
+        this.discoveryBudget = { searchesUsed: 0, filesRead: 0, unrelatedFilesRead: 0 };
+    }
+
+    public validateFileRead(filePath: string, reason: string | undefined, planFiles: string[], complexity: TaskComplexity): { allowed: boolean; reason?: string } {
+        if (!reason || reason.trim().length < 10) {
+            return { allowed: false, reason: 'File read blocked: You must provide a substantive explicit reason for reading this file.' };
+        }
+        
+        const budget = this.getDiscoveryBudget(complexity);
+        
+        if (this.discoveryBudget.filesRead >= budget.maxFilesInitiallyRead) {
+            return { allowed: false, reason: `File read blocked: Discovery budget exhausted (${budget.maxFilesInitiallyRead} files). Please rely on the existing plan or replan.` };
+        }
+        
+        const isRelated = planFiles.some(f => filePath.includes(f));
+        if (!isRelated) {
+            this.discoveryBudget.unrelatedFilesRead++;
+            if (this.discoveryBudget.unrelatedFilesRead > budget.maxUnrelatedFiles) {
+                return { allowed: false, reason: `File read blocked: Too many unrelated files accessed (${budget.maxUnrelatedFiles}). Stick to the implementation plan.` };
+            }
+        }
+        
+        this.discoveryBudget.filesRead++;
+        return { allowed: true };
+    }
+}

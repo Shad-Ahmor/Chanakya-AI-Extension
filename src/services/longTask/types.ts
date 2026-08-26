@@ -1,5 +1,9 @@
 export enum TaskState {
     RECEIVED = 'RECEIVED',
+    PARSING = 'PARSING',
+    UNDERSTANDING = 'UNDERSTANDING',
+    CLASSIFYING = 'CLASSIFYING',
+    DISCOVERING = 'DISCOVERING',
     PENDING = 'PENDING',
     ANALYZING = 'ANALYZING',
     PLANNING = 'PLANNING',
@@ -10,6 +14,7 @@ export enum TaskState {
     VERIFYING = 'VERIFYING',
     CHECKPOINTING = 'CHECKPOINTING',
     PAUSED = 'PAUSED',
+    REPLANNING = 'REPLANNING',
     RECOVERING = 'RECOVERING',
     BLOCKED = 'BLOCKED',
     COMPLETED = 'COMPLETED',
@@ -136,4 +141,48 @@ export interface TaskCheckpoint {
     errors: string[];
     timestamp: number;
     currentWorkingSet?: WorkingSet;
+}
+
+export interface TaskUnderstanding {
+    originalPrompt: string;
+    intent: string;
+    taskType: 'bug_fix' | 'feature' | 'refactor' | 'investigation' | 'configuration' | 'documentation' | 'testing' | 'mixed' | 'unknown';
+    requirements: string[];
+    constraints: string[];
+    explicitFiles: string[];
+    explicitTechnologies: string[];
+    expectedOutcome: string;
+    acceptanceCriteria: string[];
+    prohibitedActions: string[];
+    ambiguities: string[];
+    riskLevel: 'low' | 'medium' | 'high';
+    requiresPlanning: boolean;
+    requiresRepositoryInspection: boolean;
+    requiresUserClarification: boolean;
+}
+
+export interface ImplementationPlan {
+    objective: string;
+    assumptions: string[];
+    affectedAreas: string[];
+    filesToInspect: string[];
+    filesLikelyToModify: string[];
+    filesThatMustNotChange: string[];
+    steps: {
+        id: string;
+        description: string;
+        reason: string;
+        dependencies: string[];
+    }[];
+    verificationPlan: string[];
+    risks: string[];
+    rollbackStrategy?: string;
+    acceptanceCriteria: string[];
+}
+
+export interface DiscoveryBudget {
+    maxSearches: number;
+    maxFilesInitiallyRead: number;
+    maxLinesInitiallyRead: number;
+    maxUnrelatedFiles: number;
 }

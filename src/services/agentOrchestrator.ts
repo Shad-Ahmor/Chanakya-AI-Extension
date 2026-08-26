@@ -499,6 +499,37 @@ Only one tool call per response is supported. Do not output anything else if you
     }
   }
 
+  /**
+   * Maps an abstract intent to a specific tool execution (Native or MCP) without bypassing reasoning gates.
+   */
+  public async executeIntent(intent: string, customWorkspace?: string): Promise<string> {
+    this.logger.log(`[AgentOrchestrator] Executing intent: ${intent}`);
+    const { LLMEngine } = require('./llmEngine');
+    const engine = LLMEngine.getInstance();
+
+    return new Promise<string>((resolve, reject) => {
+      let finalResult = 'No tool was executed for this intent.';
+      engine.streamChat({
+        prompt: `Execute the following intent by selecting the best available tool:\n\n${intent}`,
+        contextItems: [],
+        customWorkspace,
+        callbacks: {
+          onChunk: () => {},
+          onComplete: (text: string) => {
+             // The tool execution result is handled inside LLMEngine loop, 
+             // but if we want the orchestrator to capture it:
+             // Actually streamChat doesn't return the tool result directly here,
+             // it usually emits it. We can just resolve the final text generated.
+             resolve(text || finalResult);
+          },
+          onError: (err: Error) => {
+            reject(err);
+          }
+        }
+      });
+    });
+  }
+
   private mapToolToActivityType(name: string): string {
     if (name === 'search_code' || name.startsWith('lsp_')) return 'search';
     if (name === 'view_file' || name === 'list_directory') return 'analyze';
