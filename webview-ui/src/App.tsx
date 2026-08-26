@@ -24,6 +24,7 @@ import {
   Plus,
   History,
   Info,
+  Search,
   MessageSquare,
   Cpu,
   Globe,
@@ -58,7 +59,7 @@ export default function App() {
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
   const [isVersionInfoOpen, setIsVersionInfoOpen] = useState(false);
-  
+  const [historySearchQuery, setHistorySearchQuery] = useState('');  
   // @ mentions autocomplete state
   const [showMentionMenu, setShowMentionMenu] = useState(false);
   const [mentionQuery, setMentionQuery] = useState('');
@@ -632,11 +633,25 @@ export default function App() {
                 <X className="w-3 h-3" />
               </button>
             </div>
+            <div className="px-2 py-2 border-b border-white/5 bg-black/10">
+              <div className="relative">
+                <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-white/40" />
+                <input
+                  type="text"
+                  placeholder="Search chats..."
+                  value={historySearchQuery}
+                  onChange={(e) => setHistorySearchQuery(e.target.value)}
+                  className="w-full bg-black/20 border border-white/10 rounded-md py-1 pl-7 pr-2 text-xs text-white/80 focus:outline-none focus:border-sky-500/50 transition placeholder-white/30"
+                />
+              </div>
+            </div>
             <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
               {conversations.length === 0 ? (
                 <div className="text-center p-4 text-white/40 text-xs">No previous chats found.</div>
               ) : (
-                conversations.map(conv => (
+                conversations
+                  .filter(conv => conv.title.toLowerCase().includes(historySearchQuery.toLowerCase()))
+                  .map(conv => (
                   <div
                     key={conv.id}
                     onClick={() => {

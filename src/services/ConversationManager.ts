@@ -158,6 +158,16 @@ export class ConversationManager {
       }
     }
     
+    // Auto-generate title if it's currently "New Chat" and there's a user message
+    if (conv.title === 'New Chat' && conv.messages.length > 0) {
+      const firstUserMsg = conv.messages.find(m => m.role === 'user');
+      if (firstUserMsg && firstUserMsg.content) {
+        // Just truncate the first prompt to 30 chars
+        const cleanContent = firstUserMsg.content.trim().split('\n')[0];
+        conv.title = cleanContent.length > 30 ? cleanContent.substring(0, 30) + '...' : cleanContent;
+      }
+    }
+
     conv.updatedAt = Date.now();
     this.conversations.sort((a, b) => b.updatedAt - a.updatedAt);
     this.saveToDisk();
