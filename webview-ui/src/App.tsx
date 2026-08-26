@@ -23,6 +23,7 @@ import {
   Square,
   Plus,
   History,
+  Info,
   MessageSquare,
   Cpu,
   Globe,
@@ -37,6 +38,7 @@ import {
   Target,
   Network
 } from 'lucide-react';
+import buildMetadata from '../../build-metadata.json';
 
 export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -55,6 +57,7 @@ export default function App() {
   const [conversations, setConversations] = useState<any[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
+  const [isVersionInfoOpen, setIsVersionInfoOpen] = useState(false);
   
   // @ mentions autocomplete state
   const [showMentionMenu, setShowMentionMenu] = useState(false);
@@ -543,8 +546,56 @@ export default function App() {
           >
             <Settings className="w-3.5 h-3.5" />
           </button>
+          <button
+            onClick={() => setIsVersionInfoOpen(!isVersionInfoOpen)}
+            title="Version & Build Information"
+            className={`p-1.5 rounded-lg transition border ${isVersionInfoOpen ? 'bg-sky-500/20 text-sky-400 border-sky-500/30' : 'hover:bg-sky-500/20 text-sky-400/80 hover:text-sky-400 border-transparent hover:border-sky-500/30'}`}
+          >
+            <Info className="w-3.5 h-3.5" />
+          </button>
         </div>
       </header>
+
+      {/* Version & Build Info Popover */}
+      {isVersionInfoOpen && (
+        <div className="absolute top-[48px] right-3 z-30 w-72 bg-vscode-editorWidget-background border border-vscode-widget-border shadow-2xl rounded-xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-4 duration-200">
+          <div className="px-4 py-3 border-b border-vscode-widget-border flex items-center justify-between bg-black/20">
+            <span className="font-bold text-sm text-vscode-foreground flex items-center gap-2">
+              <Info className="w-4 h-4 text-sky-400" />
+              Build Information
+            </span>
+            <button onClick={() => setIsVersionInfoOpen(false)} className="p-1 hover:bg-white/10 rounded-md text-vscode-descriptionForeground hover:text-vscode-foreground transition">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div className="p-4 space-y-3 custom-scrollbar text-xs text-vscode-foreground">
+            <div className="flex justify-between items-center pb-2 border-b border-white/5">
+              <span className="text-vscode-descriptionForeground font-medium">Version</span>
+              <span className="font-mono bg-sky-500/10 text-sky-300 px-2 py-0.5 rounded-md border border-sky-500/20">{buildMetadata.version}</span>
+            </div>
+            <div className="flex justify-between items-center pb-2 border-b border-white/5">
+              <span className="text-vscode-descriptionForeground font-medium">Build Date</span>
+              <span className="font-medium text-right">{buildMetadata.formattedBuildTime}</span>
+            </div>
+            <div className="flex justify-between items-center pb-2 border-b border-white/5">
+              <span className="text-vscode-descriptionForeground font-medium">Build ID</span>
+              <span className="font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">{buildMetadata.buildId}</span>
+            </div>
+            <div className="flex justify-between items-center pb-2 border-b border-white/5">
+              <span className="text-vscode-descriptionForeground font-medium">Commit</span>
+              <span className="font-mono">{buildMetadata.commit} ({buildMetadata.branch})</span>
+            </div>
+            <div className="flex justify-between items-center pb-2 border-b border-white/5">
+              <span className="text-vscode-descriptionForeground font-medium">Publisher</span>
+              <span className="font-medium">{buildMetadata.publisher}</span>
+            </div>
+            <div className="pt-2 text-[10px] text-vscode-descriptionForeground flex items-center gap-1.5 justify-center opacity-80">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+              <span>Build Verified & Active</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* History Drawer Overlay */}
       {isHistoryDrawerOpen && (

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { AppConfig, ModelConfig } from '../../types/config';
 import { vscode } from '../../vscode';
 import ModelEditModal from './ModelEditModal';
@@ -27,6 +27,7 @@ import {
   TrendingDown,
   BarChart2,
   Network,
+  ChevronDown
 } from 'lucide-react';
 
 interface Props {
@@ -38,6 +39,16 @@ interface Props {
   initialDashboardTab?: 'visual' | 'yaml' | 'settings' | 'token_optimizer' | 'skill_ops' | 'analytics' | 'graphify' | 'mcp';
 }
 
+type TabId = 'analytics' | 'graphify' | 'mcp' | 'visual' | 'settings' | 'token_optimizer' | 'skill_ops' | 'yaml';
+
+interface NavTab {
+  id: TabId;
+  label: string;
+  icon: React.ReactNode;
+  badge?: React.ReactNode;
+  onClick?: () => void;
+}
+
 export default function ModelHubView({ config, rawYaml, onUpdateConfig, onClose, isDashboard, initialDashboardTab }: Props) {
   const [activeTab, setActiveTab] = useState<'visual' | 'yaml' | 'settings' | 'token_optimizer' | 'skill_ops' | 'analytics' | 'graphify' | 'mcp'>(initialDashboardTab || 'visual');
   const [filter, setFilter] = useState<'all' | 'local' | 'online' | 'chat' | 'autocomplete'>('all');
@@ -47,6 +58,68 @@ export default function ModelHubView({ config, rawYaml, onUpdateConfig, onClose,
   const [yamlContent, setYamlContent] = useState(rawYaml);
   const [isScanning, setIsScanning] = useState(false);
   const [pingResults, setPingResults] = useState<Record<string, { success: boolean; latencyMs?: number; error?: string; loading?: boolean }>>({});
+
+  // Responsive Navigation State
+  const containerRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(1440);
+  const [tabWidths, setTabWidths] = useState<number[]>([]);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+
+  const tabs: NavTab[] = [
+    { id: 'analytics', label: 'Dashboard', icon: <BarChart2 className="w-4 h-4" /> },
+    { id: 'graphify', label: 'Graphify Architecture', icon: <Network className="w-4 h-4 text-cyan-400" /> },
+    { id: 'mcp', label: 'MCP Hub', icon: <Server className="w-4 h-4 text-emerald-400" /> },
+    { id: 'visual', label: 'Models Hub', icon: <Zap className="w-4 h-4" />, badge: <span className="bg-[var(--vscode-badge-background)] text-[var(--vscode-badge-foreground)] px-2 py-0.5 rounded-full text-[10px] ml-1">{config.models.length}</span> },
+    { id: 'settings', label: 'General Settings', icon: <Settings className="w-4 h-4" /> },
+    { id: 'token_optimizer', label: 'Token Optimizer', icon: <TrendingDown className="w-4 h-4" /> },
+    { id: 'skill_ops', label: 'SkillOps', icon: <TrendingDown className="w-4 h-4" /> },
+    { id: 'yaml', label: 'config.yaml', icon: <FileCode className="w-4 h-4" />, onClick: () => { setYamlContent(YAML.stringify(config)); setActiveTab('yaml'); } },
+  ];
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (measureRef.current) {
+      const widths = Array.from(measureRef.current.children).map(child => (child as HTMLElement).offsetWidth);
+      setTabWidths(widths);
+    }
+  }, [tabs.length]);
+
+  let visibleCount = tabs.length;
+  const GAP = 24; // gap-6 = 1.5rem = 24px
+  const MORE_BTN_WIDTH = 100; // estimated width of "More" button
+
+  if (tabWidths.length === tabs.length && containerWidth > 0) {
+    const totalWidth = tabWidths.reduce((sum, w) => sum + w + GAP, 0) - GAP;
+    if (totalWidth > containerWidth) {
+      visibleCount = 0;
+      let currentWidth = 0;
+      for (let i = 0; i < tabs.length; i++) {
+        const itemWidth = tabWidths[i];
+        currentWidth += itemWidth;
+        if (i > 0) currentWidth += GAP;
+        if (currentWidth + GAP + MORE_BTN_WIDTH > containerWidth) {
+          break;
+        }
+        visibleCount++;
+      }
+      visibleCount = Math.max(1, visibleCount);
+    }
+  }
+
+  const visibleTabs = tabs.slice(0, visibleCount);
+  const hiddenTabs = tabs.slice(visibleCount);
+  const isHiddenTabActive = hiddenTabs.some(t => t.id === activeTab);
 
 
 
@@ -230,32 +303,62 @@ export default function ModelHubView({ config, rawYaml, onUpdateConfig, onClose,
             </div>
           </div>
 
-          <div className="flex items-center justify-between mt-10">
-            <div className="flex items-center gap-6 border-b w-full relative" style={{ borderColor: 'var(--vscode-widget-border)' }}>
-              <button onClick={() => setActiveTab('analytics')} className={`pb-3 font-bold text-sm tracking-wide transition-colors ${activeTab === 'analytics' ? 'text-[var(--vscode-textLink-foreground)] border-b-2 border-[var(--vscode-textLink-foreground)]' : 'text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)]'}`}>
-                <div className="flex items-center gap-2"><BarChart2 className="w-4 h-4" /> Dashboard</div>
-              </button>
-              <button onClick={() => setActiveTab('graphify')} className={`pb-3 font-bold text-sm tracking-wide transition-colors ${activeTab === 'graphify' ? 'text-[var(--vscode-textLink-foreground)] border-b-2 border-[var(--vscode-textLink-foreground)]' : 'text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)]'}`}>
-                <div className="flex items-center gap-2"><Network className="w-4 h-4 text-cyan-400" /> Graphify Architecture</div>
-              </button>
-              <button onClick={() => setActiveTab('mcp')} className={`pb-3 font-bold text-sm tracking-wide transition-colors ${activeTab === 'mcp' ? 'text-[var(--vscode-textLink-foreground)] border-b-2 border-[var(--vscode-textLink-foreground)]' : 'text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)]'}`}>
-                <div className="flex items-center gap-2"><Server className="w-4 h-4 text-emerald-400" /> MCP Hub</div>
-              </button>
-              <button onClick={() => setActiveTab('visual')} className={`pb-3 font-bold text-sm tracking-wide transition-colors ${activeTab === 'visual' ? 'text-[var(--vscode-textLink-foreground)] border-b-2 border-[var(--vscode-textLink-foreground)]' : 'text-[var(--vscode-descriptionForeground)] hover:opacity-80'}`} style={activeTab !== 'visual' ? { color: 'var(--vscode-descriptionForeground)' } : {}}>
-                <div className="flex items-center gap-2"><Zap className="w-4 h-4" /> Models Hub <span className="bg-[var(--vscode-badge-background)] text-[var(--vscode-badge-foreground)] px-2 py-0.5 rounded-full text-[10px] ml-1">{config.models.length}</span></div>
-              </button>
-              <button onClick={() => setActiveTab('settings')} className={`pb-3 font-bold text-sm tracking-wide transition-colors ${activeTab === 'settings' ? 'text-[var(--vscode-textLink-foreground)] border-b-2 border-[var(--vscode-textLink-foreground)]' : 'text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)]'}`}>
-                <div className="flex items-center gap-2"><Settings className="w-4 h-4" /> General Settings</div>
-              </button>
-              <button onClick={() => setActiveTab('token_optimizer')} className={`pb-3 font-bold text-sm tracking-wide transition-colors ${activeTab === 'token_optimizer' ? 'text-[var(--vscode-textLink-foreground)] border-b-2 border-[var(--vscode-textLink-foreground)]' : 'text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)]'}`}>
-                <div className="flex items-center gap-2"><TrendingDown className="w-4 h-4" /> Token Optimizer</div>
-              </button>
-              <button onClick={() => setActiveTab('skill_ops')} className={`pb-3 font-bold text-sm tracking-wide transition-colors ${activeTab === 'skill_ops' ? 'text-[var(--vscode-textLink-foreground)] border-b-2 border-[var(--vscode-textLink-foreground)]' : 'text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)]'}`}>
-                <div className="flex items-center gap-2"><TrendingDown className="w-4 h-4" /> SkillOps</div>
-              </button>
-              <button onClick={() => { setYamlContent(YAML.stringify(config)); setActiveTab('yaml'); }} className={`pb-3 font-bold text-sm tracking-wide transition-colors ${activeTab === 'yaml' ? 'text-[var(--vscode-textLink-foreground)] border-b-2 border-[var(--vscode-textLink-foreground)]' : 'text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)]'}`}>
-                <div className="flex items-center gap-2"><FileCode className="w-4 h-4" /> config.yaml</div>
-              </button>
+          <div className="flex items-center justify-between mt-10 min-w-0">
+            {/* Invisible Measurement Container */}
+            <div ref={measureRef} className="absolute opacity-0 pointer-events-none flex items-center gap-6" style={{ top: -9999, left: 0 }} aria-hidden="true">
+              {tabs.map((tab) => (
+                <button key={`measure-${tab.id}`} className="pb-3 font-bold text-sm tracking-wide whitespace-nowrap">
+                  <div className="flex items-center gap-2">{tab.icon} {tab.label} {tab.badge}</div>
+                </button>
+              ))}
+            </div>
+
+            <div ref={containerRef} className="flex items-center gap-6 border-b w-full relative min-w-0" style={{ borderColor: 'var(--vscode-widget-border)' }}>
+              {visibleTabs.map((tab) => (
+                <button 
+                  key={tab.id}
+                  onClick={() => {
+                    tab.onClick ? tab.onClick() : setActiveTab(tab.id);
+                  }}
+                  className={`pb-3 font-bold text-sm tracking-wide whitespace-nowrap transition-colors ${activeTab === tab.id ? 'text-[var(--vscode-textLink-foreground)] border-b-2 border-[var(--vscode-textLink-foreground)]' : 'text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)]'}`}
+                  style={activeTab !== tab.id && tab.id === 'visual' ? { color: 'var(--vscode-descriptionForeground)' } : {}}
+                >
+                  <div className="flex items-center gap-2">{tab.icon} {tab.label} {tab.badge}</div>
+                </button>
+              ))}
+
+              {hiddenTabs.length > 0 && (
+                <div className="relative">
+                  <button 
+                    onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
+                    className={`pb-3 font-bold text-sm tracking-wide whitespace-nowrap transition-colors flex items-center gap-1 ${isHiddenTabActive ? 'text-[var(--vscode-textLink-foreground)] border-b-2 border-[var(--vscode-textLink-foreground)]' : 'text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)]'}`}
+                  >
+                    More <ChevronDown className="w-3.5 h-3.5" />
+                  </button>
+                  
+                  {isMoreMenuOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setIsMoreMenuOpen(false)} />
+                      <div className="absolute top-full right-0 mt-1 w-56 py-1 bg-[#1e1e1e] border border-white/10 rounded-xl shadow-2xl z-50 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-100">
+                        {hiddenTabs.map(tab => (
+                          <button
+                            key={tab.id}
+                            onClick={() => {
+                              tab.onClick ? tab.onClick() : setActiveTab(tab.id);
+                              setIsMoreMenuOpen(false);
+                            }}
+                            className={`w-full text-left px-4 py-2.5 text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === tab.id ? 'text-[var(--vscode-textLink-foreground)] bg-black/20' : 'text-white/70 hover:text-white hover:bg-white/5'}`}
+                          >
+                            <span className="opacity-80">{tab.icon}</span>
+                            <span className="flex-1 truncate">{tab.label}</span>
+                            {tab.badge}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

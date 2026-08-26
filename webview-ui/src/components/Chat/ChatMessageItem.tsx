@@ -143,11 +143,8 @@ export default function ChatMessageItem({ message, onOpenArtifact }: Props) {
           >
             <span className="text-xs">🧠</span>
             <span className="font-semibold">
-              {message.isThinking ? 'DeepSeek Reasoning in progress...' : 'DeepSeek Reasoning Process'}
+              {message.isThinking ? 'Thinking...' : `Thought for ${message.thoughtDurationMs ? (message.thoughtDurationMs / 1000).toFixed(1) : 0}s`}
             </span>
-            {message.thoughtDurationMs ? (
-              <span className="text-[10px] opacity-70">({(message.thoughtDurationMs / 1000).toFixed(1)}s)</span>
-            ) : null}
             <span className="text-[10px] ml-1 opacity-70">{showThought ? '▲' : '▼'}</span>
           </div>
 
@@ -197,6 +194,23 @@ export default function ChatMessageItem({ message, onOpenArtifact }: Props) {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Working / Worked for Chip */}
+      {!isUser && (
+        <div className="my-2 select-none">
+          {(message as any).isStreaming ? (
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono border border-vscode-border bg-vscode-badgeBg/10 text-vscode-fg">
+              <Loader2 className="w-3 h-3 animate-spin text-sky-400" />
+              <span className="font-semibold">Working...</span>
+            </div>
+          ) : message.telemetry?.durationSec ? (
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono border border-vscode-border bg-vscode-badgeBg/10 text-vscode-fg">
+              <span className="text-xs">⚡</span>
+              <span className="font-semibold">Worked for {message.telemetry.durationSec.toFixed(1)}s</span>
+            </div>
+          ) : null}
         </div>
       )}
 

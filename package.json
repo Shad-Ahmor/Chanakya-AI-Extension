@@ -268,8 +268,8 @@
 		"build:extension": "webpack --mode production",
 		"build:webview": "npm run --prefix webview-ui build",
 		"watch:webview": "npm run --prefix webview-ui watch",
-		"build": "npm run build:webview && npm run build:extension",
-		"clean:build": "rm -f chanakya-ai-enhancer-*.vsix && npm run build:webview && npx vsce package",
+		"build": "node scripts/generate-build-metadata.js && npm run build:webview && npm run build:extension",
+		"clean:build": "node scripts/generate-build-metadata.js && rm -f chanakya-ai-enhancer-*.vsix && npm run build:webview && npx vsce package",
 		"lint": "eslint src --ext ts",
 		"test": "npx tsc -p ./ && node ./out/test/runTest.js"
 	},
