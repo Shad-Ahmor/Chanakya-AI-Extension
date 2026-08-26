@@ -162,6 +162,7 @@ export type FromWebviewMessage =
   | { type: 'toggleMcpServer'; payload: { name: string; enabled: boolean } }
   | { type: 'pingMcpServer'; payload: { name: string } }
   | { type: 'testMcpTool'; payload: { serverName: string; toolName: string; args: Record<string, any> } }
+  | { type: 'toggleGlobalMcp'; payload: { enabled: boolean } }
   | { type: 'renderPxPipePreview'; payload: { text: string; title?: string } }
   | { type: 'getPxPipeTelemetry' };
 
@@ -178,6 +179,7 @@ export type ToWebviewMessage =
   | { type: 'fileContentResult'; payload: { contextItem: ContextItem } }
   | { type: 'setLoading'; payload: { isLoading: boolean } }
   | { type: 'setError'; payload: { error: string } }
+  | { type: 'globalMcpStateUpdated'; payload: { enabled: boolean } }
   | { type: 'clearChat' }
   | { type: 'configResult'; payload: { config: AppConfig; rawYaml: string } }
   | { type: 'pxpipeSettingsUpdated'; payload: { settings: any } }

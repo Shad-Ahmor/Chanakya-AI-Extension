@@ -26,14 +26,15 @@ import {
   Folder,
   Sparkles,
   Cpu,
-  Search
+  Search,
+  BookOpen
 } from 'lucide-react';
 
 export default function McpHubView() {
   const [servers, setServers] = useState<McpServerInfo[]>([]);
   const [logs, setLogs] = useState<McpToolExecutionLog[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [activeTab, setActiveTab] = useState<'servers' | 'tools' | 'marketplace' | 'logs'>('servers');
+  const [activeTab, setActiveTab] = useState<'servers' | 'tools' | 'marketplace' | 'logs' | 'instructions'>('servers');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Add Custom Server Modal
@@ -319,6 +320,17 @@ export default function McpHubView() {
         >
           <Activity className="w-3.5 h-3.5" />
           <span>Database & Execution Logs ({logs.length})</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('instructions')}
+          className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ml-auto ${
+            activeTab === 'instructions'
+              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+              : 'text-slate-400 hover:text-white hover:bg-white/5'
+          }`}
+        >
+          <BookOpen className="w-3.5 h-3.5 text-sky-400" />
+          <span>Instructions & Guide</span>
         </button>
       </div>
 
@@ -666,6 +678,123 @@ export default function McpHubView() {
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {/* Tab 5: Instructions */}
+        {activeTab === 'instructions' && (
+          <div className="space-y-6 text-sm text-slate-300 max-w-4xl mx-auto pb-10">
+            {/* What is MCP? */}
+            <div className="bg-[#121222] border border-white/10 rounded-xl p-6 shadow-lg">
+              <h3 className="text-emerald-400 font-bold text-lg mb-2 flex items-center gap-2">
+                <Brain className="w-5 h-5" /> What is Model Context Protocol (MCP)?
+              </h3>
+              <p className="mb-4 text-xs leading-relaxed">
+                Imagine you have a really smart AI assistant, but it's locked in a room with no internet and no access to your files. It's smart, but it can't actually <strong>do</strong> anything for you.
+              </p>
+              <p className="text-xs leading-relaxed">
+                <strong>MCP is like giving the AI hands, eyes, and internet access.</strong> It is a standard way to connect AI models to external tools, databases, and APIs securely. By setting up MCP, you let the AI read your databases, search the web, check GitHub, and execute real actions right from VS Code!
+              </p>
+            </div>
+
+            {/* Core Concepts */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-[#121222] border border-white/10 rounded-xl p-5 hover:border-emerald-500/30 transition">
+                <h4 className="text-white font-bold mb-2 flex items-center gap-2">
+                  <Server className="w-4 h-4 text-emerald-500" /> What is an MCP Server?
+                </h4>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  An MCP Server is a tiny background program that acts as a bridge. For example, a "GitHub MCP Server" connects the AI to GitHub. The AI talks to the server, and the server securely talks to GitHub on your behalf.
+                </p>
+              </div>
+
+              <div className="bg-[#121222] border border-white/10 rounded-xl p-5 hover:border-amber-500/30 transition">
+                <h4 className="text-white font-bold mb-2 flex items-center gap-2">
+                  <Database className="w-4 h-4 text-amber-500" /> What is an MCP Database?
+                </h4>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Some MCP servers (like Memory servers) need a place to remember things so the AI doesn't forget details across chats. An MCP DB (like SQLite) stores this memory locally on your computer securely so it never leaks online.
+                </p>
+              </div>
+            </div>
+
+            {/* Transport Types & Environments */}
+            <div className="bg-[#121222] border border-white/10 rounded-xl p-6 shadow-lg">
+              <h3 className="text-white font-bold text-base mb-4">How do they connect? (Transport Types)</h3>
+              
+              <div className="space-y-4">
+                <div className="bg-black/30 p-4 rounded-lg border border-white/5">
+                  <h5 className="text-emerald-400 font-semibold mb-1 flex items-center gap-2 text-sm">
+                    <Code className="w-4 h-4" /> STDIO (Local Server)
+                  </h5>
+                  <p className="text-xs text-slate-400 mb-2">
+                    Runs directly on your computer. It uses standard input/output (like terminal commands). This is the most common and secure way because data never leaves your machine.
+                  </p>
+                  <p className="text-[11px] font-mono text-slate-500 bg-black/50 p-2 rounded border border-white/5 overflow-x-auto">
+                    Command: npx<br/>
+                    Args: -y @modelcontextprotocol/server-sqlite
+                  </p>
+                </div>
+
+                <div className="bg-black/30 p-4 rounded-lg border border-white/5">
+                  <h5 className="text-sky-400 font-semibold mb-1 flex items-center gap-2 text-sm">
+                    <Globe className="w-4 h-4" /> SSE (Remote Server)
+                  </h5>
+                  <p className="text-xs text-slate-400 mb-2">
+                    Connects to a server running somewhere else on the internet using HTTP. This is useful for connecting to massive enterprise databases or external company services.
+                  </p>
+                  <p className="text-[11px] font-mono text-slate-500 bg-black/50 p-2 rounded border border-white/5 overflow-x-auto">
+                    URL: https://api.mycompany.com/mcp-endpoint
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Environment Variables */}
+            <div className="bg-[#121222] border border-white/10 rounded-xl p-6 shadow-lg">
+              <h3 className="text-white font-bold text-base mb-2">What are Environment Variables?</h3>
+              <p className="text-xs text-slate-400 mb-4">
+                Some servers need secret keys to work (like a GitHub API Token or a Database Password). You pass these secrets securely using <strong>Environment Variables</strong> in JSON format. Do not worry, these are stored securely in your VS Code Secret Storage.
+              </p>
+              <pre className="text-[11px] font-mono text-emerald-300 bg-black/50 p-3 rounded-lg border border-white/5 overflow-x-auto">
+{`{
+  "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_your_secret_token_here",
+  "BRAVE_API_KEY": "your_brave_search_api_key"
+}`}
+              </pre>
+            </div>
+
+            {/* How to Setup */}
+            <div className="bg-gradient-to-br from-[#121222] to-emerald-950/20 border border-emerald-500/20 rounded-xl p-6 shadow-lg">
+              <h3 className="text-emerald-400 font-bold text-lg mb-4 flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-amber-400" /> How to Setup in Chanakya AI
+              </h3>
+              
+              <ol className="list-decimal list-inside space-y-3 text-xs text-slate-300">
+                <li>
+                  <span className="font-semibold text-white">The Easy Way (1-Click Marketplace):</span> Go to the "1-Click Marketplace" tab above, click on a popular server like SQLite or Brave Search, enter any required keys, and click connect!
+                </li>
+                <li>
+                  <span className="font-semibold text-white">The Manual Way:</span> Click the <span className="bg-emerald-500 text-black px-1.5 py-0.5 rounded font-bold">Add Server</span> button in the top right.
+                </li>
+                <li className="ml-5">Give your server a name (like <code>my-github</code>).</li>
+                <li className="ml-5">Select <strong>Stdio</strong>.</li>
+                <li className="ml-5">Set the Command to <code>npx</code>.</li>
+                <li className="ml-5">Set the Arguments to <code>-y @modelcontextprotocol/server-github</code>.</li>
+                <li className="ml-5">Set the Environment Variables with your tokens (as JSON).</li>
+                <li className="ml-5">Click <strong>Connect Server</strong>!</li>
+              </ol>
+
+              <div className="mt-6 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-200 text-xs flex items-start gap-3">
+                <CheckCircle2 className="w-5 h-5 mt-0.5 shrink-0 text-emerald-400" />
+                <p className="leading-relaxed">
+                  <strong className="text-emerald-300">Once Setup:</strong> The AI will automatically detect these tools. You can test them manually in the "Tools & Live Runner" tab! 
+                  <br/><br/>
+                  <strong className="text-white">Crucial Step:</strong> Don't forget to toggle the global MCP button (the chip icon <Cpu className="w-3 h-3 inline-block"/>) in the Chat input box when you want the AI to use these tools in your conversation.
+                </p>
+              </div>
+            </div>
+
           </div>
         )}
       </div>
