@@ -283,27 +283,27 @@ export default function ModelHubView({ config, rawYaml, onUpdateConfig, onClose,
       {/* Header Area */}
       {isDashboard ? (
         <div
-          className="flex flex-col pt-10 pb-6 px-10 shadow-sm border-b shrink-0"
+          className="flex flex-col pt-6 pb-4 px-8 shadow-sm border-b shrink-0"
           style={{ backgroundColor: 'var(--vscode-editorWidget-background)', borderColor: 'var(--vscode-widget-border)' }}
         >
           <div className="flex items-start justify-between">
             <div className="max-w-xl">
-              <h1 className="text-4xl font-extrabold tracking-tight mb-2" style={{ color: 'var(--vscode-editor-foreground)' }}>Chanakya AI Dashboard</h1>
-              <p className="text-[var(--vscode-descriptionForeground)] text-base">A beautifully unified dashboard to configure models and IDE settings.</p>
+              <h1 className="text-2xl font-extrabold tracking-tight mb-1" style={{ color: 'var(--vscode-editor-foreground)' }}>Chanakya AI Dashboard</h1>
+              <p className="text-[var(--vscode-descriptionForeground)] text-sm">A beautifully unified dashboard to configure models and IDE settings.</p>
             </div>
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 px-4 py-2 bg-[var(--vscode-input-background)] rounded-full border border-[var(--vscode-input-border)] text-[var(--vscode-input-foreground)] font-medium text-sm shadow-sm">
-                <Globe className="w-4 h-4 text-emerald-500" />
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--vscode-input-background)] rounded-full border border-[var(--vscode-input-border)] text-[var(--vscode-input-foreground)] font-medium text-xs shadow-sm">
+                <Globe className="w-3.5 h-3.5 text-emerald-500" />
                 Network Standby
               </div>
-              <div className="flex items-center gap-2 px-4 py-2 bg-[var(--vscode-input-background)] rounded-full border border-[var(--vscode-input-border)] text-[var(--vscode-input-foreground)] font-medium text-sm shadow-sm">
-                <Cpu className="w-4 h-4 text-purple-500" />
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--vscode-input-background)] rounded-full border border-[var(--vscode-input-border)] text-[var(--vscode-input-foreground)] font-medium text-xs shadow-sm">
+                <Cpu className="w-3.5 h-3.5 text-purple-500" />
                 System Ready
               </div>
             </div>
           </div>
 
-          <div className="flex items-center justify-between mt-10 min-w-0">
+          <div className="flex items-center justify-between mt-6 min-w-0">
             {/* Invisible Measurement Container */}
             <div ref={measureRef} className="absolute opacity-0 pointer-events-none flex items-center gap-6" style={{ top: -9999, left: 0 }} aria-hidden="true">
               {tabs.map((tab) => (
